@@ -1,66 +1,248 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# 📚 KomiBook — Backend API
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+Backend của dự án **KomiBook** — nền tảng thương mại điện tử sách đa người bán (multi-vendor), xây dựng bằng **Laravel 11** và xác thực qua **Laravel Sanctum**.
 
-## About Laravel
+---
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+## 🛠️ Công nghệ sử dụng
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+| Thành phần        | Phiên bản |
+|-------------------|-----------|
+| PHP               | ^8.2      |
+| Laravel Framework | ^11.0     |
+| Laravel Sanctum   | ^4.0      |
+| Predis (Redis)    | ^3.4      |
+| Laravel Tinker    | ^2.9      |
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+### Dev Dependencies
+- `barryvdh/laravel-ide-helper` — IDE autocompletion
+- `laravel/pint` — PHP code style fixer
+- `phpunit/phpunit` — unit testing
+- `spatie/laravel-ignition` — error reporting
 
-## Learning Laravel
+---
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+## 📁 Cấu trúc thư mục chính
 
-You may also try the [Laravel Bootcamp](https://bootcamp.laravel.com), where you will be guided through building a modern Laravel application from scratch.
+```
+backend/
+├── app/
+│   ├── Http/
+│   │   ├── Controllers/
+│   │   │   └── Api/
+│   │   │       └── AuthController.php     # Xử lý đăng ký / đăng nhập / đăng xuất / me
+│   │   ├── Requests/
+│   │   │   └── Auth/
+│   │   │       ├── LoginRequest.php
+│   │   │       └── RegisterRequest.php
+│   │   └── Resources/
+│   │       └── UserResource.php           # API Resource cho User (bao gồm vendor_profile)
+│   ├── Models/
+│   │   ├── User.php                       # Role: admin | vendor | customer
+│   │   ├── Vendor.php                     # Hồ sơ cửa hàng của Vendor
+│   │   ├── Book.php                       # Sách (có Global Scope theo vendor)
+│   │   ├── Category.php                   # Danh mục sách
+│   │   ├── Order.php                      # Đơn hàng
+│   │   └── OrderItem.php                  # Chi tiết đơn hàng
+│   ├── Scopes/
+│   │   ├── BookVisibilityScope.php        # Global scope: vendor chỉ thấy sách của mình
+│   │   └── OrderVisibilityScope.php       # Global scope: vendor chỉ thấy đơn hàng mình nhận
+│   ├── Services/                          # Business logic layer (chuẩn bị mở rộng)
+│   └── Traits/
+│       └── MultiVendorScoped.php          # Trait áp dụng Global Scope cho models đa vendor
+├── database/
+│   ├── migrations/
+│   │   ├── create_users_table.php
+│   │   ├── create_vendors_table.php
+│   │   ├── create_categories_table.php
+│   │   ├── create_books_table.php
+│   │   ├── create_orders_table.php
+│   │   ├── create_order_items_table.php
+│   │   └── create_personal_access_tokens_table.php
+│   └── seeders/
+│       └── DatabaseSeeder.php             # Seed admin, vendor, customer mẫu
+└── routes/
+    └── api.php                            # Định nghĩa tất cả API routes
+```
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+---
 
-## Laravel Sponsors
+## 🗄️ Cơ sở dữ liệu
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+### Bảng `users`
+| Cột        | Kiểu                              | Mô tả                         |
+|------------|-----------------------------------|-------------------------------|
+| `id`       | bigint (PK)                       |                               |
+| `name`     | varchar                           |                               |
+| `email`    | varchar (unique)                  |                               |
+| `password` | varchar (hashed)                  |                               |
+| `role`     | enum: `admin`, `vendor`, `customer` | Phân quyền người dùng       |
 
-### Premium Partners
+### Bảng `vendors`
+| Cột           | Kiểu    | Mô tả                    |
+|---------------|---------|--------------------------|
+| `id`          | bigint  |                          |
+| `user_id`     | bigint (FK → users) | 1-1 với user |
+| `shop_name`   | varchar | Tên cửa hàng             |
+| `slug`        | varchar | Đường dẫn thân thiện URL |
+| `logo`        | varchar | Ảnh logo                 |
+| `description` | text    | Mô tả cửa hàng           |
+| `status`      | enum: `pending`, `active`, `banned` |  |
 
-- **[Vehikl](https://vehikl.com/)**
-- **[Tighten Co.](https://tighten.co)**
-- **[WebReinvent](https://webreinvent.com/)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel/)**
-- **[Cyber-Duck](https://cyber-duck.co.uk)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Jump24](https://jump24.co.uk)**
-- **[Redberry](https://redberry.international/laravel/)**
-- **[Active Logic](https://activelogic.com)**
-- **[byte5](https://byte5.de)**
-- **[OP.GG](https://op.gg)**
+### Bảng `books`
+| Cột           | Kiểu    | Mô tả                         |
+|---------------|---------|-------------------------------|
+| `vendor_id`   | FK      | Cửa hàng sở hữu sách          |
+| `category_id` | FK      | Danh mục sách                 |
+| `title`       | varchar |                               |
+| `slug`        | varchar |                               |
+| `author`      | varchar |                               |
+| `price`       | integer | Giá gốc (VNĐ)                 |
+| `sale_price`  | integer | Giá khuyến mãi (nullable)     |
+| `stock`       | integer | Số lượng tồn kho              |
+| `type`        | enum: `physical`, `ebook` |                |
+| `status`      | enum: `draft`, `published`, `archived` |   |
 
-## Contributing
+### Bảng `orders` & `order_items`
+Lưu thông tin đơn hàng và chi tiết sản phẩm trong đơn.
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+---
 
-## Code of Conduct
+## 🔐 Xác thực & Phân quyền
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+Dự án sử dụng **Laravel Sanctum** (token-based auth cho SPA).
 
-## Security Vulnerabilities
+### Chính sách Token
+- **Single-device policy**: Khi đăng nhập thành công, tất cả token cũ bị xóa trước khi cấp token mới.
+- Token được gửi qua header `Authorization: Bearer <token>`.
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+### Phân quyền theo Role
+| Role       | Mô tả                                                   |
+|------------|----------------------------------------------------------|
+| `admin`    | Quản trị toàn bộ hệ thống                               |
+| `vendor`   | Quản lý cửa hàng, sách và đơn hàng của mình             |
+| `customer` | Tìm kiếm, mua sách, xem lịch sử đơn hàng               |
 
-## License
+### Global Scopes (Multi-Vendor Isolation)
+- `BookVisibilityScope`: Vendor chỉ truy vấn được sách của mình.
+- `OrderVisibilityScope`: Vendor chỉ truy vấn được đơn hàng liên quan đến cửa hàng mình.
+- Trait `MultiVendorScoped` được áp dụng vào model `Book` và `Order`.
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+---
+
+## 🛣️ API Routes
+
+Base URL: `http://localhost:8000/api`
+
+### Public Routes (không cần xác thực)
+| Method | Endpoint           | Controller action          | Mô tả              |
+|--------|--------------------|----------------------------|--------------------|
+| POST   | `/auth/register`   | `AuthController@register`  | Đăng ký tài khoản  |
+| POST   | `/auth/login`      | `AuthController@login`     | Đăng nhập          |
+
+### Protected Routes (yêu cầu `Authorization: Bearer <token>`)
+| Method | Endpoint       | Controller action         | Mô tả                      |
+|--------|----------------|---------------------------|----------------------------|
+| POST   | `/auth/logout` | `AuthController@logout`   | Đăng xuất (thu hồi token)  |
+| GET    | `/auth/me`     | `AuthController@me`       | Thông tin user hiện tại    |
+
+---
+
+## 📦 API Resource
+
+### `UserResource`
+Trả về thông tin user trong mọi response xác thực:
+
+```json
+{
+  "id": 1,
+  "name": "Nguyễn Văn A",
+  "email": "vendor@example.com",
+  "role": "vendor",
+  "created_at": "2026-04-19T00:00:00.000Z",
+  "vendor_profile": {
+    "shop_name": "Sách Hay",
+    "slug": "sach-hay",
+    "logo": null,
+    "description": "Cửa hàng sách chất lượng",
+    "status": "active"
+  }
+}
+```
+
+> `vendor_profile` chỉ xuất hiện khi `role === 'vendor'`. Sử dụng `whenLoaded()` để tránh N+1 query.
+
+---
+
+## ⚙️ Cấu hình môi trường
+
+Sao chép file `.env.example` thành `.env` và cập nhật các giá trị:
+
+```env
+APP_NAME=KomiBook
+APP_URL=http://localhost:8000
+
+# Database (MySQL cho production)
+DB_CONNECTION=mysql
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_DATABASE=komibook
+DB_USERNAME=root
+DB_PASSWORD=
+
+# Cache & Queue (Redis)
+CACHE_STORE=redis
+QUEUE_CONNECTION=redis
+REDIS_HOST=127.0.0.1
+REDIS_PORT=6379
+
+# CORS — cho phép frontend Vue
+SANCTUM_STATEFUL_DOMAINS=localhost:5173
+```
+
+---
+
+## 🚀 Hướng dẫn cài đặt & chạy
+
+```bash
+# 1. Cài đặt dependencies
+composer install
+
+# 2. Sao chép file cấu hình
+cp .env.example .env
+
+# 3. Tạo application key
+php artisan key:generate
+
+# 4. Chạy migration & seed dữ liệu mẫu
+php artisan migrate --seed
+
+# 5. Khởi động server phát triển (dùng Laravel Herd hoặc artisan)
+php artisan serve
+# Server chạy tại: http://localhost:8000
+
+# 6. (Tùy chọn) Sinh file IDE helper
+php artisan ide-helper:generate
+php artisan ide-helper:models --nowrite
+```
+
+---
+
+## 🧪 Kiểm thử
+
+```bash
+# Chạy toàn bộ test suite
+php artisan test
+
+# Kiểm tra code style
+./vendor/bin/pint
+```
+
+---
+
+## 📌 Ghi chú
+
+- CORS được cấu hình để chấp nhận request từ `http://localhost:5173` (frontend Vue).
+- Middleware `auth:sanctum` bảo vệ tất cả protected routes.
+- Model `User` implement `HasApiTokens` từ Sanctum.
+- Password được tự động hash thông qua `cast: 'hashed'` trong model.
