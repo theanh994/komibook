@@ -68,3 +68,5 @@ desktop.ini
 /frontend/.eslintcache
 /frontend/coverage/
 /frontend/test-results/
+
+.agent
