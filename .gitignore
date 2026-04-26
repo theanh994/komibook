@@ -69,4 +69,6 @@ desktop.ini
 /frontend/coverage/
 /frontend/test-results/
 
-.agent
+.agent/
+.agents/
+.docs/
