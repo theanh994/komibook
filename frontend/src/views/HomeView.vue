@@ -167,17 +167,25 @@
                     </span>
                   </p>
 
-                  <!-- Price -->
-                  <div class="flex items-center gap-2">
-                    <span class="text-base font-bold text-indigo-600">
-                      {{ formatCurrency(book.sale_price || book.price) }}
-                    </span>
-                    <span
-                      v-if="book.sale_price && book.price > book.sale_price"
-                      class="text-xs text-slate-400 line-through"
-                    >
-                      {{ formatCurrency(book.price) }}
-                    </span>
+                  <!-- Price & Cart -->
+                  <div class="flex items-center justify-between gap-2 mt-auto">
+                    <div class="flex items-center gap-2">
+                      <span class="text-base font-bold text-indigo-600">
+                        {{ formatCurrency(book.sale_price || book.price) }}
+                      </span>
+                      <span
+                        v-if="book.sale_price && book.price > book.sale_price"
+                        class="text-xs text-slate-400 line-through"
+                      >
+                        {{ formatCurrency(book.price) }}
+                      </span>
+                    </div>
+                    <Button 
+                      icon="pi pi-cart-plus" 
+                      class="!w-8 !h-8 !p-0 !rounded-full !bg-indigo-50 !text-indigo-600 !border-none hover:!bg-indigo-600 hover:!text-white transition-colors"
+                      @click.stop="addToCart(book)"
+                      title="Thêm vào giỏ"
+                    />
                   </div>
                 </div>
               </div>
@@ -206,11 +214,16 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import apiClient from '@/services/axios'
+import { useCartStore } from '@/stores/cart'
+import { useToast } from 'primevue/usetoast'
 import InputText from 'primevue/inputtext'
 import Skeleton from 'primevue/skeleton'
 import Paginator from 'primevue/paginator'
+import Button from 'primevue/button'
 
 const router = useRouter()
+const cartStore = useCartStore()
+const toast = useToast()
 
 // ─── State ──────────────────────────────────────────────────────────
 const categories = ref([])
@@ -296,6 +309,11 @@ const goToDetail = (slug) => {
 const formatCurrency = (value) => {
   if (!value) return '0 đ'
   return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(value)
+}
+
+const addToCart = (book) => {
+  cartStore.addToCart(book, 1)
+  toast.add({ severity: 'success', summary: 'Thành công', detail: 'Đã thêm vào giỏ hàng!', life: 3000 })
 }
 
 // ─── Watchers ───────────────────────────────────────────────────────

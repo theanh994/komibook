@@ -23,6 +23,20 @@
         <nav class="hidden md:flex items-center gap-2">
           <Button label="Trang chủ" icon="pi pi-home" text class="p-button-secondary font-medium" @click="$router.push('/')" />
           
+          <!-- Giỏ hàng -->
+          <button 
+            class="relative p-2 text-surface-500 hover:text-surface-900 transition-colors mx-2 cursor-pointer bg-transparent border-none"
+            @click="$router.push('/cart')"
+          >
+            <i class="pi pi-shopping-cart text-xl"></i>
+            <span 
+              v-if="cartStore.totalItems > 0"
+              class="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold w-4 h-4 flex items-center justify-center rounded-full"
+            >
+              {{ cartStore.totalItems > 9 ? '9+' : cartStore.totalItems }}
+            </span>
+          </button>
+          
           <template v-if="authStore.isAuthenticated">
             <!-- Quản trị Link (Condition based on roles) -->
             <Button 
@@ -65,12 +79,14 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { useCartStore } from '@/stores/cart'
 import Button from 'primevue/button'
 import Avatar from 'primevue/avatar'
 import Menu from 'primevue/menu'
 
 const router = useRouter()
 const authStore = useAuthStore()
+const cartStore = useCartStore()
 const logoExists = ref(false)
 const mobileMenu = ref(false)
 const userMenu = ref()

@@ -17,6 +17,12 @@ const router = createRouter({
       meta: { guestOnly: false, requiresAuth: false }
     },
     {
+      path: '/cart',
+      name: 'cart',
+      component: () => import('@/views/CartView.vue'),
+      meta: { guestOnly: false, requiresAuth: false }
+    },
+    {
       path: '/profile',
       name: 'profile',
       component: () => import('@/views/ProfileView.vue'),
