@@ -8,8 +8,15 @@ export const useAuthStore = defineStore('auth', {
   }),
   getters: {
     isAuthenticated: (state) => !!state.token,
+    isAdmin: (state) => state.user?.role === 'admin',
+    isVendor: (state) => state.user?.role === 'vendor',
+    isCustomer: (state) => state.user?.role === 'customer',
   },
   actions: {
+    async register(userData) {
+      await apiClient.get('/sanctum/csrf-cookie')
+      await apiClient.post('/api/auth/register', userData)
+    },
     async login(credentials) {
       // 1. Phải gọi lấy CSRF Cookie của Sanctum trước
       await apiClient.get('/sanctum/csrf-cookie')

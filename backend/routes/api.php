@@ -13,6 +13,11 @@ Route::prefix('auth')->name('auth.')->group(function () {
     Route::post('/login',    [AuthController::class, 'login'])->name('login');
 });
 
+// Các endpoint Catalog công cộng
+Route::get('/categories', [\App\Http\Controllers\Api\CategoryController::class, 'index']);
+Route::get('/books',      [\App\Http\Controllers\Api\BookController::class, 'index']);
+Route::get('/books/{slug}', [\App\Http\Controllers\Api\BookController::class, 'show']);
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Protected routes — Yêu cầu Sanctum token hợp lệ
 // ═══════════════════════════════════════════════════════════════════════════════

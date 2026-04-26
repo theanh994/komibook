@@ -95,8 +95,14 @@ class AuthController extends Controller
      */
     public function logout(Request $request): JsonResponse
     {
-        // Xóa đúng token đang dùng trong request này
-        $request->user()->currentAccessToken()->delete();
+        // Support either token or session based authentication
+        if ($request->user()->currentAccessToken() && method_exists($request->user()->currentAccessToken(), 'delete')) {
+            $request->user()->currentAccessToken()->delete();
+        }
+
+        \Illuminate\Support\Facades\Auth::guard('web')->logout();
+        $request->session()->invalidate();
+        $request->session()->regenerateToken();
 
         return response()->json([
             'status'  => 'success',
