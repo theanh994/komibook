@@ -35,15 +35,15 @@
             
             <div class="h-8 w-[1px] bg-surface-200 dark:bg-surface-700 mx-3"></div>
             
-            <!-- User Menu -->
-            <div class="flex items-center gap-3 pl-2">
-              <div class="flex flex-col items-end mr-1 hidden lg:flex">
-                <span class="text-xs text-surface-500 font-medium">Xin chào,</span>
-                <span class="text-sm font-bold text-surface-900 dark:text-surface-50">{{ authStore.user?.name }}</span>
+              <div class="flex items-center gap-3 pl-2 cursor-pointer" @click="toggleUserMenu" aria-haspopup="true" aria-controls="overlay_menu">
+                <div class="flex flex-col items-end mr-1 hidden lg:flex">
+                  <span class="text-xs text-surface-500 font-medium">Xin chào,</span>
+                  <span class="text-sm font-bold text-surface-900 dark:text-surface-50">{{ authStore.user?.name }}</span>
+                </div>
+                <Avatar icon="pi pi-user" shape="circle" class="bg-primary text-white" />
+                <i class="pi pi-angle-down text-surface-500 text-sm"></i>
               </div>
-              <Avatar icon="pi pi-user" shape="circle" class="bg-primary text-white cursor-pointer" />
-              <Button icon="pi pi-sign-out" text severity="danger" v-tooltip.bottom="'Đăng xuất'" @click="handleLogout" />
-            </div>
+              <Menu ref="userMenu" id="overlay_menu" :model="userMenuItems" :popup="true" />
           </template>
 
           <template v-else>
@@ -67,11 +67,38 @@ import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import Button from 'primevue/button'
 import Avatar from 'primevue/avatar'
+import Menu from 'primevue/menu'
 
 const router = useRouter()
 const authStore = useAuthStore()
 const logoExists = ref(false)
 const mobileMenu = ref(false)
+const userMenu = ref()
+
+const userMenuItems = ref([
+  {
+    label: 'Thông tin cá nhân',
+    icon: 'pi pi-user-edit',
+    command: () => {
+      router.push('/profile')
+    }
+  },
+  {
+    separator: true
+  },
+  {
+    label: 'Đăng xuất',
+    icon: 'pi pi-sign-out',
+    command: async () => {
+      await authStore.logout()
+      router.push({ name: 'home' })
+    }
+  }
+])
+
+const toggleUserMenu = (event) => {
+  userMenu.value.toggle(event)
+}
 
 // Check if logo exists (simplified)
 onMounted(() => {
@@ -83,11 +110,6 @@ onMounted(() => {
 
 const goToDashboard = () => {
   router.push({ name: 'dashboard' })
-}
-
-const handleLogout = async () => {
-    await authStore.logout()
-    router.push({ name: 'home' })
 }
 </script>
 

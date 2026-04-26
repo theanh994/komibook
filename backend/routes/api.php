@@ -26,3 +26,8 @@ Route::middleware('auth:sanctum')->prefix('auth')->name('auth.')->group(function
     Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
     Route::get('/me',      [AuthController::class, 'me'])->name('me');
 });
+
+Route::middleware('auth:sanctum')->prefix('profile')->name('profile.')->group(function () {
+    Route::put('/info',     [\App\Http\Controllers\Api\ProfileController::class, 'updateInfo'])->name('updateInfo');
+    Route::put('/password', [\App\Http\Controllers\Api\ProfileController::class, 'updatePassword'])->name('updatePassword');
+});

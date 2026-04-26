@@ -67,6 +67,20 @@ export const useAuthStore = defineStore('auth', {
         this.user = null
         localStorage.removeItem('token')
       }
+    },
+    async updateProfile(profileData) {
+      const response = await apiClient.put('/api/profile/info', profileData)
+      const responseData = response.data.data || response.data
+      
+      // Update local user state
+      if (this.user && responseData) {
+        this.user = { ...this.user, ...responseData }
+      }
+      return response.data
+    },
+    async updatePassword(passwordData) {
+      const response = await apiClient.put('/api/profile/password', passwordData)
+      return response.data
     }
   }
 })
