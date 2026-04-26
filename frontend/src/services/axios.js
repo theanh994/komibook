@@ -33,7 +33,7 @@ apiClient.interceptors.response.use(
       // Do không thể import useAuthStore tĩnh do vòng lặp import nên sẽ require động
       import('@/stores/auth').then(({ useAuthStore }) => {
         const authStore = useAuthStore()
-        authStore.logout()
+        authStore.logout(true) // skipApi = true: tránh vòng lặp 401 → logout → 401
         router.push({ name: 'login' })
       })
     }

@@ -24,6 +24,15 @@ class BookController extends Controller
             $query->where('category_id', $request->category_id);
         }
 
+        // 2b. Tìm kiếm theo từ khoá (title hoặc author)
+        if ($request->filled('search')) {
+            $search = $request->search;
+            $query->where(function ($q) use ($search) {
+                $q->where('title', 'LIKE', "%{$search}%")
+                  ->orWhere('author', 'LIKE', "%{$search}%");
+            });
+        }
+
         // 3. Hỗ trợ sắp xếp (ví dụ: mới nhất)
         $query->orderBy('created_at', 'desc');
 

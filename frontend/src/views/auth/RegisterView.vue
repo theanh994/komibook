@@ -1,43 +1,86 @@
 <template>
-  <div class="flex items-center justify-center min-h-screen bg-surface-50 dark:bg-surface-900 px-4">
-    <Card class="w-full max-w-[450px] shadow-lg rounded-xl overflow-hidden py-4">
-      <template #title>
-        <div class="text-center text-2xl font-bold text-surface-900 dark:text-surface-0 mb-2">Đăng Ký Tài Khoản</div>
-        <p class="text-center text-surface-500 dark:text-surface-400 text-sm font-normal">Gia nhập cộng đồng KomiBook ngay hôm nay</p>
-      </template>
-      
-      <template #content>
-        <form @submit.prevent="handleRegister" class="flex flex-col gap-5 mt-4">
-          <div class="flex flex-col gap-2">
-            <label for="name" class="font-medium text-surface-700 dark:text-surface-200">Họ và tên</label>
-            <InputText id="name" v-model="form.name" placeholder="Nhập họ và tên" required autofocus />
-          </div>
+  <div class="flex items-center justify-center min-h-screen bg-slate-50 px-4">
+    <!-- Auth Card -->
+    <div class="w-full max-w-[440px] bg-white rounded-xl shadow-sm shadow-slate-200/50 border border-slate-200/60 p-8">
+      <!-- Header -->
+      <div class="text-center mb-8">
+        <h1 class="text-2xl font-semibold text-slate-900 tracking-tight">Đăng Ký Tài Khoản</h1>
+        <p class="text-slate-500 text-sm mt-1.5">Gia nhập cộng đồng KomiBook ngay hôm nay</p>
+      </div>
 
-          <div class="flex flex-col gap-2">
-            <label for="email" class="font-medium text-surface-700 dark:text-surface-200">Email</label>
-            <InputText id="email" v-model="form.email" type="email" placeholder="Nhập địa chỉ email" required />
-          </div>
+      <!-- Form -->
+      <form @submit.prevent="handleRegister" class="flex flex-col gap-5">
+        <div class="flex flex-col gap-1.5">
+          <label for="name" class="text-sm font-medium text-slate-700">Họ và tên</label>
+          <InputText
+            id="name"
+            v-model="form.name"
+            placeholder="Nguyễn Văn A"
+            required
+            autofocus
+            class="auth-input"
+          />
+        </div>
 
-          <div class="flex flex-col gap-2">
-            <label for="password" class="font-medium text-surface-700 dark:text-surface-200">Mật khẩu</label>
-            <Password id="password" v-model="form.password" toggleMask placeholder="Nhập mật khẩu" required inputClass="w-full" />
-          </div>
+        <div class="flex flex-col gap-1.5">
+          <label for="email" class="text-sm font-medium text-slate-700">Email</label>
+          <InputText
+            id="email"
+            v-model="form.email"
+            type="email"
+            placeholder="you@example.com"
+            required
+            class="auth-input"
+          />
+        </div>
 
-          <div class="flex flex-col gap-2">
-            <label for="password_confirmation" class="font-medium text-surface-700 dark:text-surface-200">Xác nhận mật khẩu</label>
-            <Password id="password_confirmation" v-model="form.password_confirmation" :feedback="false" toggleMask placeholder="Nhập lại mật khẩu" required inputClass="w-full" />
-          </div>
+        <div class="flex flex-col gap-1.5">
+          <label for="password" class="text-sm font-medium text-slate-700">Mật khẩu</label>
+          <Password
+            id="password"
+            v-model="form.password"
+            toggleMask
+            placeholder="Tối thiểu 8 ký tự"
+            required
+            inputClass="w-full auth-input"
+          />
+        </div>
 
-          <Button type="submit" label="Đăng ký ngay" :loading="loading" class="w-full mt-2" />
-          
-          <div class="text-center text-sm text-surface-600 dark:text-surface-400 mt-2">
-            Đã có tài khoản? 
-            <router-link to="/login" class="text-primary font-bold hover:underline">Đăng nhập</router-link>
-          </div>
-        </form>
-      </template>
-    </Card>
-    
+        <div class="flex flex-col gap-1.5">
+          <label for="password_confirmation" class="text-sm font-medium text-slate-700">Xác nhận mật khẩu</label>
+          <Password
+            id="password_confirmation"
+            v-model="form.password_confirmation"
+            :feedback="false"
+            toggleMask
+            placeholder="Nhập lại mật khẩu"
+            required
+            inputClass="w-full auth-input"
+          />
+        </div>
+
+        <Button
+          type="submit"
+          label="Đăng ký ngay"
+          :loading="loading"
+          class="auth-btn w-full mt-1 !bg-gradient-to-b !from-indigo-500 !to-indigo-600 hover:!from-indigo-600 hover:!to-indigo-700 !text-white !border-none !rounded-lg !shadow-sm !font-medium !text-sm !py-2.5 transition-all duration-300 ease-out"
+        />
+      </form>
+
+      <!-- Divider + Navigation -->
+      <div class="mt-6 pt-5 border-t border-slate-100 text-center">
+        <p class="text-sm text-slate-500">
+          Đã có tài khoản?
+          <router-link
+            to="/login"
+            class="text-indigo-600 hover:text-indigo-700 font-medium transition-colors duration-200"
+          >
+            Đăng nhập
+          </router-link>
+        </p>
+      </div>
+    </div>
+
     <Toast />
   </div>
 </template>
@@ -48,7 +91,7 @@ import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from 'primevue/usetoast'
 
-import Card from 'primevue/card'
+
 import InputText from 'primevue/inputtext'
 import Password from 'primevue/password'
 import Button from 'primevue/button'
@@ -76,11 +119,11 @@ const handleRegister = async () => {
   loading.value = true
   try {
     await authStore.register({ ...form })
-    toast.add({ severity: 'success', summary: 'Thành công', detail: 'Đăng ký tài khoản thành công! Bạn có thể đăng nhập ngay.', life: 3000 })
+    toast.add({ severity: 'success', summary: 'Thành công', detail: 'Đăng ký tài khoản thành công! Đang chuyển hướng...', life: 3000 })
     
     setTimeout(() => {
-      router.push({ name: 'login' })
-    }, 2000)
+      router.push({ name: 'dashboard' })
+    }, 1000)
   } catch (error) {
     let errorMessage = 'Có lỗi xảy ra trong quá trình đăng ký.'
     if (error.response?.data?.message) {
@@ -95,3 +138,22 @@ const handleRegister = async () => {
   }
 }
 </script>
+
+<style scoped>
+/* UUPM: Focus ring cho PrimeVue inputs */
+:deep(.auth-input) {
+  border-radius: 0.5rem;
+  border-color: var(--color-slate-300);
+  font-size: 0.875rem;
+}
+:deep(.auth-input:focus),
+:deep(.auth-input.p-focus) {
+  box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.3);
+  border-color: var(--color-indigo-400);
+}
+/* UUPM: Hover effect cho Auth Button */
+.auth-btn:hover {
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+  transform: translateY(-2px);
+}
+</style>

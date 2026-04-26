@@ -15,7 +15,16 @@ export const useAuthStore = defineStore('auth', {
   actions: {
     async register(userData) {
       await apiClient.get('/sanctum/csrf-cookie')
-      await apiClient.post('/api/auth/register', userData)
+      const response = await apiClient.post('/api/auth/register', userData)
+
+      // Backend trả về: { status: 'success', data: { user, access_token, token_type } }
+      const responseData = response.data.data || response.data
+
+      this.token = responseData.access_token || responseData.token
+      localStorage.setItem('token', this.token)
+
+      // Lưu user trực tiếp từ response (không cần gọi thêm /me)
+      this.user = responseData.user || null
     },
     async login(credentials) {
       // 1. Phải gọi lấy CSRF Cookie của Sanctum trước
@@ -45,9 +54,9 @@ export const useAuthStore = defineStore('auth', {
         this.logout()
       }
     },
-    async logout() {
+    async logout(skipApi = false) {
       try {
-        if (this.token) {
+        if (this.token && !skipApi) {
           // Gửi request thu hồi token ở backend
           await apiClient.post('/api/auth/logout')
         }
