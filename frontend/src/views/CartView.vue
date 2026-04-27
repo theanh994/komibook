@@ -96,6 +96,17 @@
           <div class="bg-white rounded-xl border border-slate-200/60 shadow-sm p-6 sticky top-24">
             <h2 class="text-lg font-semibold text-slate-900 tracking-tight mb-5">Tóm tắt đơn hàng</h2>
             
+            <div class="space-y-4 mb-5 border-b border-slate-100 pb-5">
+              <div class="flex flex-col gap-2">
+                <label class="text-sm font-medium text-slate-700">Số điện thoại</label>
+                <InputText v-model="shippingData.phone" placeholder="Nhập số điện thoại..." class="w-full text-sm !rounded-lg" />
+              </div>
+              <div class="flex flex-col gap-2">
+                <label class="text-sm font-medium text-slate-700">Địa chỉ giao hàng</label>
+                <InputText v-model="shippingData.shipping_address" placeholder="Nhập địa chỉ nhận hàng..." class="w-full text-sm !rounded-lg" />
+              </div>
+            </div>
+
             <div class="space-y-3 mb-5 border-b border-slate-100 pb-5">
               <div class="flex justify-between text-sm text-slate-600">
                 <span>Tổng phụ ({{ cartStore.totalItems }} sản phẩm)</span>
@@ -112,10 +123,10 @@
               <span class="text-2xl font-bold text-indigo-600">{{ formatCurrency(cartStore.totalPrice) }}</span>
             </div>
 
-            <Button label="Tiến hành thanh toán" class="w-full !p-3 !text-base !font-bold bg-gradient-to-b from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700 shadow-sm border-none !rounded-xl" @click="checkout" />
+            <Button label="Tiến hành thanh toán" :loading="isSubmitting" class="w-full !p-3 !text-base !font-bold bg-gradient-to-b from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700 shadow-sm border-none !rounded-xl" @click="checkout" />
             
             <p class="text-xs text-center text-slate-400 mt-4 leading-relaxed">
-              (Bấm thanh toán để tiếp tục. Yêu cầu đăng nhập sẽ được thực hiện ở trang Checkout sau này.)
+              Vui lòng nhập đầy đủ địa chỉ và số điện thoại để thanh toán.
             </p>
           </div>
         </div>
@@ -131,13 +142,23 @@
 <script setup>
 import { useCartStore } from '@/stores/cart'
 import { useRouter } from 'vue-router'
+import { ref } from 'vue'
 import Button from 'primevue/button'
+import InputText from 'primevue/inputtext'
 import { useConfirm } from "primevue/useconfirm"
+import { useToast } from "primevue/usetoast"
 import ConfirmDialog from 'primevue/confirmdialog'
 
 const cartStore = useCartStore()
 const router = useRouter()
 const confirm = useConfirm()
+const toast = useToast()
+
+const isSubmitting = ref(false)
+const shippingData = ref({
+  phone: '',
+  shipping_address: ''
+})
 
 const formatCurrency = (value) => {
   if (!value) return '0 đ'
@@ -163,9 +184,35 @@ const confirmRemove = (book) => {
   })
 }
 
-const checkout = () => {
-  // TODO: Implement Checkout Flow in the next phases
-  router.push('/checkout')
+const checkout = async () => {
+  if (!shippingData.value.phone || !shippingData.value.shipping_address) {
+    toast.add({ severity: 'warn', summary: 'Cảnh báo', detail: 'Vui lòng nhập đủ SĐT và địa chỉ!', life: 3000 })
+    return
+  }
+
+  isSubmitting.value = true
+  try {
+    await cartStore.checkout(shippingData.value)
+    
+    // Thành công
+    cartStore.clearCart()
+    toast.add({ severity: 'success', summary: 'Thành công', detail: 'Đặt hàng thành công!', life: 3000 })
+    
+    // Redirect về trang chủ (tạm thời về home nếu chưa có trang lịch sử)
+    router.push('/')
+  } catch (error) {
+    console.error(error)
+    const msg = error.response?.data?.message || 'Có lỗi xảy ra khi thanh toán'
+    // Xử lý lỗi validation từ Laravel nếu có
+    if (error.response?.status === 401) {
+      toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Bạn cần đăng nhập để thanh toán', life: 5000 })
+      router.push('/login')
+    } else {
+      toast.add({ severity: 'error', summary: 'Lỗi', detail: msg, life: 5000 })
+    }
+  } finally {
+    isSubmitting.value = false
+  }
 }
 </script>
 

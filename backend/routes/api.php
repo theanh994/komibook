@@ -31,3 +31,8 @@ Route::middleware('auth:sanctum')->prefix('profile')->name('profile.')->group(fu
     Route::put('/info',     [\App\Http\Controllers\Api\ProfileController::class, 'updateInfo'])->name('updateInfo');
     Route::put('/password', [\App\Http\Controllers\Api\ProfileController::class, 'updatePassword'])->name('updatePassword');
 });
+
+Route::middleware('auth:sanctum')->group(function () {
+    Route::post('/checkout', [\App\Http\Controllers\Api\CheckoutController::class, 'store']);
+});
+

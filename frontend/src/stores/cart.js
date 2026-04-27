@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
+import apiClient from '@/services/axios'
 
 export const useCartStore = defineStore('cart', () => {
   const items = ref([])
@@ -75,6 +76,22 @@ export const useCartStore = defineStore('cart', () => {
     items.value = []
   }
 
+  const checkout = async (shippingData) => {
+    const payloadItems = items.value.map(item => ({
+      book_id: item.book.id,
+      quantity: item.quantity
+    }))
+
+    const payload = {
+      items: payloadItems,
+      shipping_address: shippingData.shipping_address,
+      phone: shippingData.phone
+    }
+
+    const response = await apiClient.post('/api/checkout', payload)
+    return response.data
+  }
+
   return {
     items,
     totalItems,
@@ -83,6 +100,7 @@ export const useCartStore = defineStore('cart', () => {
     addToCart,
     updateQuantity,
     removeFromCart,
-    clearCart
+    clearCart,
+    checkout
   }
 })
