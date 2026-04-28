@@ -33,6 +33,29 @@ class BookController extends Controller
             });
         }
 
+        // 2c. Lọc theo khoảng giá
+        if ($request->filled('min_price')) {
+            $query->where(function($q) use ($request) {
+                $q->where('sale_price', '>=', $request->min_price)
+                  ->orWhere(function($subq) use ($request) {
+                      $subq->whereNull('sale_price')->where('price', '>=', $request->min_price);
+                  });
+            });
+        }
+        if ($request->filled('max_price')) {
+            $query->where(function($q) use ($request) {
+                $q->where('sale_price', '<=', $request->max_price)
+                  ->orWhere(function($subq) use ($request) {
+                      $subq->whereNull('sale_price')->where('price', '<=', $request->max_price);
+                  });
+            });
+        }
+
+        // 2d. Lọc theo Loại sách
+        if ($request->filled('type') && $request->type !== 'all') {
+            $query->where('type', $request->type);
+        }
+
         // 3. Hỗ trợ sắp xếp (ví dụ: mới nhất)
         $query->orderBy('created_at', 'desc');
 
@@ -53,13 +76,38 @@ class BookController extends Controller
         $book = Book::withoutGlobalScopes()
             ->where('slug', $slug)
             ->where('status', 'published')
-            ->with(['vendor', 'category'])
+            ->with(['vendor', 'category', 'reviews.user']) // Tải reviews kèm user
             ->firstOrFail();
 
         return response()->json([
             'status'  => 'success',
             'message' => 'Lấy chi tiết sách thành công.',
             'data'    => new BookResource($book),
+        ]);
+    }
+
+    /**
+     * Thêm đánh giá cho sách
+     */
+    public function addReview(Request $request, $id)
+    {
+        $request->validate([
+            'rating' => 'required|integer|min:1|max:5',
+            'comment' => 'nullable|string|max:1000',
+        ]);
+
+        $book = Book::withoutGlobalScopes()->findOrFail($id);
+
+        $review = $book->reviews()->create([
+            'user_id' => $request->user()->id,
+            'rating' => $request->rating,
+            'comment' => $request->comment,
+        ]);
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Cảm ơn bạn đã đánh giá!',
+            'data' => clone $review->load('user')
         ]);
     }
 }

@@ -73,6 +73,14 @@ class Book extends Model
         return $this->belongsTo(Category::class);
     }
 
+    /**
+     * Đánh giá của sách.
+     */
+    public function reviews(): HasMany
+    {
+        return $this->hasMany(Review::class);
+    }
+
     // ─── Helper Methods ───────────────────────────────────────────────────────
 
     public function isPublished(): bool

@@ -4,12 +4,14 @@
     <!-- ═══════════════════════════════════════════════════════════════ -->
     <!-- HERO / HEADER SECTION                                         -->
     <!-- ═══════════════════════════════════════════════════════════════ -->
-    <section class="bg-gradient-to-br from-indigo-600 via-indigo-500 to-purple-500 py-14 px-4">
-      <div class="max-w-3xl mx-auto text-center">
-        <h1 class="text-3xl md:text-4xl font-bold text-white tracking-tight mb-3">
+    <section class="relative bg-slate-900 py-16 px-4 overflow-hidden">
+      <div class="absolute inset-0 bg-gradient-to-r from-indigo-900/90 to-purple-900/80 z-10"></div>
+      <img src="https://images.unsplash.com/photo-1507842217343-583bb7270b66?ixlib=rb-1.2.1&auto=format&fit=crop&w=2000&q=80" alt="Banner" class="absolute inset-0 w-full h-full object-cover opacity-50">
+      <div class="relative z-20 max-w-3xl mx-auto text-center">
+        <h1 class="text-3xl md:text-5xl font-bold text-white tracking-tight mb-4 drop-shadow-md">
           Khám phá thế giới sách
         </h1>
-        <p class="text-indigo-100 text-base md:text-lg mb-8">
+        <p class="text-indigo-100 text-base md:text-xl mb-8 drop-shadow-sm">
           Hàng ngàn cuốn sách hay đang chờ bạn tại KomiBook
         </p>
 
@@ -73,6 +75,41 @@
                 </button>
               </li>
             </ul>
+
+            <!-- Filters -->
+            <div class="mt-6 pt-6 border-t border-slate-100">
+              <h3 class="text-sm font-semibold text-slate-900 tracking-tight mb-3">Bộ lọc nâng cao</h3>
+              
+              <!-- Loại sách -->
+              <div class="mb-4">
+                <label class="text-xs font-medium text-slate-600 block mb-2">Loại sách</label>
+                <div class="flex flex-col gap-2">
+                  <div class="flex items-center">
+                    <RadioButton v-model="filterType" inputId="type1" name="type" value="all" @change="applyFilters" />
+                    <label for="type1" class="ml-2 text-sm text-slate-700 cursor-pointer">Tất cả</label>
+                  </div>
+                  <div class="flex items-center">
+                    <RadioButton v-model="filterType" inputId="type2" name="type" value="physical" @change="applyFilters" />
+                    <label for="type2" class="ml-2 text-sm text-slate-700 cursor-pointer">Sách vật lý</label>
+                  </div>
+                  <div class="flex items-center">
+                    <RadioButton v-model="filterType" inputId="type3" name="type" value="ebook" @change="applyFilters" />
+                    <label for="type3" class="ml-2 text-sm text-slate-700 cursor-pointer">E-book</label>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Khoảng giá -->
+              <div>
+                <label class="text-xs font-medium text-slate-600 block mb-2">Khoảng giá</label>
+                <div class="flex items-center gap-2">
+                  <InputNumber v-model="filterMinPrice" placeholder="Tối thiểu" class="flex-1" inputClass="w-full text-sm !rounded-md" @keyup.enter="applyFilters" />
+                  <span class="text-slate-400">-</span>
+                  <InputNumber v-model="filterMaxPrice" placeholder="Tối đa" class="flex-1" inputClass="w-full text-sm !rounded-md" @keyup.enter="applyFilters" />
+                </div>
+                <Button label="Áp dụng lọc" class="w-full mt-3 !text-xs !py-2 !rounded-lg" severity="secondary" outlined @click="applyFilters" />
+              </div>
+            </div>
           </div>
         </aside>
 
@@ -220,6 +257,8 @@ import InputText from 'primevue/inputtext'
 import Skeleton from 'primevue/skeleton'
 import Paginator from 'primevue/paginator'
 import Button from 'primevue/button'
+import RadioButton from 'primevue/radiobutton'
+import InputNumber from 'primevue/inputnumber'
 
 const router = useRouter()
 const cartStore = useCartStore()
@@ -239,6 +278,11 @@ const searchQuery = ref('')
 const totalRecords = ref(0)
 const first = ref(0)
 const currentPage = ref(1)
+
+// Filters
+const filterType = ref('all')
+const filterMinPrice = ref(null)
+const filterMaxPrice = ref(null)
 
 // ─── Computed ───────────────────────────────────────────────────────
 const activeTitle = computed(() => {
@@ -272,6 +316,9 @@ const fetchBooks = async () => {
       page: currentPage.value,
       ...(selectedCategoryId.value && { category_id: selectedCategoryId.value }),
       ...(searchQuery.value.trim() && { search: searchQuery.value.trim() }),
+      ...(filterType.value !== 'all' && { type: filterType.value }),
+      ...(filterMinPrice.value !== null && { min_price: filterMinPrice.value }),
+      ...(filterMaxPrice.value !== null && { max_price: filterMaxPrice.value }),
     }
 
     const response = await apiClient.get('/api/books', { params })
@@ -290,6 +337,12 @@ const fetchBooks = async () => {
 // ─── User Actions ───────────────────────────────────────────────────
 const selectCategory = (id) => {
   selectedCategoryId.value = id
+  currentPage.value = 1
+  first.value = 0
+  fetchBooks()
+}
+
+const applyFilters = () => {
   currentPage.value = 1
   first.value = 0
   fetchBooks()

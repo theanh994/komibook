@@ -34,5 +34,7 @@ Route::middleware('auth:sanctum')->prefix('profile')->name('profile.')->group(fu
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/checkout', [\App\Http\Controllers\Api\CheckoutController::class, 'store']);
+    Route::post('/books/{id}/reviews', [\App\Http\Controllers\Api\BookController::class, 'addReview']);
+    Route::post('/coupons/apply', [\App\Http\Controllers\Api\CouponController::class, 'apply']);
 });
 

@@ -107,10 +107,27 @@
               </div>
             </div>
 
+            <div class="space-y-4 mb-5 border-b border-slate-100 pb-5">
+              <div class="flex flex-col gap-2">
+                <label class="text-sm font-medium text-slate-700">Mã giảm giá</label>
+                <div class="flex gap-2">
+                  <InputText v-model="couponCode" placeholder="Nhập mã giảm giá..." class="flex-1 text-sm !rounded-lg" />
+                  <Button label="Áp dụng" class="!px-4 !rounded-lg" :loading="isApplyingCoupon" @click="applyCoupon" />
+                </div>
+                <div v-if="appliedCoupon" class="text-xs text-emerald-600 font-medium mt-1 flex items-center gap-1">
+                  <i class="pi pi-check-circle"></i> Đã áp dụng mã: {{ appliedCoupon.code }} (-{{ formatCurrency(appliedCoupon.discount_amount) }})
+                </div>
+              </div>
+            </div>
+
             <div class="space-y-3 mb-5 border-b border-slate-100 pb-5">
               <div class="flex justify-between text-sm text-slate-600">
                 <span>Tổng phụ ({{ cartStore.totalItems }} sản phẩm)</span>
                 <span class="font-medium text-slate-900">{{ formatCurrency(cartStore.totalPrice) }}</span>
+              </div>
+              <div class="flex justify-between text-sm text-slate-600" v-if="appliedCoupon">
+                <span>Giảm giá</span>
+                <span class="font-medium text-emerald-600">-{{ formatCurrency(appliedCoupon.discount_amount) }}</span>
               </div>
               <div class="flex justify-between text-sm text-slate-600">
                 <span>Phí vận chuyển</span>
@@ -120,7 +137,7 @@
 
             <div class="flex justify-between items-center mb-6">
               <span class="text-base font-semibold text-slate-900">Tổng cộng</span>
-              <span class="text-2xl font-bold text-indigo-600">{{ formatCurrency(cartStore.totalPrice) }}</span>
+              <span class="text-2xl font-bold text-indigo-600">{{ formatCurrency(finalTotal) }}</span>
             </div>
 
             <Button label="Tiến hành thanh toán" :loading="isSubmitting" class="w-full !p-3 !text-base !font-bold bg-gradient-to-b from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700 shadow-sm border-none !rounded-xl" @click="checkout" />
@@ -142,7 +159,8 @@
 <script setup>
 import { useCartStore } from '@/stores/cart'
 import { useRouter } from 'vue-router'
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
+import apiClient from '@/services/axios'
 import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
 import { useConfirm } from "primevue/useconfirm"
@@ -158,6 +176,18 @@ const isSubmitting = ref(false)
 const shippingData = ref({
   phone: '',
   shipping_address: ''
+})
+
+const couponCode = ref('')
+const isApplyingCoupon = ref(false)
+const appliedCoupon = ref(null)
+
+const finalTotal = computed(() => {
+  let total = cartStore.totalPrice
+  if (appliedCoupon.value && appliedCoupon.value.discount_amount) {
+    total -= appliedCoupon.value.discount_amount
+  }
+  return total > 0 ? total : 0
 })
 
 const formatCurrency = (value) => {
@@ -182,6 +212,30 @@ const confirmRemove = (book) => {
       cartStore.removeFromCart(book.id)
     }
   })
+}
+
+const applyCoupon = async () => {
+  if (!couponCode.value.trim()) {
+    toast.add({ severity: 'warn', summary: 'Cảnh báo', detail: 'Vui lòng nhập mã giảm giá', life: 3000 })
+    return
+  }
+
+  isApplyingCoupon.value = true
+  try {
+    const response = await apiClient.post('/api/coupons/apply', {
+      code: couponCode.value,
+      total_amount: cartStore.totalPrice
+    })
+    appliedCoupon.value = response.data.data
+    toast.add({ severity: 'success', summary: 'Thành công', detail: response.data.message || 'Đã áp dụng mã giảm giá!', life: 3000 })
+  } catch (error) {
+    console.error(error)
+    const msg = error.response?.data?.message || 'Có lỗi xảy ra khi áp dụng mã'
+    toast.add({ severity: 'error', summary: 'Lỗi', detail: msg, life: 3000 })
+    appliedCoupon.value = null
+  } finally {
+    isApplyingCoupon.value = false
+  }
 }
 
 const checkout = async () => {

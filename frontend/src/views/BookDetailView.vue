@@ -44,6 +44,12 @@
             </div>
 
             <h1 class="text-3xl md:text-4xl font-bold mb-2">{{ book.title }}</h1>
+            
+            <div class="flex items-center gap-2 mb-2" v-if="book.reviews && book.reviews.length > 0">
+              <Rating :modelValue="averageRating" readonly :cancel="false" />
+              <span class="text-sm text-surface-500">({{ book.reviews.length }} đánh giá)</span>
+            </div>
+
             <p class="text-lg text-surface-500 dark:text-surface-400 mb-6">Tác giả: <span class="font-semibold text-surface-800 dark:text-surface-100">{{ book.author || 'Đang cập nhật' }}</span></p>
 
             <!-- Price Box -->
@@ -90,6 +96,49 @@
               </div>
             </div>
 
+            <!-- Reviews Section -->
+            <div class="mt-8 pt-8 border-t border-surface-200 dark:border-surface-700">
+              <h3 class="text-xl font-bold mb-6">Đánh giá từ khách hàng</h3>
+              
+              <!-- Review Form -->
+              <div class="bg-surface-50 dark:bg-surface-900 rounded-xl p-6 mb-8 border border-surface-200 dark:border-surface-700">
+                <h4 class="font-semibold mb-3">Viết đánh giá của bạn</h4>
+                <div class="flex flex-col gap-4">
+                  <div>
+                    <label class="block text-sm mb-2 text-surface-600">Đánh giá sao</label>
+                    <Rating v-model="reviewForm.rating" :cancel="false" />
+                  </div>
+                  <div>
+                    <label class="block text-sm mb-2 text-surface-600">Nội dung</label>
+                    <Textarea v-model="reviewForm.comment" rows="3" class="w-full !rounded-lg" placeholder="Chia sẻ cảm nhận của bạn về cuốn sách này..."></Textarea>
+                  </div>
+                  <div class="flex justify-end">
+                    <Button label="Gửi đánh giá" :loading="isSubmittingReview" @click="submitReview" />
+                  </div>
+                </div>
+              </div>
+
+              <!-- Reviews List -->
+              <div v-if="book.reviews && book.reviews.length > 0" class="space-y-6">
+                <div v-for="review in book.reviews" :key="review.id" class="border-b border-surface-100 dark:border-surface-800 pb-6 last:border-0 last:pb-0">
+                  <div class="flex items-center gap-3 mb-2">
+                    <div class="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold">
+                      {{ review.user?.name?.charAt(0) || 'U' }}
+                    </div>
+                    <div>
+                      <div class="font-medium">{{ review.user?.name || 'Người dùng ẩn danh' }}</div>
+                      <div class="text-xs text-surface-400">{{ new Date(review.created_at).toLocaleDateString('vi-VN') }}</div>
+                    </div>
+                  </div>
+                  <Rating :modelValue="review.rating" readonly :cancel="false" class="mb-2 !text-sm" />
+                  <p class="text-surface-700 dark:text-surface-300 text-sm leading-relaxed">{{ review.comment }}</p>
+                </div>
+              </div>
+              <div v-else class="text-center py-8 text-surface-500 bg-surface-50 dark:bg-surface-900 rounded-xl">
+                Chưa có đánh giá nào. Hãy là người đầu tiên đánh giá cuốn sách này!
+              </div>
+            </div>
+
           </div>
         </div>
       </div>
@@ -99,13 +148,15 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useToast } from 'primevue/usetoast'
 import apiClient from '@/services/axios'
 
 import Button from 'primevue/button'
 import Badge from 'primevue/badge'
+import Rating from 'primevue/rating'
+import Textarea from 'primevue/textarea'
 
 const route = useRoute()
 const toast = useToast()
@@ -124,6 +175,45 @@ const fetchBookDetail = async () => {
     console.error('Lỗi tải chi tiết sách:', error)
   } finally {
     loading.value = false
+  }
+}
+
+const averageRating = computed(() => {
+  if (!book.value || !book.value.reviews || book.value.reviews.length === 0) return 0
+  const sum = book.value.reviews.reduce((acc, curr) => acc + curr.rating, 0)
+  return Math.round(sum / book.value.reviews.length)
+})
+
+const reviewForm = ref({ rating: 5, comment: '' })
+const isSubmittingReview = ref(false)
+
+const submitReview = async () => {
+  if (!reviewForm.value.rating) {
+    toast.add({ severity: 'warn', summary: 'Cảnh báo', detail: 'Vui lòng chọn số sao đánh giá.', life: 3000 })
+    return
+  }
+
+  isSubmittingReview.value = true
+  try {
+    const response = await apiClient.post(`/api/books/${book.value.id}/reviews`, reviewForm.value)
+    toast.add({ severity: 'success', summary: 'Thành công', detail: response.data.message || 'Cảm ơn bạn đã đánh giá!', life: 3000 })
+    
+    // Thêm review mới vào danh sách hiện tại
+    if (!book.value.reviews) book.value.reviews = []
+    book.value.reviews.unshift(response.data.data)
+    
+    // Reset form
+    reviewForm.value = { rating: 5, comment: '' }
+  } catch (error) {
+    console.error(error)
+    const msg = error.response?.data?.message || 'Có lỗi xảy ra khi gửi đánh giá'
+    if (error.response?.status === 401) {
+      toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Bạn cần đăng nhập để đánh giá.', life: 5000 })
+    } else {
+      toast.add({ severity: 'error', summary: 'Lỗi', detail: msg, life: 5000 })
+    }
+  } finally {
+    isSubmittingReview.value = false
   }
 }
 

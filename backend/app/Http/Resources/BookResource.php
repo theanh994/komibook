@@ -45,6 +45,19 @@ class BookResource extends JsonResource
                     'slug' => $this->category->slug,
                 ];
             }),
+            'reviews'  => $this->whenLoaded('reviews', function () {
+                return $this->reviews->map(function ($review) {
+                    return [
+                        'id' => $review->id,
+                        'rating' => $review->rating,
+                        'comment' => $review->comment,
+                        'created_at' => $review->created_at,
+                        'user' => [
+                            'name' => $review->user->name ?? 'Người dùng ẩn danh',
+                        ]
+                    ];
+                });
+            }),
         ];
     }
 }
