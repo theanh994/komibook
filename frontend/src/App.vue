@@ -8,7 +8,7 @@ import Toast from 'primevue/toast'
   <Toast />
   <div class="min-h-screen bg-surface-50 dark:bg-surface-900 flex flex-col">
     <!-- Thanh Header Toàn cục -->
-    <AppHeader />
+    <AppHeader v-if="!$route.meta.hideHeader" />
     
     <!-- Render các trang bên dưới Navbar -->
     <main class="flex-grow">

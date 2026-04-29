@@ -100,6 +100,13 @@ const userMenuItems = ref([
     }
   },
   {
+    label: 'Tủ sách',
+    icon: 'pi pi-book',
+    command: () => {
+      router.push('/my-library')
+    }
+  },
+  {
     separator: true
   },
   {

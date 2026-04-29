@@ -31,6 +31,7 @@ class Book extends Model
         'stock',
         'type',
         'status',
+        'file_path',
     ];
 
     /**

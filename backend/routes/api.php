@@ -36,5 +36,11 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/checkout', [\App\Http\Controllers\Api\CheckoutController::class, 'store']);
     Route::post('/books/{id}/reviews', [\App\Http\Controllers\Api\BookController::class, 'addReview']);
     Route::post('/coupons/apply', [\App\Http\Controllers\Api\CouponController::class, 'apply']);
+    Route::get('/my-orders', [\App\Http\Controllers\Api\OrderController::class, 'myOrders']);
+    Route::get('/orders/{order}/ebooks/{book}/generate-link', [\App\Http\Controllers\Api\OrderController::class, 'generateEbookLink']);
 });
 
+// Route để stream e-book (Dùng signed URL, không cần auth middleware vì link chỉ có hiệu lực với chữ ký hợp lệ)
+Route::get('/ebooks/{filename}/stream', [\App\Http\Controllers\Api\OrderController::class, 'streamEbook'])
+    ->middleware('signed')
+    ->name('api.ebook.stream');
