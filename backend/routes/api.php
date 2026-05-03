@@ -40,6 +40,14 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/orders/{order}/ebooks/{book}/generate-link', [\App\Http\Controllers\Api\OrderController::class, 'generateEbookLink']);
 });
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// Vendor routes — Quản lý gian hàng (yêu cầu role: vendor)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+Route::middleware('auth:sanctum')->prefix('vendor')->name('vendor.')->group(function () {
+    Route::apiResource('books', \App\Http\Controllers\Api\Vendor\BookController::class);
+});
+
 // Route để stream e-book (Dùng signed URL, không cần auth middleware vì link chỉ có hiệu lực với chữ ký hợp lệ)
 Route::get('/ebooks/{filename}/stream', [\App\Http\Controllers\Api\OrderController::class, 'streamEbook'])
     ->middleware('signed')

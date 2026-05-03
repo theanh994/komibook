@@ -1,0 +1,69 @@
+<?php
+
+namespace App\Http\Requests\Vendor;
+
+use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
+
+class StoreBookRequest extends FormRequest
+{
+    /**
+     * Determine if the user is authorized to make this request.
+     */
+    public function authorize(): bool
+    {
+        return $this->user()?->role === 'vendor';
+    }
+
+    /**
+     * Get the validation rules that apply to the request.
+     *
+     * @return array<string, \Illuminate\Contracts\Validation\ValidationRule|array<mixed>|string>
+     */
+    public function rules(): array
+    {
+        return [
+            'title'       => ['required', 'string', 'max:255'],
+            'author'      => ['required', 'string', 'max:255'],
+            'category_id' => ['required', 'integer', 'exists:categories,id'],
+            'description' => ['nullable', 'string', 'max:5000'],
+            'isbn'        => ['nullable', 'string', 'max:20'],
+            'price'       => ['required', 'integer', 'min:0'],
+            'sale_price'  => ['nullable', 'integer', 'min:0', 'lt:price'],
+            'stock'       => ['required', 'integer', 'min:0'],
+            'type'        => ['required', Rule::in(['physical', 'ebook'])],
+            'status'      => ['nullable', Rule::in(['draft', 'published'])],
+            'cover_image' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
+            'ebook_file'  => ['nullable', 'file', 'mimes:pdf,epub', 'max:51200', 'required_if:type,ebook'],
+        ];
+    }
+
+    /**
+     * Custom attribute names for error messages.
+     */
+    public function attributes(): array
+    {
+        return [
+            'title'       => 'Tên sách',
+            'author'      => 'Tác giả',
+            'category_id' => 'Danh mục',
+            'price'       => 'Giá',
+            'sale_price'  => 'Giá khuyến mãi',
+            'stock'       => 'Tồn kho',
+            'type'        => 'Loại sách',
+            'cover_image' => 'Ảnh bìa',
+            'ebook_file'  => 'File E-book',
+        ];
+    }
+
+    /**
+     * Custom validation messages.
+     */
+    public function messages(): array
+    {
+        return [
+            'sale_price.lt'          => 'Giá khuyến mãi phải nhỏ hơn giá gốc.',
+            'ebook_file.required_if' => 'Vui lòng tải lên file E-book khi loại sách là E-book.',
+        ];
+    }
+}

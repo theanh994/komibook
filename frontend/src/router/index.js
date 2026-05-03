@@ -69,10 +69,29 @@ const router = createRouter({
       meta: { requiresAuth: true, role: 'admin' }
     },
     {
-      path: '/vendor/dashboard',
-      name: 'vendor-dashboard',
-      component: () => import('@/views/vendor/VendorDashboard.vue'),
-      meta: { requiresAuth: true, role: 'vendor' }
+      path: '/vendor',
+      component: () => import('@/layouts/AdminLayout.vue'),
+      meta: { requiresAuth: true, role: 'vendor', hideHeader: true },
+      children: [
+        {
+          path: 'dashboard',
+          name: 'vendor-dashboard',
+          component: () => import('@/views/vendor/VendorDashboard.vue'),
+          meta: { requiresAuth: true, role: 'vendor', hideHeader: true, title: 'Dashboard' }
+        },
+        {
+          path: 'books',
+          name: 'vendor-books',
+          component: () => import('@/views/vendor/BooksView.vue'),
+          meta: { requiresAuth: true, role: 'vendor', hideHeader: true, title: 'Quản lý Sách' }
+        },
+        {
+          path: 'orders',
+          name: 'vendor-orders',
+          component: () => import('@/views/vendor/VendorDashboard.vue'), // Placeholder
+          meta: { requiresAuth: true, role: 'vendor', hideHeader: true, title: 'Quản lý Đơn hàng' }
+        },
+      ]
     }
   ],
 })
