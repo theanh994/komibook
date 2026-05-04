@@ -20,7 +20,20 @@ class OrderResource extends JsonResource
             'total_amount' => $this->total_amount,
             'status' => $this->status,
             'payment_status' => $this->payment_status,
+            'payment_method' => $this->payment_method,
+            'shipping_address' => $this->shipping_address,
+            'phone' => $this->phone,
             'created_at' => $this->created_at->toISOString(),
+
+            // Thông tin người mua (Eager Loaded)
+            'user' => $this->whenLoaded('user', function () {
+                return [
+                    'id'    => $this->user->id,
+                    'name'  => $this->user->name,
+                    'email' => $this->user->email,
+                ];
+            }),
+
             'items' => $this->whenLoaded('orderItems', function () {
                 return $this->orderItems->map(function ($item) {
                     $bookData = null;
@@ -28,7 +41,9 @@ class OrderResource extends JsonResource
                         $bookData = [
                             'id' => $item->book->id,
                             'title' => $item->book->title,
-                            'cover_image' => $item->book->cover_image,
+                            'cover_image' => $item->book->cover_image
+                                ? url('storage/' . $item->book->cover_image)
+                                : null,
                             'type' => $item->book->type,
                         ];
                     }

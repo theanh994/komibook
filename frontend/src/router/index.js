@@ -88,7 +88,7 @@ const router = createRouter({
         {
           path: 'orders',
           name: 'vendor-orders',
-          component: () => import('@/views/vendor/VendorDashboard.vue'), // Placeholder
+          component: () => import('@/views/vendor/OrdersView.vue'),
           meta: { requiresAuth: true, role: 'vendor', hideHeader: true, title: 'Quản lý Đơn hàng' }
         },
       ]

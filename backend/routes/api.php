@@ -46,6 +46,11 @@ Route::middleware('auth:sanctum')->group(function () {
 
 Route::middleware('auth:sanctum')->prefix('vendor')->name('vendor.')->group(function () {
     Route::apiResource('books', \App\Http\Controllers\Api\Vendor\BookController::class);
+
+    // Quản lý đơn hàng
+    Route::get('orders',              [\App\Http\Controllers\Api\Vendor\OrderController::class, 'index'])->name('orders.index');
+    Route::get('orders/{order}',      [\App\Http\Controllers\Api\Vendor\OrderController::class, 'show'])->name('orders.show');
+    Route::patch('orders/{order}/status', [\App\Http\Controllers\Api\Vendor\OrderController::class, 'updateStatus'])->name('orders.updateStatus');
 });
 
 // Route để stream e-book (Dùng signed URL, không cần auth middleware vì link chỉ có hiệu lực với chữ ký hợp lệ)
