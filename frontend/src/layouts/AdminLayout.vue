@@ -12,7 +12,8 @@ const authStore = useAuthStore()
 const sidebarCollapsed = ref(false)
 const userMenu = ref()
 
-const menuItems = [
+// ─── Menu động theo Role ───────────────────────────────────────────────────
+const vendorMenuItems = [
   {
     label: 'Dashboard',
     icon: 'pi pi-th-large',
@@ -29,6 +30,27 @@ const menuItems = [
     route: '/vendor/orders',
   },
 ]
+
+const adminMenuItems = [
+  {
+    label: 'Tổng quan',
+    icon: 'pi pi-chart-bar',
+    route: '/admin/dashboard',
+  },
+  {
+    label: 'Quản lý Users',
+    icon: 'pi pi-users',
+    route: '/admin/users',
+  },
+]
+
+const menuItems = computed(() => {
+  return authStore.isAdmin ? adminMenuItems : vendorMenuItems
+})
+
+const panelLabel = computed(() => {
+  return authStore.isAdmin ? 'Admin Panel' : 'Vendor Panel'
+})
 
 const bottomItems = [
   {
@@ -72,6 +94,7 @@ const toggleUserMenu = (event) => {
 }
 
 const shopName = computed(() => {
+  if (authStore.isAdmin) return 'Quản trị viên'
   return authStore.user?.vendor?.shop_name || authStore.user?.name || 'Vendor'
 })
 </script>
@@ -92,7 +115,7 @@ const shopName = computed(() => {
           <transition name="fade">
             <div v-if="!sidebarCollapsed" class="brand-text">
               <span class="brand-name">Komi<span class="brand-accent">Book</span></span>
-              <span class="brand-sub">Vendor Panel</span>
+              <span class="brand-sub">{{ panelLabel }}</span>
             </div>
           </transition>
         </router-link>

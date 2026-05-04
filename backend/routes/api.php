@@ -53,6 +53,19 @@ Route::middleware('auth:sanctum')->prefix('vendor')->name('vendor.')->group(func
     Route::patch('orders/{order}/status', [\App\Http\Controllers\Api\Vendor\OrderController::class, 'updateStatus'])->name('orders.updateStatus');
 });
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// Admin routes — Quản trị hệ thống (yêu cầu role: admin)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+Route::middleware('auth:sanctum')->prefix('admin')->name('admin.')->group(function () {
+    // Thống kê tổng quan
+    Route::get('stats', [\App\Http\Controllers\Api\Admin\DashboardController::class, 'stats'])->name('stats');
+
+    // Quản lý Users
+    Route::get('users',              [\App\Http\Controllers\Api\Admin\UserController::class, 'index'])->name('users.index');
+    Route::patch('users/{id}/role',  [\App\Http\Controllers\Api\Admin\UserController::class, 'updateRole'])->name('users.updateRole');
+});
+
 // Route để stream e-book (Dùng signed URL, không cần auth middleware vì link chỉ có hiệu lực với chữ ký hợp lệ)
 Route::get('/ebooks/{filename}/stream', [\App\Http\Controllers\Api\OrderController::class, 'streamEbook'])
     ->middleware('signed')

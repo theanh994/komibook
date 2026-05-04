@@ -63,10 +63,23 @@ const router = createRouter({
       }
     },
     {
-      path: '/admin/dashboard',
-      name: 'admin-dashboard',
-      component: () => import('@/views/admin/AdminDashboard.vue'),
-      meta: { requiresAuth: true, role: 'admin' }
+      path: '/admin',
+      component: () => import('@/layouts/AdminLayout.vue'),
+      meta: { requiresAuth: true, role: 'admin', hideHeader: true },
+      children: [
+        {
+          path: 'dashboard',
+          name: 'admin-dashboard',
+          component: () => import('@/views/admin/DashboardView.vue'),
+          meta: { requiresAuth: true, role: 'admin', hideHeader: true, title: 'Tổng quan' }
+        },
+        {
+          path: 'users',
+          name: 'admin-users',
+          component: () => import('@/views/admin/UsersView.vue'),
+          meta: { requiresAuth: true, role: 'admin', hideHeader: true, title: 'Quản lý Users' }
+        },
+      ]
     },
     {
       path: '/vendor',
