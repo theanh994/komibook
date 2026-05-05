@@ -41,6 +41,7 @@
             <div class="flex gap-2 mb-4">
               <Badge v-if="book.category" :value="book.category.name" severity="secondary" />
               <Badge :value="book.type === 'ebook' ? 'E-Book' : 'Sách giấy'" :severity="book.type === 'ebook' ? 'info' : 'success'" />
+              <Badge v-if="book.series" :value="book.series.title" severity="warn" />
             </div>
 
             <h1 class="text-3xl md:text-4xl font-bold mb-2">{{ book.title }}</h1>
@@ -64,7 +65,23 @@
                 </div>
               </div>
 
+              <!-- Nút tuỳ theo trạng thái sở hữu E-book -->
+              <div v-if="book.type === 'ebook' && ownershipData.owned" class="flex flex-col items-center gap-2">
+                <Button 
+                  label="Đã sở hữu - Đọc ngay" 
+                  icon="pi pi-book" 
+                  severity="success"
+                  size="large"
+                  class="owned-btn"
+                  @click="goToReader"
+                />
+                <span class="text-xs text-green-600 font-medium">
+                  <i class="pi pi-check-circle"></i> Bạn đã mua E-book này
+                </span>
+              </div>
+
               <Button 
+                v-else
                 label="Thêm vào giỏ hàng" 
                 icon="pi pi-shopping-cart" 
                 size="large" 
@@ -143,14 +160,52 @@
         </div>
       </div>
 
+      <!-- ═══ SERIES BOOKS SECTION ═══ -->
+      <div v-if="seriesBooks.length > 0" class="mt-8">
+        <div class="bg-white dark:bg-surface-800 rounded-xl shadow-sm border border-surface-200 dark:border-surface-700 p-6 md:p-8">
+          <div class="flex items-center gap-3 mb-6">
+            <div class="w-10 h-10 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
+              <i class="pi pi-list text-amber-600 text-lg"></i>
+            </div>
+            <div>
+              <h2 class="text-xl font-bold">Các tập khác trong Series</h2>
+              <p class="text-sm text-surface-500">{{ book?.series?.title }}</p>
+            </div>
+          </div>
+          
+          <div class="series-grid">
+            <div 
+              v-for="sb in seriesBooks" 
+              :key="sb.id" 
+              class="series-book-card"
+              @click="$router.push({ name: 'book-detail', params: { slug: sb.slug } })"
+            >
+              <div class="series-book-cover">
+                <img v-if="sb.cover_image" :src="sb.cover_image" :alt="sb.title" />
+                <div v-else class="series-book-placeholder">
+                  <i class="pi pi-image"></i>
+                </div>
+              </div>
+              <div class="series-book-info">
+                <span class="series-book-title">{{ sb.title }}</span>
+                <span class="series-book-author">{{ sb.author }}</span>
+                <span class="series-book-price">{{ formatCurrency(sb.sale_price || sb.price) }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useToast } from 'primevue/usetoast'
+import { useAuthStore } from '@/stores/auth'
+import { useCartStore } from '@/stores/cart'
 import apiClient from '@/services/axios'
 
 import Button from 'primevue/button'
@@ -159,22 +214,71 @@ import Rating from 'primevue/rating'
 import Textarea from 'primevue/textarea'
 
 const route = useRoute()
+const router = useRouter()
 const toast = useToast()
+const authStore = useAuthStore()
+const cartStore = useCartStore()
 
 const book = ref(null)
 const loading = ref(true)
+const seriesBooks = ref([])
+const ownershipData = ref({ owned: false, order_id: null, book_id: null })
 
 const fetchBookDetail = async () => {
   loading.value = true
   try {
     const response = await apiClient.get(`/api/books/${route.params.slug}`)
     const responseData = response.data.data || response.data
-    // Backend returns data => new BookResource(book)
     book.value = responseData
+
+    // Song song: Kiểm tra sở hữu e-book & lấy series books
+    const promises = []
+    
+    // Check ownership nếu đã đăng nhập và sách là ebook
+    if (authStore.isAuthenticated && responseData.type === 'ebook') {
+      promises.push(checkEbookOwnership(responseData.id))
+    }
+
+    // Lấy sách cùng series
+    if (responseData.series) {
+      promises.push(fetchSeriesBooks(responseData.id))
+    }
+
+    await Promise.allSettled(promises)
   } catch (error) {
     console.error('Lỗi tải chi tiết sách:', error)
   } finally {
     loading.value = false
+  }
+}
+
+const checkEbookOwnership = async (bookId) => {
+  try {
+    const res = await apiClient.get(`/api/books/${bookId}/check-ownership`)
+    ownershipData.value = res.data.data
+  } catch (error) {
+    console.warn('Không thể kiểm tra sở hữu:', error)
+  }
+}
+
+const fetchSeriesBooks = async (bookId) => {
+  try {
+    const res = await apiClient.get(`/api/books/${bookId}/series`)
+    seriesBooks.value = res.data.data || []
+  } catch (error) {
+    console.warn('Không thể tải sách cùng series:', error)
+  }
+}
+
+const goToReader = () => {
+  if (ownershipData.value.order_id && ownershipData.value.book_id) {
+    router.push({
+      name: 'ebook-reader',
+      params: {
+        orderId: ownershipData.value.order_id,
+        bookId: ownershipData.value.book_id
+      }
+    })
   }
 }
 
@@ -218,6 +322,21 @@ const submitReview = async () => {
 }
 
 const addToCart = () => {
+  if (!book.value) return
+  
+  cartStore.addToCart({
+    id: book.value.id,
+    title: book.value.title,
+    slug: book.value.slug,
+    author: book.value.author,
+    cover_image: book.value.cover_image,
+    price: book.value.price,
+    sale_price: book.value.sale_price,
+    type: book.value.type,
+    vendor: book.value.vendor,
+    vendor_id: book.value.vendor?.id
+  })
+
   toast.add({
     severity: 'success',
     summary: 'Thành công',
@@ -231,9 +350,107 @@ const formatCurrency = (value) => {
   return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(value)
 }
 
+// Watch route changes for navigating between series books
+watch(() => route.params.slug, (newSlug) => {
+  if (newSlug) {
+    seriesBooks.value = []
+    ownershipData.value = { owned: false, order_id: null, book_id: null }
+    fetchBookDetail()
+  }
+})
+
 onMounted(() => {
   if (route.params.slug) {
     fetchBookDetail()
   }
 })
 </script>
+
+<style scoped>
+/* ═══ OWNED BUTTON ═══ */
+.owned-btn {
+  background: linear-gradient(to bottom, #22c55e, #16a34a) !important;
+  border: none !important;
+  color: white !important;
+  font-weight: 700 !important;
+  box-shadow: 0 4px 14px rgba(34, 197, 94, 0.35) !important;
+  transition: all 0.3s ease !important;
+}
+.owned-btn:hover {
+  box-shadow: 0 6px 20px rgba(34, 197, 94, 0.45) !important;
+  transform: translateY(-2px);
+}
+
+/* ═══ SERIES GRID ═══ */
+.series-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 16px;
+}
+
+.series-book-card {
+  cursor: pointer;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  transition: all 0.3s ease;
+}
+.series-book-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.1);
+  border-color: #818cf8;
+}
+
+.series-book-cover {
+  width: 100%;
+  aspect-ratio: 2 / 3;
+  overflow: hidden;
+  background: #e2e8f0;
+}
+.series-book-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.4s ease;
+}
+.series-book-card:hover .series-book-cover img {
+  transform: scale(1.05);
+}
+.series-book-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #94a3b8;
+  font-size: 28px;
+}
+
+.series-book-info {
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.series-book-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1e293b;
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.series-book-author {
+  font-size: 11px;
+  color: #94a3b8;
+}
+.series-book-price {
+  font-size: 13px;
+  font-weight: 700;
+  color: #6366f1;
+  margin-top: 4px;
+}
+</style>

@@ -45,6 +45,12 @@ class BookResource extends JsonResource
                     'slug' => $this->category->slug,
                 ];
             }),
+            'series' => $this->whenLoaded('series', function () {
+                return [
+                    'id'    => $this->series->id,
+                    'title' => $this->series->title,
+                ];
+            }),
             'reviews'  => $this->whenLoaded('reviews', function () {
                 return $this->reviews->map(function ($review) {
                     return [

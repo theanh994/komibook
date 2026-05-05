@@ -17,6 +17,7 @@ Route::prefix('auth')->name('auth.')->group(function () {
 Route::get('/categories', [\App\Http\Controllers\Api\CategoryController::class, 'index']);
 Route::get('/books',      [\App\Http\Controllers\Api\BookController::class, 'index']);
 Route::get('/books/{slug}', [\App\Http\Controllers\Api\BookController::class, 'show']);
+Route::get('/books/{id}/series', [\App\Http\Controllers\Api\BookController::class, 'seriesBooks']);
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Protected routes — Yêu cầu Sanctum token hợp lệ
@@ -35,6 +36,7 @@ Route::middleware('auth:sanctum')->prefix('profile')->name('profile.')->group(fu
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/checkout', [\App\Http\Controllers\Api\CheckoutController::class, 'store']);
     Route::post('/books/{id}/reviews', [\App\Http\Controllers\Api\BookController::class, 'addReview']);
+    Route::get('/books/{id}/check-ownership', [\App\Http\Controllers\Api\BookController::class, 'checkOwnership']);
     Route::post('/coupons/apply', [\App\Http\Controllers\Api\CouponController::class, 'apply']);
     Route::get('/my-orders', [\App\Http\Controllers\Api\OrderController::class, 'myOrders']);
     Route::get('/orders/{order}/ebooks/{book}/generate-link', [\App\Http\Controllers\Api\OrderController::class, 'generateEbookLink']);

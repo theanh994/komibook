@@ -1,6 +1,7 @@
 <script setup>
 import { RouterView } from 'vue-router'
 import AppHeader from '@/components/layout/AppHeader.vue'
+import AppFooter from '@/components/layout/AppFooter.vue'
 import Toast from 'primevue/toast'
 </script>
 
@@ -14,7 +15,11 @@ import Toast from 'primevue/toast'
     <main class="flex-grow">
       <RouterView />
     </main>
+
+    <!-- Footer Toàn cục (ẩn ở Admin/Vendor Dashboard & Reader) -->
+    <AppFooter v-if="!$route.meta.hideHeader" />
   </div>
 </template>
 
 <style scoped></style>
+

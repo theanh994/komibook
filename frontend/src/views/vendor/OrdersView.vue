@@ -10,6 +10,7 @@ import Dialog from 'primevue/dialog'
 import Tag from 'primevue/tag'
 import Select from 'primevue/select'
 import Divider from 'primevue/divider'
+import Menu from 'primevue/menu'
 
 const toast = useToast()
 
@@ -117,6 +118,25 @@ const onPage = (event) => {
 }
 
 onMounted(fetchOrders)
+
+// Action Menu
+const actionMenuRef = ref()
+const activeOrderRow = ref(null)
+
+const orderActionItems = [
+  {
+    label: 'Xem chi tiết',
+    icon: 'pi pi-eye',
+    command: () => {
+      if (activeOrderRow.value) openDetail(activeOrderRow.value)
+    }
+  }
+]
+
+const toggleOrderMenu = (event, data) => {
+  activeOrderRow.value = data
+  actionMenuRef.value.toggle(event)
+}
 </script>
 
 <template>
@@ -198,19 +218,22 @@ onMounted(fetchOrders)
         </Column>
 
         <!-- Hành động -->
-        <Column header="" style="min-width: 120px; text-align: right">
+        <Column header="" style="min-width: 70px; text-align: right">
           <template #body="{ data }">
             <Button
-              label="Chi tiết"
-              icon="pi pi-eye"
+              icon="pi pi-ellipsis-v"
               text
-              severity="info"
-              size="small"
-              @click="openDetail(data)"
+              rounded
+              severity="secondary"
+              @click="(e) => toggleOrderMenu(e, data)"
+              v-tooltip.top="'Tác vụ'"
             />
           </template>
         </Column>
       </DataTable>
+
+      <!-- Action Menu -->
+      <Menu ref="actionMenuRef" :model="orderActionItems" :popup="true" />
     </div>
 
     <!-- ═══ ORDER DETAIL DIALOG ═══ -->

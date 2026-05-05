@@ -16,6 +16,7 @@ import FileUpload from 'primevue/fileupload'
 import ConfirmDialog from 'primevue/confirmdialog'
 import { useConfirm } from 'primevue/useconfirm'
 import Skeleton from 'primevue/skeleton'
+import Menu from 'primevue/menu'
 
 const toast = useToast()
 const confirm = useConfirm()
@@ -47,6 +48,33 @@ const bookForm = ref({
 const coverFile = ref(null)
 const ebookFile = ref(null)
 const editingBookId = ref(null)
+
+// Action Menu
+const actionMenuRef = ref()
+const activeRow = ref(null)
+
+const actionMenuItems = computed(() => [
+  {
+    label: 'Sửa',
+    icon: 'pi pi-pencil',
+    command: () => {
+      if (activeRow.value) openEditDialog(activeRow.value)
+    }
+  },
+  {
+    label: 'Xóa',
+    icon: 'pi pi-trash',
+    class: 'text-red-500',
+    command: () => {
+      if (activeRow.value) confirmDelete(activeRow.value)
+    }
+  }
+])
+
+const toggleActionMenu = (event, data) => {
+  activeRow.value = data
+  actionMenuRef.value.toggle(event)
+}
 
 const bookTypes = [
   { label: 'Sách vật lý', value: 'physical' },
@@ -300,29 +328,24 @@ onMounted(() => {
           </template>
         </Column>
 
-        <Column header="Hành động" style="min-width: 130px" frozen alignFrozen="right">
+        <Column header="Hành động" style="min-width: 80px" frozen alignFrozen="right">
           <template #body="{ data }">
             <div class="action-btns">
               <Button
-                icon="pi pi-pencil"
+                icon="pi pi-ellipsis-v"
                 text
                 rounded
-                severity="info"
-                v-tooltip.top="'Sửa'"
-                @click="openEditDialog(data)"
-              />
-              <Button
-                icon="pi pi-trash"
-                text
-                rounded
-                severity="danger"
-                v-tooltip.top="'Xóa'"
-                @click="confirmDelete(data)"
+                severity="secondary"
+                @click="(e) => toggleActionMenu(e, data)"
+                v-tooltip.top="'Tác vụ'"
               />
             </div>
           </template>
         </Column>
       </DataTable>
+
+      <!-- Action Menu -->
+      <Menu ref="actionMenuRef" :model="actionMenuItems" :popup="true" />
     </div>
 
     <!-- ═══ CREATE/EDIT DIALOG ═══ -->

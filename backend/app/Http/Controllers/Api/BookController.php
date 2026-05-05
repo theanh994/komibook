@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\BookResource;
 use App\Models\Book;
+use App\Models\OrderItem;
 use Illuminate\Http\Request;
 
 class BookController extends Controller
@@ -17,7 +18,7 @@ class BookController extends Controller
         // 1. Tắt Global Scope MultiVendor (Bản thân Book tự động bị thu gọn list với user đăng nhập là vendor. Nên ta phải huỷ global scope)
         $query = Book::withoutGlobalScopes()
             ->where('status', 'published')
-            ->with(['vendor', 'category']); // Eager loading
+            ->with(['vendor', 'category', 'series']); // Eager loading
             
         // 2. Lọc theo category_id nếu có params
         if ($request->has('category_id') && $request->category_id !== '') {
@@ -76,13 +77,76 @@ class BookController extends Controller
         $book = Book::withoutGlobalScopes()
             ->where('slug', $slug)
             ->where('status', 'published')
-            ->with(['vendor', 'category', 'reviews.user']) // Tải reviews kèm user
+            ->with(['vendor', 'category', 'series', 'reviews.user']) // Tải reviews kèm user + series
             ->firstOrFail();
 
         return response()->json([
             'status'  => 'success',
             'message' => 'Lấy chi tiết sách thành công.',
             'data'    => new BookResource($book),
+        ]);
+    }
+
+    /**
+     * Lấy danh sách sách cùng Series.
+     */
+    public function seriesBooks($bookId)
+    {
+        $book = Book::withoutGlobalScopes()->findOrFail($bookId);
+
+        if (!$book->series_id) {
+            return response()->json([
+                'status' => 'success',
+                'data'   => [],
+            ]);
+        }
+
+        $seriesBooks = Book::withoutGlobalScopes()
+            ->where('series_id', $book->series_id)
+            ->where('id', '!=', $book->id)
+            ->where('status', 'published')
+            ->with(['vendor', 'category'])
+            ->limit(10)
+            ->get();
+
+        return response()->json([
+            'status' => 'success',
+            'data'   => BookResource::collection($seriesBooks),
+        ]);
+    }
+
+    /**
+     * Kiểm tra user đã sở hữu E-book này chưa.
+     * Trả về { owned: true/false, order_id: ..., book_id: ... }
+     */
+    public function checkOwnership(Request $request, $bookId)
+    {
+        $userId = $request->user()->id;
+
+        $orderItem = OrderItem::where('book_id', $bookId)
+            ->whereHas('order', function ($q) use ($userId) {
+                $q->withoutGlobalScopes()
+                  ->where('user_id', $userId)
+                  ->whereIn('status', ['pending', 'processing', 'shipped', 'completed']);
+            })
+            ->first();
+
+        if ($orderItem) {
+            return response()->json([
+                'status' => 'success',
+                'data'   => [
+                    'owned'    => true,
+                    'order_id' => $orderItem->order_id,
+                    'book_id'  => (int) $bookId,
+                ],
+            ]);
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'data'   => [
+                'owned' => false,
+            ],
         ]);
     }
 

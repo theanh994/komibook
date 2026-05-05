@@ -20,6 +20,7 @@ class Book extends Model
     protected $fillable = [
         'vendor_id',
         'category_id',
+        'series_id',
         'title',
         'slug',
         'author',
@@ -72,6 +73,14 @@ class Book extends Model
     public function category(): BelongsTo
     {
         return $this->belongsTo(Category::class);
+    }
+
+    /**
+     * Sách thuộc về một Series (nullable).
+     */
+    public function series(): BelongsTo
+    {
+        return $this->belongsTo(Series::class);
     }
 
     /**

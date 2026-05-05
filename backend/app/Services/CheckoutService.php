@@ -28,6 +28,33 @@ class CheckoutService
         // Không dùng GlobalScope Vendor ở đây vì giỏ hàng chứa sách của nhiều shop khác nhau
         $books = Book::withoutGlobalScopes()->whereIn('id', $bookIds)->get()->keyBy('id');
 
+        // BƯỚC 1: Kiểm tra E-book đã sở hữu
+        $ebookIds = [];
+        foreach ($items as $item) {
+            $bookId = $item['book_id'];
+            if ($books->has($bookId) && $books->get($bookId)->isEbook()) {
+                $ebookIds[] = $bookId;
+            }
+        }
+
+        if (!empty($ebookIds)) {
+            // Tìm các e-book đã mua thành công trước đó
+            $ownedEbookIds = OrderItem::whereIn('book_id', $ebookIds)
+                ->whereHas('order', function ($q) use ($userId) {
+                    $q->withoutGlobalScopes()
+                      ->where('user_id', $userId)
+                      ->whereIn('status', ['pending', 'processing', 'shipped', 'completed']);
+                })
+                ->pluck('book_id')
+                ->unique()
+                ->toArray();
+
+            if (!empty($ownedEbookIds)) {
+                $ownedTitles = $books->only($ownedEbookIds)->pluck('title')->implode(', ');
+                throw new Exception("Bạn đã sở hữu E-book: {$ownedTitles}. Mỗi E-book chỉ được mua 1 lần.");
+            }
+        }
+
         // BƯỚC 2a: Redis Stock Lock
         foreach ($items as $item) {
             $bookId = $item['book_id'];
