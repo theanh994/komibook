@@ -98,12 +98,49 @@
             
             <div class="space-y-4 mb-5 border-b border-slate-100 pb-5">
               <div class="flex flex-col gap-2">
+                <label class="text-sm font-medium text-slate-700">Sổ địa chỉ</label>
+                <Dropdown v-model="selectedAddress" :options="addresses" optionLabel="address" placeholder="Chọn địa chỉ giao hàng..." class="w-full text-sm !rounded-lg" @change="onAddressSelect">
+                  <template #value="slotProps">
+                    <div v-if="slotProps.value" class="flex items-center">
+                      <div>{{ slotProps.value.receiver_name }} - {{ slotProps.value.phone }}</div>
+                    </div>
+                    <span v-else>
+                      {{ slotProps.placeholder }}
+                    </span>
+                  </template>
+                  <template #option="slotProps">
+                    <div class="flex flex-col">
+                      <span class="font-medium">{{ slotProps.option.receiver_name }} ({{ slotProps.option.phone }})</span>
+                      <span class="text-xs text-slate-500">{{ slotProps.option.address }}</span>
+                    </div>
+                  </template>
+                </Dropdown>
+              </div>
+              <div class="flex flex-col gap-2">
+                <label class="text-sm font-medium text-slate-700">Người nhận</label>
+                <InputText v-model="shippingData.receiver_name" placeholder="Tên người nhận..." class="w-full text-sm !rounded-lg" />
+              </div>
+              <div class="flex flex-col gap-2">
                 <label class="text-sm font-medium text-slate-700">Số điện thoại</label>
                 <InputText v-model="shippingData.phone" placeholder="Nhập số điện thoại..." class="w-full text-sm !rounded-lg" />
               </div>
               <div class="flex flex-col gap-2">
-                <label class="text-sm font-medium text-slate-700">Địa chỉ giao hàng</label>
+                <label class="text-sm font-medium text-slate-700">Địa chỉ giao hàng chi tiết</label>
                 <InputText v-model="shippingData.shipping_address" placeholder="Nhập địa chỉ nhận hàng..." class="w-full text-sm !rounded-lg" />
+              </div>
+            </div>
+
+            <div class="space-y-4 mb-5 border-b border-slate-100 pb-5">
+              <label class="text-sm font-medium text-slate-700">Phương thức thanh toán</label>
+              <div class="flex flex-col gap-3 mt-2">
+                <div class="flex items-center">
+                  <RadioButton v-model="paymentMethod" inputId="cod" name="payment" value="COD" />
+                  <label for="cod" class="ml-2 text-sm text-slate-700 cursor-pointer">Thanh toán khi nhận hàng (COD)</label>
+                </div>
+                <div class="flex items-center">
+                  <RadioButton v-model="paymentMethod" inputId="vnpay" name="payment" value="VNPAY" />
+                  <label for="vnpay" class="ml-2 text-sm text-slate-700 cursor-pointer">Thanh toán online (VNPAY)</label>
+                </div>
               </div>
             </div>
 
@@ -143,7 +180,7 @@
             <Button label="Tiến hành thanh toán" :loading="isSubmitting" class="w-full !p-3 !text-base !font-bold bg-gradient-to-b from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700 shadow-sm border-none !rounded-xl" @click="checkout" />
             
             <p class="text-xs text-center text-slate-400 mt-4 leading-relaxed">
-              Vui lòng nhập đầy đủ địa chỉ và số điện thoại để thanh toán.
+              Vui lòng kiểm tra lại thông tin và địa chỉ trước khi thanh toán.
             </p>
           </div>
         </div>
@@ -159,10 +196,12 @@
 <script setup>
 import { useCartStore } from '@/stores/cart'
 import { useRouter } from 'vue-router'
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import apiClient from '@/services/axios'
 import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
+import Dropdown from 'primevue/dropdown'
+import RadioButton from 'primevue/radiobutton'
 import { useConfirm } from "primevue/useconfirm"
 import { useToast } from "primevue/usetoast"
 import ConfirmDialog from 'primevue/confirmdialog'
@@ -174,13 +213,44 @@ const toast = useToast()
 
 const isSubmitting = ref(false)
 const shippingData = ref({
+  receiver_name: '',
   phone: '',
   shipping_address: ''
 })
 
+const paymentMethod = ref('COD')
+const addresses = ref([])
+const selectedAddress = ref(null)
+
 const couponCode = ref('')
 const isApplyingCoupon = ref(false)
 const appliedCoupon = ref(null)
+
+onMounted(() => {
+  fetchAddresses()
+})
+
+const fetchAddresses = async () => {
+  try {
+    const res = await apiClient.get('/api/profile/addresses')
+    addresses.value = res.data.data
+    if (addresses.value && addresses.value.length > 0) {
+      const def = addresses.value.find(a => a.is_default) || addresses.value[0]
+      selectedAddress.value = def
+      onAddressSelect()
+    }
+  } catch (error) {
+    console.error('Error fetching addresses:', error)
+  }
+}
+
+const onAddressSelect = () => {
+  if (selectedAddress.value) {
+    shippingData.value.receiver_name = selectedAddress.value.receiver_name
+    shippingData.value.phone = selectedAddress.value.phone
+    shippingData.value.shipping_address = selectedAddress.value.address
+  }
+}
 
 const finalTotal = computed(() => {
   let total = cartStore.totalPrice
@@ -239,25 +309,43 @@ const applyCoupon = async () => {
 }
 
 const checkout = async () => {
-  if (!shippingData.value.phone || !shippingData.value.shipping_address) {
-    toast.add({ severity: 'warn', summary: 'Cảnh báo', detail: 'Vui lòng nhập đủ SĐT và địa chỉ!', life: 3000 })
+  if (!shippingData.value.phone || !shippingData.value.shipping_address || !shippingData.value.receiver_name) {
+    toast.add({ severity: 'warn', summary: 'Cảnh báo', detail: 'Vui lòng nhập đủ tên, SĐT và địa chỉ!', life: 3000 })
     return
   }
 
   isSubmitting.value = true
   try {
-    await cartStore.checkout(shippingData.value)
+    // 1. Tạo đơn hàng trên backend
+    const payload = {
+      ...shippingData.value,
+      payment_method: paymentMethod.value // Backend chưa có cột này khi tạo đơn ở luồng cũ, nhưng cứ truyền lên.
+    }
+    const res = await cartStore.checkout(payload)
     
-    // Thành công
+    // 2. Xử lý logic thanh toán
+    if (paymentMethod.value === 'VNPAY') {
+       // Trong trường hợp có nhiều order (do nhiều vendor), VNPAY Demo thường chỉ hỗ trợ 1 transaction.
+       // Lấy order đầu tiên để thanh toán.
+       const firstOrder = res.data[0];
+       if (firstOrder) {
+           const vnpayRes = await apiClient.post('/api/vnpay/create', { order_id: firstOrder.id })
+           cartStore.clearCart() 
+           // Chuyển hướng user sang URL VNPAY
+           window.location.href = vnpayRes.data.url
+           return
+       }
+    }
+
+    // Thành công (COD)
     cartStore.clearCart()
     toast.add({ severity: 'success', summary: 'Thành công', detail: 'Đặt hàng thành công!', life: 3000 })
     
-    // Redirect về trang chủ (tạm thời về home nếu chưa có trang lịch sử)
+    // Redirect về trang chủ hoặc danh sách đơn hàng
     router.push('/')
   } catch (error) {
     console.error(error)
     const msg = error.response?.data?.message || 'Có lỗi xảy ra khi thanh toán'
-    // Xử lý lỗi validation từ Laravel nếu có
     if (error.response?.status === 401) {
       toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Bạn cần đăng nhập để thanh toán', life: 5000 })
       router.push('/login')

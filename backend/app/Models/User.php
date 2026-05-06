@@ -24,6 +24,7 @@ class User extends Authenticatable
         'email',
         'password',
         'role',
+        'avatar',
     ];
 
     /**
@@ -65,6 +66,14 @@ class User extends Authenticatable
     public function orders(): HasMany
     {
         return $this->hasMany(Order::class);
+    }
+
+    /**
+     * Sổ địa chỉ.
+     */
+    public function addresses(): HasMany
+    {
+        return $this->hasMany(UserAddress::class);
     }
 
     // ─── Role Helper Methods ──────────────────────────────────────────────────

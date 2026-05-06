@@ -54,7 +54,13 @@
                   <span class="text-xs text-surface-500 font-medium">Xin chào,</span>
                   <span class="text-sm font-bold text-surface-900 dark:text-surface-50">{{ authStore.user?.name }}</span>
                 </div>
-                <Avatar icon="pi pi-user" shape="circle" class="bg-primary text-white" />
+                
+                <!-- Hiển thị Avatar thật nếu có -->
+                <div v-if="authStore.user?.avatar" class="w-9 h-9 rounded-full overflow-hidden border border-surface-200 shadow-sm">
+                  <img :src="getAvatarUrl(authStore.user.avatar)" alt="Avatar" class="w-full h-full object-cover" />
+                </div>
+                <Avatar v-else icon="pi pi-user" shape="circle" class="bg-primary text-white" />
+                
                 <i class="pi pi-angle-down text-surface-500 text-sm"></i>
               </div>
               <Menu ref="userMenu" id="overlay_menu" :model="userMenuItems" :popup="true" />
@@ -107,6 +113,13 @@ const userMenuItems = ref([
     }
   },
   {
+    label: 'Lịch sử mua hàng',
+    icon: 'pi pi-shopping-bag',
+    command: () => {
+      router.push('/orders')
+    }
+  },
+  {
     separator: true
   },
   {
@@ -133,6 +146,13 @@ onMounted(() => {
 
 const goToDashboard = () => {
   router.push({ name: 'dashboard' })
+}
+
+const getAvatarUrl = (avatar) => {
+  if (!avatar) return ''
+  if (avatar.startsWith('http')) return avatar
+  const baseUrl = import.meta.env.VITE_API_URL || 'http://komibook.test'
+  return `${baseUrl}/storage/${avatar}`
 }
 </script>
 

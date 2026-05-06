@@ -31,6 +31,12 @@ Route::middleware('auth:sanctum')->prefix('auth')->name('auth.')->group(function
 Route::middleware('auth:sanctum')->prefix('profile')->name('profile.')->group(function () {
     Route::put('/info',     [\App\Http\Controllers\Api\ProfileController::class, 'updateInfo'])->name('updateInfo');
     Route::put('/password', [\App\Http\Controllers\Api\ProfileController::class, 'updatePassword'])->name('updatePassword');
+    Route::post('/avatar',  [\App\Http\Controllers\Api\ProfileController::class, 'uploadAvatar'])->name('uploadAvatar');
+    Route::get('/addresses', [\App\Http\Controllers\Api\ProfileController::class, 'getAddresses'])->name('getAddresses');
+    Route::post('/addresses', [\App\Http\Controllers\Api\ProfileController::class, 'addAddress'])->name('addAddress');
+    Route::put('/addresses/{id}', [\App\Http\Controllers\Api\ProfileController::class, 'updateAddress'])->name('updateAddress');
+    Route::delete('/addresses/{id}', [\App\Http\Controllers\Api\ProfileController::class, 'deleteAddress'])->name('deleteAddress');
+    Route::patch('/addresses/{id}/default', [\App\Http\Controllers\Api\ProfileController::class, 'setDefaultAddress'])->name('setDefaultAddress');
 });
 
 Route::middleware('auth:sanctum')->group(function () {
@@ -40,6 +46,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/coupons/apply', [\App\Http\Controllers\Api\CouponController::class, 'apply']);
     Route::get('/my-orders', [\App\Http\Controllers\Api\OrderController::class, 'myOrders']);
     Route::get('/orders/{order}/ebooks/{book}/generate-link', [\App\Http\Controllers\Api\OrderController::class, 'generateEbookLink']);
+    
+    // VNPAY Create payment
+    Route::post('/vnpay/create', [\App\Http\Controllers\Api\VnpayController::class, 'createPayment']);
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -72,3 +81,7 @@ Route::middleware('auth:sanctum')->prefix('admin')->name('admin.')->group(functi
 Route::get('/ebooks/{filename}/stream', [\App\Http\Controllers\Api\OrderController::class, 'streamEbook'])
     ->middleware('signed')
     ->name('api.ebook.stream');
+
+// VNPAY Webhooks/Return (no auth required because it's called by VNPAY)
+Route::get('/vnpay/return', [\App\Http\Controllers\Api\VnpayController::class, 'vnpayReturn'])->name('vnpay.return');
+Route::get('/vnpay/ipn', [\App\Http\Controllers\Api\VnpayController::class, 'vnpayIpn'])->name('vnpay.ipn');

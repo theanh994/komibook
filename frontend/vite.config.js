@@ -18,17 +18,18 @@ export default defineConfig({
     },
   },
   server: {
+    allowedHosts: ['komibook.id.vn'],
     proxy: {
       '/api': {
-        target: 'http://backend.test',
+        target: 'http://127.0.0.1:8000',
         changeOrigin: true,
-        cookieDomainRewrite: 'localhost',
+        cookieDomainRewrite: 'komibook.id.vn',
         headers: { Accept: 'application/json' }
       },
       '/sanctum': {
-        target: 'http://backend.test',
+        target: 'http://127.0.0.1:8000',
         changeOrigin: true,
-        cookieDomainRewrite: 'localhost',
+        cookieDomainRewrite: 'komibook.id.vn',
         headers: { Accept: 'application/json' }
       }
     }
