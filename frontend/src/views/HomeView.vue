@@ -28,6 +28,77 @@
     </section>
 
     <!-- ═══════════════════════════════════════════════════════════════ -->
+    <!-- TOP SELLING SECTION                                             -->
+    <!-- ═══════════════════════════════════════════════════════════════ -->
+    <section class="bg-white border-b border-slate-200/60 pt-10 pb-12">
+      <div class="max-w-7xl mx-auto px-4">
+        <div class="flex items-center justify-between mb-8">
+          <h2 class="text-2xl font-bold text-slate-900 flex items-center gap-2">
+            <span class="text-3xl">🔥</span> Sách Bán Chạy Nhất
+          </h2>
+        </div>
+
+        <div v-if="loadingTopSelling" class="grid grid-cols-2 md:grid-cols-4 gap-6">
+          <div v-for="i in 4" :key="i" class="bg-white rounded-xl border border-slate-200/60 overflow-hidden">
+            <Skeleton height="280px" borderRadius="0" />
+            <div class="p-4 flex flex-col gap-2">
+              <Skeleton height="20px" width="80%" />
+              <Skeleton height="16px" width="60%" />
+            </div>
+          </div>
+        </div>
+
+        <div v-else-if="topSellingBooks.length > 0" class="grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-4 gap-6">
+          <div
+            v-for="book in topSellingBooks"
+            :key="book.id"
+            class="book-card group bg-white rounded-xl border border-slate-200/60 shadow-sm shadow-slate-200/50 overflow-hidden cursor-pointer hover:-translate-y-1 hover:shadow-lg transition-all duration-300 ease-out flex flex-col h-full"
+            @click="goToDetail(book.slug)"
+          >
+            <div class="relative w-full pt-[140%] overflow-hidden bg-slate-100">
+              <img
+                v-if="book.cover_image"
+                :src="book.cover_image"
+                :alt="book.title"
+                class="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                loading="lazy"
+              />
+              <div v-else class="absolute inset-0 flex items-center justify-center">
+                <i class="pi pi-image text-4xl text-slate-300"></i>
+              </div>
+              
+              <!-- Badge: Đã bán -->
+              <div class="absolute bottom-2 left-2 right-2 bg-black/60 backdrop-blur-md rounded-md py-1 px-2 text-center">
+                <span class="text-white text-xs font-medium">Đã bán: {{ book.total_sold || 0 }}</span>
+              </div>
+            </div>
+
+            <div class="p-4 flex flex-col flex-grow">
+              <h3 class="text-sm font-bold text-slate-900 line-clamp-2 leading-snug mb-1 group-hover:text-rose-600 transition-colors">
+                {{ book.title }}
+              </h3>
+              <p class="text-xs text-slate-500 line-clamp-1 mb-3">
+                {{ book.author || 'Đang cập nhật' }}
+              </p>
+
+              <div class="mt-auto flex items-center justify-between">
+                <span class="text-base font-bold text-rose-600">
+                  {{ formatCurrency(book.sale_price || book.price) }}
+                </span>
+                <Button 
+                  icon="pi pi-cart-plus" 
+                  class="!w-8 !h-8 !p-0 !rounded-full !bg-rose-50 !text-rose-600 !border-none hover:!bg-rose-600 hover:!text-white transition-colors"
+                  @click.stop="addToCart(book)"
+                  title="Thêm vào giỏ"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════════════ -->
     <!-- MAIN CONTENT — CSS Grid 2 cột                                 -->
     <!-- ═══════════════════════════════════════════════════════════════ -->
     <div class="max-w-7xl mx-auto px-4 py-8">
@@ -272,6 +343,9 @@ const selectedCategoryId = ref(null)
 const books = ref([])
 const loadingBooks = ref(false)
 
+const topSellingBooks = ref([])
+const loadingTopSelling = ref(false)
+
 const searchQuery = ref('')
 
 // Pagination
@@ -334,6 +408,18 @@ const fetchBooks = async () => {
   }
 }
 
+const fetchTopSellingBooks = async () => {
+  loadingTopSelling.value = true
+  try {
+    const response = await apiClient.get('/api/books/top-selling')
+    topSellingBooks.value = response.data.data
+  } catch (error) {
+    console.error('Lỗi tải sách bán chạy:', error)
+  } finally {
+    loadingTopSelling.value = false
+  }
+}
+
 // ─── User Actions ───────────────────────────────────────────────────
 const selectCategory = (id) => {
   selectedCategoryId.value = id
@@ -384,6 +470,7 @@ watch(searchQuery, () => {
 // ─── Init ───────────────────────────────────────────────────────────
 onMounted(() => {
   fetchCategories()
+  fetchTopSellingBooks()
   fetchBooks()
 })
 </script>

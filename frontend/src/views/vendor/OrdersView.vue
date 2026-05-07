@@ -9,6 +9,7 @@ import Button from 'primevue/button'
 import Dialog from 'primevue/dialog'
 import Tag from 'primevue/tag'
 import Select from 'primevue/select'
+import MultiSelect from 'primevue/multiselect'
 import Divider from 'primevue/divider'
 import Menu from 'primevue/menu'
 
@@ -19,6 +20,29 @@ const orders = ref([])
 const loading = ref(false)
 const totalRecords = ref(0)
 const lazyParams = ref({ first: 0, rows: 15, page: 1 })
+const selectedOrders = ref([])
+
+// Filter Status
+const filterStatus = ref('all')
+const filterStatusOptions = [
+  { label: 'Tất cả trạng thái', value: 'all' },
+  { label: 'Chờ xử lý', value: 'pending' },
+  { label: 'Đang xử lý', value: 'processing' },
+  { label: 'Đang giao hàng', value: 'shipped' },
+  { label: 'Hoàn thành', value: 'completed' },
+  { label: 'Đã hủy', value: 'cancelled' }
+]
+
+// Column toggler
+const availableColumns = [
+  { field: 'order_code', header: 'Mã đơn' },
+  { field: 'created_at', header: 'Ngày đặt' },
+  { field: 'user', header: 'Khách hàng' },
+  { field: 'total_amount', header: 'Tổng tiền' },
+  { field: 'status', header: 'Trạng thái' }
+]
+const selectedColumns = ref([...availableColumns])
+const showColumn = (field) => selectedColumns.value.some(c => c.field === field)
 
 // Detail dialog
 const detailDialog = ref(false)
@@ -67,7 +91,11 @@ const fetchOrders = async () => {
   loading.value = true
   try {
     const res = await apiClient.get('/api/vendor/orders', {
-      params: { page: lazyParams.value.page, per_page: lazyParams.value.rows },
+      params: { 
+        page: lazyParams.value.page, 
+        per_page: lazyParams.value.rows,
+        status: filterStatus.value
+      },
     })
     orders.value = res.data.data
     totalRecords.value = res.data.meta?.total || res.data.data.length
@@ -112,6 +140,45 @@ const updateStatus = async () => {
   }
 }
 
+// ─── Bulk Actions ───
+const bulkUpdatingStatus = ref(false)
+const bulkNewStatus = ref(null)
+
+const bulkUpdateStatus = async () => {
+  if (!bulkNewStatus.value || selectedOrders.value.length === 0) return
+  
+  // Lọc ra các đơn hàng hợp lệ (không ở trạng thái cuối)
+  const validOrderIds = selectedOrders.value
+    .filter(o => !['completed', 'cancelled'].includes(o.status))
+    .map(o => o.id)
+    
+  if (validOrderIds.length === 0) {
+    toast.add({ severity: 'warn', summary: 'Lưu ý', detail: 'Các đơn hàng đã chọn đều không thể cập nhật (đã hủy/hoàn thành).', life: 4000 })
+    return
+  }
+
+  bulkUpdatingStatus.value = true
+  try {
+    const res = await apiClient.patch('/api/vendor/orders/bulk-status', {
+      order_ids: validOrderIds,
+      status: bulkNewStatus.value
+    })
+    toast.add({ severity: 'success', summary: 'Thành công', detail: res.data.message, life: 3000 })
+    
+    // Cập nhật state nội bộ để UI phản ứng ngay
+    selectedOrders.value.forEach(o => {
+      if (validOrderIds.includes(o.id)) o.status = bulkNewStatus.value
+    })
+    selectedOrders.value = []
+    bulkNewStatus.value = null
+  } catch (e) {
+    const msg = e.response?.data?.message || 'Không thể cập nhật hàng loạt.'
+    toast.add({ severity: 'error', summary: 'Lỗi', detail: msg, life: 4000 })
+  } finally {
+    bulkUpdatingStatus.value = false
+  }
+}
+
 const onPage = (event) => {
   lazyParams.value = { ...event, page: event.page + 1 }
   fetchOrders()
@@ -142,10 +209,55 @@ const toggleOrderMenu = (event, data) => {
 <template>
   <div class="vendor-orders">
     <!-- Page Header -->
-    <div class="page-header">
+    <div class="page-header flex justify-between items-end">
       <div>
         <h1 class="page-title">Quản lý Đơn hàng</h1>
         <p class="page-subtitle">Theo dõi và cập nhật trạng thái các đơn hàng của gian hàng</p>
+      </div>
+    </div>
+
+    <!-- Toolbar Filters & Bulk Actions -->
+    <div class="flex flex-wrap items-center justify-between gap-4 mb-4">
+      <div class="flex flex-wrap items-center gap-4">
+        <Select 
+          v-model="filterStatus" 
+          :options="filterStatusOptions" 
+          optionLabel="label" 
+          optionValue="value" 
+          @change="() => { lazyParams.page = 1; lazyParams.first = 0; fetchOrders() }"
+          class="w-full md:w-56"
+        />
+        <MultiSelect 
+          v-model="selectedColumns" 
+          :options="availableColumns" 
+          optionLabel="header" 
+          placeholder="Chọn thông tin hiển thị"
+          :maxSelectedLabels="3" 
+          class="w-full md:w-64"
+        />
+      </div>
+
+      <!-- Bulk Action Panel -->
+      <div v-if="selectedOrders.length > 0" class="flex items-center gap-3 bg-indigo-50 px-4 py-2 rounded-xl border border-indigo-100 shadow-sm transition-all">
+        <span class="text-indigo-800 text-sm font-semibold">Đã chọn {{ selectedOrders.length }}</span>
+        <Select
+          v-model="bulkNewStatus"
+          :options="statusOptions"
+          optionLabel="label"
+          optionValue="value"
+          placeholder="Chuyển trạng thái..."
+          class="w-48"
+          size="small"
+        />
+        <Button
+          label="Áp dụng"
+          icon="pi pi-check"
+          size="small"
+          :loading="bulkUpdatingStatus"
+          :disabled="!bulkNewStatus"
+          @click="bulkUpdateStatus"
+          class="btn-primary"
+        />
       </div>
     </div>
 
@@ -153,6 +265,7 @@ const toggleOrderMenu = (event, data) => {
     <div class="table-card">
       <DataTable
         :value="orders"
+        v-model:selection="selectedOrders"
         :loading="loading"
         :paginator="true"
         :rows="lazyParams.rows"
@@ -172,22 +285,25 @@ const toggleOrderMenu = (event, data) => {
           </div>
         </template>
 
+        <!-- Cột Selection Checkbox -->
+        <Column selectionMode="multiple" headerStyle="width: 3rem"></Column>
+
         <!-- Mã đơn -->
-        <Column header="Mã đơn" style="min-width: 180px">
+        <Column v-if="showColumn('order_code')" header="Mã đơn" style="min-width: 180px">
           <template #body="{ data }">
             <span class="order-code">{{ data.order_code }}</span>
           </template>
         </Column>
 
         <!-- Ngày đặt -->
-        <Column header="Ngày đặt" style="min-width: 160px" sortable field="created_at">
+        <Column v-if="showColumn('created_at')" header="Ngày đặt" style="min-width: 160px" sortable field="created_at">
           <template #body="{ data }">
             <span class="date-text">{{ formatDate(data.created_at) }}</span>
           </template>
         </Column>
 
         <!-- Khách hàng -->
-        <Column header="Khách hàng" style="min-width: 160px">
+        <Column v-if="showColumn('user')" header="Khách hàng" style="min-width: 160px">
           <template #body="{ data }">
             <div class="customer-cell">
               <div class="customer-avatar">
@@ -199,14 +315,14 @@ const toggleOrderMenu = (event, data) => {
         </Column>
 
         <!-- Tổng tiền -->
-        <Column header="Tổng tiền" style="min-width: 130px" sortable field="total_amount">
+        <Column v-if="showColumn('total_amount')" header="Tổng tiền" style="min-width: 130px" sortable field="total_amount">
           <template #body="{ data }">
             <span class="amount-text">{{ formatPrice(data.total_amount) }}</span>
           </template>
         </Column>
 
         <!-- Trạng thái -->
-        <Column header="Trạng thái" style="min-width: 140px">
+        <Column v-if="showColumn('status')" header="Trạng thái" style="min-width: 140px">
           <template #body="{ data }">
             <Tag
               :severity="getStatus(data.status).severity"

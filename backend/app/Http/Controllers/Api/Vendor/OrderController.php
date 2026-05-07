@@ -82,4 +82,40 @@ class OrderController extends Controller
             'data'    => new OrderResource($order->fresh()->load('user')),
         ]);
     }
+
+    /**
+     * Cập nhật trạng thái nhiều đơn hàng cùng lúc.
+     */
+    public function bulkUpdateStatus(Request $request): JsonResponse
+    {
+        $request->validate([
+            'order_ids'   => ['required', 'array', 'min:1'],
+            'order_ids.*' => ['integer', 'exists:orders,id'],
+            'status'      => ['required', 'string', 'in:pending,processing,shipped,completed,cancelled'],
+        ]);
+
+        $newStatus = $request->status;
+        $orderIds = $request->order_ids;
+
+        // Lấy danh sách order thuộc về vendor (đã được auto-scoped) và loại trừ những đơn không thể cập nhật
+        $orders = Order::whereIn('id', $orderIds)
+            ->whereNotIn('status', ['cancelled', 'completed'])
+            ->get();
+
+        if ($orders->isEmpty()) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Không có đơn hàng nào hợp lệ để cập nhật.',
+            ], 422);
+        }
+
+        // Thực hiện cập nhật
+        Order::whereIn('id', $orders->pluck('id'))->update(['status' => $newStatus]);
+
+        return response()->json([
+            'status'  => 'success',
+            'message' => "Đã cập nhật trạng thái thành công cho {$orders->count()} đơn hàng!",
+            'updated_count' => $orders->count(),
+        ]);
+    }
 }

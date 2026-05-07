@@ -1,5 +1,4 @@
 import axios from 'axios'
-import router from '@/router'
 
 // Sử dụng proxy để mọi request đều là same-origin, loại bỏ hoàn toàn các lỗi Cookie/CORS
 const apiClient = axios.create({
@@ -30,11 +29,14 @@ apiClient.interceptors.response.use(
     if (error.response?.status === 401) {
       console.warn('Unauthenticated – vui lòng đăng nhập lại.')
       
-      // Do không thể import useAuthStore tĩnh do vòng lặp import nên sẽ require động
+      // Do không thể import useAuthStore và router tĩnh do vòng lặp import nên sẽ require động
       import('@/stores/auth').then(({ useAuthStore }) => {
         const authStore = useAuthStore()
         authStore.logout(true) // skipApi = true: tránh vòng lặp 401 → logout → 401
-        router.push({ name: 'login' })
+        
+        import('@/router').then(({ default: router }) => {
+          router.push({ name: 'login' })
+        })
       })
     }
     return Promise.reject(error)

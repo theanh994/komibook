@@ -16,6 +16,7 @@ Route::prefix('auth')->name('auth.')->group(function () {
 // Các endpoint Catalog công cộng
 Route::get('/categories', [\App\Http\Controllers\Api\CategoryController::class, 'index']);
 Route::get('/books',      [\App\Http\Controllers\Api\BookController::class, 'index']);
+Route::get('/books/top-selling', [\App\Http\Controllers\Api\BookController::class, 'topSelling']);
 Route::get('/books/{slug}', [\App\Http\Controllers\Api\BookController::class, 'show']);
 Route::get('/books/{id}/series', [\App\Http\Controllers\Api\BookController::class, 'seriesBooks']);
 
@@ -56,10 +57,14 @@ Route::middleware('auth:sanctum')->group(function () {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 Route::middleware('auth:sanctum')->prefix('vendor')->name('vendor.')->group(function () {
+    // Thống kê dashboard
+    Route::get('dashboard-stats', [\App\Http\Controllers\Api\Vendor\DashboardController::class, 'stats'])->name('dashboard.stats');
+
     Route::apiResource('books', \App\Http\Controllers\Api\Vendor\BookController::class);
 
     // Quản lý đơn hàng
     Route::get('orders',              [\App\Http\Controllers\Api\Vendor\OrderController::class, 'index'])->name('orders.index');
+    Route::patch('orders/bulk-status', [\App\Http\Controllers\Api\Vendor\OrderController::class, 'bulkUpdateStatus'])->name('orders.bulkUpdateStatus');
     Route::get('orders/{order}',      [\App\Http\Controllers\Api\Vendor\OrderController::class, 'show'])->name('orders.show');
     Route::patch('orders/{order}/status', [\App\Http\Controllers\Api\Vendor\OrderController::class, 'updateStatus'])->name('orders.updateStatus');
 });

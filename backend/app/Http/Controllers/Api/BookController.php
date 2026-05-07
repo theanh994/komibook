@@ -11,6 +11,29 @@ use Illuminate\Http\Request;
 class BookController extends Controller
 {
     /**
+     * Lấy danh sách 8 sách bán chạy nhất
+     */
+    public function topSelling()
+    {
+        $books = Book::withoutGlobalScopes()
+            ->where('books.status', 'published')
+            ->join('order_items', 'books.id', '=', 'order_items.book_id')
+            ->join('orders', 'order_items.order_id', '=', 'orders.id')
+            ->where('orders.status', 'completed')
+            ->select('books.*', \Illuminate\Support\Facades\DB::raw('SUM(order_items.quantity) as total_sold'))
+            ->groupBy('books.id')
+            ->orderBy('total_sold', 'desc')
+            ->limit(8)
+            ->with(['vendor', 'category'])
+            ->get();
+
+        return response()->json([
+            'status' => 'success',
+            'data'   => $books,
+        ]);
+    }
+
+    /**
      * Lấy danh sách catalog công cộng (sách published của tất cả vendor).
      */
     public function index(Request $request)

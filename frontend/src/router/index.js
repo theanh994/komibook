@@ -95,7 +95,7 @@ const router = createRouter({
         {
           path: 'dashboard',
           name: 'vendor-dashboard',
-          component: () => import('@/views/vendor/VendorDashboard.vue'),
+          component: () => import('@/views/vendor/DashboardView.vue'),
           meta: { requiresAuth: true, role: 'vendor', hideHeader: true, title: 'Dashboard' }
         },
         {
