@@ -3,10 +3,12 @@ import { RouterView } from 'vue-router'
 import AppHeader from '@/components/layout/AppHeader.vue'
 import AppFooter from '@/components/layout/AppFooter.vue'
 import Toast from 'primevue/toast'
+import ConfirmDialog from 'primevue/confirmdialog'
 </script>
 
 <template>
   <Toast />
+  <ConfirmDialog />
   <div class="min-h-screen bg-surface-50 dark:bg-surface-900 flex flex-col">
     <!-- Thanh Header Toàn cục -->
     <AppHeader v-if="!$route.meta.hideHeader" />

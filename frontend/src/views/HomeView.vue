@@ -1,6 +1,44 @@
 <template>
   <div class="min-h-screen bg-slate-50">
 
+    <!-- Flash Sale Banner -->
+    <!-- Flash Sale Banner -->
+    <Transition name="slide-down">
+      <div v-if="activeFlashSale" class="flash-sale-banner">
+        <div class="max-w-7xl mx-auto px-4 py-3 flex flex-col md:flex-row items-center justify-between gap-4">
+          <div class="flex items-center gap-3">
+            <div class="flash-icon-box">
+              <i class="pi pi-bolt"></i>
+            </div>
+            <span class="flash-message text-white">
+              Nhập mã <span class="code-badge">{{ activeFlashSale.code }}</span> để giảm <span class="percent-badge">{{ activeFlashSale.discount_percent }}%</span>
+              <span v-if="activeFlashSale.category"> cho danh mục <b>{{ activeFlashSale.category?.name }}</b></span>!
+            </span>
+          </div>
+          
+          <div class="flex items-center gap-4">
+            <span class="text-white/80 text-[10px] md:text-xs font-bold uppercase tracking-widest hidden sm:inline">Kết thúc sau</span>
+            <div class="countdown-wrap">
+              <div class="timer-box">
+                <span class="timer-num">{{ countdown.hours }}</span>
+                <span class="timer-unit">Giờ</span>
+              </div>
+              <span class="timer-sep">:</span>
+              <div class="timer-box">
+                <span class="timer-num">{{ countdown.minutes }}</span>
+                <span class="timer-unit">Phút</span>
+              </div>
+              <span class="timer-sep">:</span>
+              <div class="timer-box">
+                <span class="timer-num">{{ countdown.seconds }}</span>
+                <span class="timer-unit">Giây</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Transition>
+
     <!-- ═══════════════════════════════════════════════════════════════ -->
     <!-- HERO / HEADER SECTION                                         -->
     <!-- ═══════════════════════════════════════════════════════════════ -->
@@ -336,6 +374,10 @@ const cartStore = useCartStore()
 const toast = useToast()
 
 // ─── State ──────────────────────────────────────────────────────────
+const activeFlashSale = ref(null)
+const countdown = ref({ hours: '00', minutes: '00', seconds: '00' })
+let countdownInterval = null
+
 const categories = ref([])
 const loadingCategories = ref(false)
 const selectedCategoryId = ref(null)
@@ -408,6 +450,56 @@ const fetchBooks = async () => {
   }
 }
 
+const fetchFlashSales = async () => {
+  try {
+    const res = await apiClient.get('/api/flash-sales')
+    if (!res.data || !res.data.data) return
+    
+    const now = new Date()
+    // Tìm flash sale đang diễn ra hoặc sắp tới gần nhất
+    const active = res.data.data.find(fs => {
+      const start = new Date(fs.start_time)
+      const end = new Date(fs.end_time)
+      return (start <= now && end > now)
+    })
+    
+    if (active) {
+      activeFlashSale.value = active
+      startCountdown(new Date(active.end_time))
+    }
+  } catch (e) {
+    console.error('Failed to fetch flash sales', e)
+  }
+}
+
+const startCountdown = (endTime) => {
+  if (countdownInterval) clearInterval(countdownInterval)
+  
+  const update = () => {
+    const now = new Date()
+    const diff = endTime - now
+    
+    if (diff <= 0) {
+      clearInterval(countdownInterval)
+      activeFlashSale.value = null
+      return
+    }
+    
+    const hours = Math.floor(diff / (1000 * 60 * 60))
+    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
+    const seconds = Math.floor((diff % (1000 * 60)) / 1000)
+    
+    countdown.value = {
+      hours: String(hours).padStart(2, '0'),
+      minutes: String(minutes).padStart(2, '0'),
+      seconds: String(seconds).padStart(2, '0')
+    }
+  }
+  
+  update()
+  countdownInterval = setInterval(update, 1000)
+}
+
 const fetchTopSellingBooks = async () => {
   loadingTopSelling.value = true
   try {
@@ -469,6 +561,7 @@ watch(searchQuery, () => {
 
 // ─── Init ───────────────────────────────────────────────────────────
 onMounted(() => {
+  fetchFlashSales()
   fetchCategories()
   fetchTopSellingBooks()
   fetchBooks()
@@ -503,5 +596,105 @@ onMounted(() => {
   background-color: var(--color-indigo-600);
   color: white;
   border-color: var(--color-indigo-600);
+}
+
+/* ═══ FLASH SALE BANNER ═══ */
+.flash-sale-banner {
+  background: linear-gradient(90deg, #ff4d4d 0%, #f97316 100%);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 4px 20px rgba(249, 115, 22, 0.25);
+  position: relative;
+  z-index: 100;
+}
+
+.flash-icon-box {
+  width: 32px;
+  height: 32px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.1); opacity: 0.8; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.flash-message {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.code-badge {
+  background: white;
+  color: #ea580c;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-weight: 800;
+  font-family: 'JetBrains Mono', monospace;
+  margin: 0 4px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.percent-badge {
+  font-weight: 800;
+  font-size: 1.1em;
+  color: #fff;
+  text-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+.countdown-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.timer-box {
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  padding: 4px 8px;
+  min-width: 44px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  backdrop-filter: blur(4px);
+}
+
+.timer-num {
+  color: white;
+  font-weight: 800;
+  font-size: 15px;
+  font-family: 'JetBrains Mono', monospace;
+  line-height: 1;
+}
+
+.timer-unit {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 8px;
+  text-transform: uppercase;
+  font-weight: 700;
+  margin-top: 2px;
+}
+
+.timer-sep {
+  color: white;
+  font-weight: bold;
+  font-size: 18px;
+  margin-top: -12px;
+}
+
+/* Animations */
+.slide-down-enter-active, .slide-down-leave-active {
+  transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.slide-down-enter-from, .slide-down-leave-to {
+  transform: translateY(-100%);
+  opacity: 0;
 }
 </style>

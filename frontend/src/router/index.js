@@ -85,6 +85,12 @@ const router = createRouter({
           component: () => import('@/views/admin/UsersView.vue'),
           meta: { requiresAuth: true, role: 'admin', hideHeader: true, title: 'Quản lý Users' }
         },
+        {
+          path: 'coupons',
+          name: 'admin-coupons',
+          component: () => import('@/views/admin/AdminCouponsView.vue'),
+          meta: { requiresAuth: true, role: 'admin', hideHeader: true, title: 'Quản lý Khuyến mãi' }
+        },
       ]
     },
     {

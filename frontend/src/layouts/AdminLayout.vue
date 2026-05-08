@@ -42,6 +42,11 @@ const adminMenuItems = [
     icon: 'pi pi-users',
     route: '/admin/users',
   },
+  {
+    label: 'Khuyến mãi',
+    icon: 'pi pi-ticket',
+    route: '/admin/coupons',
+  },
 ]
 
 const menuItems = computed(() => {
@@ -112,12 +117,12 @@ const shopName = computed(() => {
           <div class="brand-icon">
             <i class="pi pi-book"></i>
           </div>
-          <transition name="fade">
+          <Transition name="fade">
             <div v-if="!sidebarCollapsed" class="brand-text">
               <span class="brand-name">Komi<span class="brand-accent">Book</span></span>
               <span class="brand-sub">{{ panelLabel }}</span>
             </div>
-          </transition>
+          </Transition>
         </router-link>
       </div>
 
@@ -135,9 +140,9 @@ const shopName = computed(() => {
             >
               <div class="nav-indicator"></div>
               <i :class="item.icon" class="nav-icon"></i>
-              <transition name="fade">
+              <Transition name="fade">
                 <span v-if="!sidebarCollapsed" class="nav-text">{{ item.label }}</span>
-              </transition>
+              </Transition>
             </li>
           </ul>
         </div>
@@ -154,9 +159,9 @@ const shopName = computed(() => {
             @click="navigateTo(item)"
           >
             <i :class="item.icon" class="nav-icon"></i>
-            <transition name="fade">
+            <Transition name="fade">
               <span v-if="!sidebarCollapsed" class="nav-text">{{ item.label }}</span>
-            </transition>
+            </Transition>
           </li>
         </ul>
       </div>

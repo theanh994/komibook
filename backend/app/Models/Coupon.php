@@ -15,13 +15,27 @@ class Coupon extends Model
         'min_order_value',
         'max_discount_amount',
         'valid_until',
+        'start_time',
+        'end_time',
+        'category_id',
+        'usage_limit',
+        'used_count',
     ];
 
     protected function casts(): array
     {
         return [
             'valid_until' => 'datetime',
+            'start_time' => 'datetime',
+            'end_time' => 'datetime',
             'discount_percent' => 'float',
+            'usage_limit' => 'integer',
+            'used_count' => 'integer',
         ];
+    }
+
+    public function category()
+    {
+        return $this->belongsTo(Category::class);
     }
 }

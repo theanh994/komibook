@@ -80,7 +80,12 @@ Route::middleware('auth:sanctum')->prefix('admin')->name('admin.')->group(functi
     // Quản lý Users
     Route::get('users',              [\App\Http\Controllers\Api\Admin\UserController::class, 'index'])->name('users.index');
     Route::patch('users/{id}/role',  [\App\Http\Controllers\Api\Admin\UserController::class, 'updateRole'])->name('users.updateRole');
+
+    // Quản lý Coupons
+    Route::apiResource('coupons', \App\Http\Controllers\Api\Admin\CouponController::class);
 });
+
+Route::get('/flash-sales', [\App\Http\Controllers\Api\CouponController::class, 'flashSales']);
 
 // Route để stream e-book (Dùng signed URL, không cần auth middleware vì link chỉ có hiệu lực với chữ ký hợp lệ)
 Route::get('/ebooks/{filename}/stream', [\App\Http\Controllers\Api\OrderController::class, 'streamEbook'])

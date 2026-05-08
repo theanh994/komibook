@@ -99,7 +99,7 @@
             <div class="space-y-4 mb-5 border-b border-slate-100 pb-5">
               <div class="flex flex-col gap-2">
                 <label class="text-sm font-medium text-slate-700">Sổ địa chỉ</label>
-                <Dropdown v-model="selectedAddress" :options="addresses" optionLabel="address" placeholder="Chọn địa chỉ giao hàng..." class="w-full text-sm !rounded-lg" @change="onAddressSelect">
+                <Select v-model="selectedAddress" :options="addresses" optionLabel="address" placeholder="Chọn địa chỉ giao hàng..." class="w-full text-sm !rounded-lg" @change="onAddressSelect">
                   <template #value="slotProps">
                     <div v-if="slotProps.value" class="flex items-center">
                       <div>{{ slotProps.value.receiver_name }} - {{ slotProps.value.phone }}</div>
@@ -114,7 +114,7 @@
                       <span class="text-xs text-slate-500">{{ slotProps.option.address }}</span>
                     </div>
                   </template>
-                </Dropdown>
+                </Select>
               </div>
               <div class="flex flex-col gap-2">
                 <label class="text-sm font-medium text-slate-700">Người nhận</label>
@@ -188,8 +188,7 @@
       </div>
     </div>
     
-    <!-- Confirm Dialog từ PrimeVue -->
-    <ConfirmDialog></ConfirmDialog>
+
   </div>
 </template>
 
@@ -200,11 +199,11 @@ import { ref, computed, onMounted } from 'vue'
 import apiClient from '@/services/axios'
 import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
-import Dropdown from 'primevue/dropdown'
+import Select from 'primevue/select'
 import RadioButton from 'primevue/radiobutton'
 import { useConfirm } from "primevue/useconfirm"
 import { useToast } from "primevue/usetoast"
-import ConfirmDialog from 'primevue/confirmdialog'
+
 
 const cartStore = useCartStore()
 const router = useRouter()
@@ -294,7 +293,13 @@ const applyCoupon = async () => {
   try {
     const response = await apiClient.post('/api/coupons/apply', {
       code: couponCode.value,
-      total_amount: cartStore.totalPrice
+      total_amount: cartStore.totalPrice,
+      items: cartStore.items.map(item => ({
+        id: item.book.id,
+        price: item.book.sale_price || item.book.price,
+        quantity: item.quantity,
+        category_id: item.book.category_id
+      }))
     })
     appliedCoupon.value = response.data.data
     toast.add({ severity: 'success', summary: 'Thành công', detail: response.data.message || 'Đã áp dụng mã giảm giá!', life: 3000 })
