@@ -59,6 +59,18 @@ const router = createRouter({
       meta: { guestOnly: true }
     },
     {
+      path: '/forgot-password',
+      name: 'forgot-password',
+      component: () => import('@/views/auth/ForgotPasswordView.vue'),
+      meta: { guestOnly: true }
+    },
+    {
+      path: '/reset-password',
+      name: 'reset-password',
+      component: () => import('@/views/auth/ResetPasswordView.vue'),
+      meta: { guestOnly: true }
+    },
+    {
       path: '/dashboard',
       name: 'dashboard',
       redirect: to => {

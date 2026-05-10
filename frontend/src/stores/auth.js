@@ -4,7 +4,8 @@ import apiClient from '@/services/axios'
 export const useAuthStore = defineStore('auth', {
   state: () => ({
     user: null,
-    token: localStorage.getItem('token') || null,
+    // Kiểm tra cả localStorage và sessionStorage để lấy token hiện tại
+    token: localStorage.getItem('token') || sessionStorage.getItem('token') || null,
   }),
   getters: {
     isAuthenticated: (state) => !!state.token,
@@ -17,15 +18,14 @@ export const useAuthStore = defineStore('auth', {
       await apiClient.get('/sanctum/csrf-cookie')
       const response = await apiClient.post('/api/auth/register', userData)
 
-      // Backend trả về: { status: 'success', data: { user, access_token, token_type } }
       const responseData = response.data.data || response.data
-
       this.token = responseData.access_token || responseData.token
+      
+      // Mặc định đăng ký mới thường lưu vào localStorage hoặc tùy chọn
       localStorage.setItem('token', this.token)
-
-      // Lưu user trực tiếp từ response (không cần gọi thêm /me)
       this.user = responseData.user || null
     },
+
     async login(credentials) {
       // 1. Phải gọi lấy CSRF Cookie của Sanctum trước
       await apiClient.get('/sanctum/csrf-cookie')
@@ -33,15 +33,22 @@ export const useAuthStore = defineStore('auth', {
       // 2. Gửi thông tin đăng nhập
       const response = await apiClient.post('/api/auth/login', credentials)
       
-      // Backend trả về: { status: 'success', data: { access_token: '...', user: {...} } }
       const responseData = response.data.data || response.data
-      
       this.token = responseData.access_token || responseData.token
-      localStorage.setItem('token', this.token)
+      
+      // 3. Quyết định nơi lưu trữ dựa trên biến 'remember'
+      if (credentials.remember) {
+        localStorage.setItem('token', this.token)
+        sessionStorage.removeItem('token') // Dọn dẹp session nếu có
+      } else {
+        sessionStorage.setItem('token', this.token)
+        localStorage.removeItem('token') // Đảm bảo không còn token cũ ở local
+      }
       
       // Lấy thông tin user ngay sau khi lưu token
       await this.fetchUser()
     },
+
     async fetchUser() {
       if (!this.token) return
       
@@ -50,14 +57,13 @@ export const useAuthStore = defineStore('auth', {
         const responseData = response.data.data || response.data
         this.user = responseData.user || responseData
       } catch (error) {
-        // Nếu token không hợp lệ hoặc lấy thông tin thất bại, thực hiện đăng xuất
         this.logout()
       }
     },
+
     async logout(skipApi = false) {
       try {
         if (this.token && !skipApi) {
-          // Gửi request thu hồi token ở backend
           await apiClient.post('/api/auth/logout')
         }
       } catch (e) {
@@ -65,19 +71,22 @@ export const useAuthStore = defineStore('auth', {
       } finally {
         this.token = null
         this.user = null
+        // Xóa sạch ở cả hai nơi lưu trữ
         localStorage.removeItem('token')
+        sessionStorage.removeItem('token')
       }
     },
+
     async updateProfile(profileData) {
       const response = await apiClient.put('/api/profile/info', profileData)
       const responseData = response.data.data || response.data
       
-      // Update local user state
       if (this.user && responseData) {
         this.user = { ...this.user, ...responseData }
       }
       return response.data
     },
+
     async updatePassword(passwordData) {
       const response = await apiClient.put('/api/profile/password', passwordData)
       return response.data
