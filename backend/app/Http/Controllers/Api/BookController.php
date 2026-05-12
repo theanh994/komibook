@@ -93,15 +93,19 @@ class BookController extends Controller
     }
 
     /**
-     * Lấy chi tiết một cuốn sách thông qua slug.
+     * Lấy chi tiết một cuốn sách thông qua slug hoặc id.
      */
-    public function show($slug)
+    public function show($identifier)
     {
-        $book = Book::withoutGlobalScopes()
-            ->where('slug', $slug)
+        $query = Book::withoutGlobalScopes()
             ->where('status', 'published')
-            ->with(['vendor', 'category', 'series', 'reviews.user']) // Tải reviews kèm user + series
-            ->firstOrFail();
+            ->with(['vendor', 'category', 'series', 'reviews.user']);
+
+        if (is_numeric($identifier)) {
+            $book = $query->where('id', $identifier)->firstOrFail();
+        } else {
+            $book = $query->where('slug', $identifier)->firstOrFail();
+        }
 
         return response()->json([
             'status'  => 'success',

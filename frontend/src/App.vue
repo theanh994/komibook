@@ -9,7 +9,7 @@ import ConfirmDialog from 'primevue/confirmdialog'
 <template>
   <Toast />
   <ConfirmDialog />
-  <div class="min-h-screen bg-surface-50 dark:bg-surface-900 flex flex-col">
+  <div class="min-h-screen bg-background text-on-background flex flex-col font-inter">
     <!-- Thanh Header Toàn cục -->
     <AppHeader v-if="!$route.meta.hideHeader" />
     

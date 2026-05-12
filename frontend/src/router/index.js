@@ -3,11 +3,29 @@ import { useAuthStore } from '@/stores/auth'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
+  scrollBehavior(to, from, savedPosition) {
+    // Nếu có vị trí lưu trước (ví dụ nút back) → khôi phục
+    if (savedPosition) return savedPosition
+    // Luôn cuộn lên đầu trang khi chuyển route
+    return { top: 0, behavior: 'smooth' }
+  },
   routes: [
     {
       path: '/',
       name: 'home',
       component: () => import('@/views/HomeView.vue'),
+      meta: { guestOnly: false, requiresAuth: false }
+    },
+    {
+      path: '/catalog',
+      name: 'catalog',
+      component: () => import('@/views/CatalogView.vue'),
+      meta: { guestOnly: false, requiresAuth: false }
+    },
+    {
+      path: '/blog',
+      name: 'blog',
+      component: () => import('@/views/BlogView.vue'),
       meta: { guestOnly: false, requiresAuth: false }
     },
     {
@@ -17,10 +35,22 @@ const router = createRouter({
       meta: { guestOnly: false, requiresAuth: false }
     },
     {
+      path: '/tracking/:orderId',
+      name: 'order-tracking',
+      component: () => import('@/views/OrderTrackingView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
       path: '/cart',
       name: 'cart',
       component: () => import('@/views/CartView.vue'),
       meta: { guestOnly: false, requiresAuth: false }
+    },
+    {
+      path: '/checkout/success',
+      name: 'checkout-success',
+      component: () => import('@/views/CheckoutSuccessView.vue'),
+      meta: { requiresAuth: true }
     },
     {
       path: '/profile',
@@ -44,6 +74,24 @@ const router = createRouter({
       path: '/orders',
       name: 'orders',
       component: () => import('@/views/OrdersView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/wishlist',
+      name: 'wishlist',
+      component: () => import('@/views/WishlistView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/notifications',
+      name: 'notifications',
+      component: () => import('@/views/NotificationsView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/annotations',
+      name: 'annotations',
+      component: () => import('@/views/MyAnnotationsView.vue'),
       meta: { requiresAuth: true }
     },
     {

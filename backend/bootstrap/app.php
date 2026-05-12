@@ -12,7 +12,7 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware) {
-        // Kích hoạt Sanctum SPA authentication (stateful cookies)
+        $middleware->trustProxies(at: '*');
         $middleware->statefulApi();
     })
     ->withExceptions(function (Exceptions $exceptions) {

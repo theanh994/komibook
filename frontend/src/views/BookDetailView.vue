@@ -1,202 +1,304 @@
 <template>
-  <div class="min-h-screen bg-surface-50 dark:bg-surface-900 p-4 md:p-8">
-    <div class="max-w-5xl mx-auto">
-      
-      <!-- Back Button -->
-      <button @click="$router.back()" class="mb-6 flex items-center gap-2 text-surface-500 hover:text-primary transition-colors font-semibold">
-        <i class="pi pi-arrow-left"></i> Quay lại
-      </button>
+  <div class="min-h-screen bg-background font-outfit antialiased">
+    <!-- Dynamic Background Decor -->
+    <div class="fixed inset-0 pointer-events-none overflow-hidden opacity-40">
+       <div class="absolute top-[-10%] right-[-10%] w-[600px] h-[600px] bg-primary/10 blur-[120px] rounded-full"></div>
+       <div class="absolute bottom-[-10%] left-[-10%] w-[500px] h-[500px] bg-secondary/10 blur-[100px] rounded-full"></div>
+    </div>
 
-      <div v-if="loading" class="flex justify-center items-center h-64 bg-white dark:bg-surface-800 rounded-xl shadow-sm border border-surface-200 dark:border-surface-700">
-        <i class="pi pi-spin pi-spinner text-4xl text-primary"></i>
-      </div>
+    <div class="w-full px-gutter max-w-[1280px] mx-auto py-xl relative z-10">
 
-      <div v-else-if="!book" class="flex flex-col items-center justify-center h-64 bg-white dark:bg-surface-800 rounded-xl shadow-sm border border-surface-200 dark:border-surface-700 text-surface-500">
-        <i class="pi pi-exclamation-circle text-6xl mb-4 opacity-50 text-red-400"></i>
-        <p class="text-lg">Không tìm thấy thông tin sách.</p>
-        <Button label="Về trang chủ" class="mt-4" @click="$router.push('/')" />
-      </div>
+      <!-- Premium Breadcrumb -->
+      <nav class="mb-xl flex items-center gap-3 text-[11px] font-black uppercase tracking-[0.2em] text-outline/60 animate-fade-in">
+        <router-link to="/" class="hover:text-primary transition-all flex items-center gap-1 group">
+          <span class="material-symbols-outlined text-[20px] group-hover:scale-110 transition-transform">home</span>
+        </router-link>
+        <span class="material-symbols-outlined text-[14px]">chevron_right</span>
+        <router-link to="/catalog" class="hover:text-primary transition-all">Danh mục</router-link>
+        <template v-if="book?.category">
+          <span class="material-symbols-outlined text-[14px]">chevron_right</span>
+          <span class="text-primary">{{ book.category.name }}</span>
+        </template>
+        <span class="material-symbols-outlined text-[14px]">chevron_right</span>
+        <span class="text-on-surface truncate max-w-[200px] opacity-100">{{ book?.title || '...' }}</span>
+      </nav>
 
-      <div v-else class="bg-white dark:bg-surface-800 rounded-xl shadow-sm border border-surface-200 dark:border-surface-700 overflow-hidden">
-        <div class="flex flex-col md:flex-row">
-          
-          <!-- Image Section -->
-          <div class="w-full md:w-2/5 md:border-r border-surface-200 dark:border-surface-700 p-8 flex justify-center bg-surface-100 dark:bg-surface-800/50">
-            <div class="w-full max-w-sm rounded-lg overflow-hidden shadow-xl aspect-[2/3] bg-white relative">
-              <img 
-                v-if="book.cover_image" 
-                :src="book.cover_image" 
-                :alt="book.title" 
-                class="w-full h-full object-cover"
-              />
-              <div v-else class="w-full h-full flex items-center justify-center text-surface-300">
-                <i class="pi pi-image text-6xl"></i>
-              </div>
-            </div>
-          </div>
-
-          <!-- Info Section -->
-          <div class="w-full md:w-3/5 p-6 md:p-10 flex flex-col">
-            <!-- Badges -->
-            <div class="flex gap-2 mb-4">
-              <Badge v-if="book.category" :value="book.category.name" severity="secondary" />
-              <Badge :value="book.type === 'ebook' ? 'E-Book' : 'Sách giấy'" :severity="book.type === 'ebook' ? 'info' : 'success'" />
-              <Badge v-if="book.series" :value="book.series.title" severity="warn" />
-            </div>
-
-            <h1 class="text-3xl md:text-4xl font-bold mb-2">{{ book.title }}</h1>
-            
-            <div class="flex items-center gap-2 mb-2" v-if="book.reviews && book.reviews.length > 0">
-              <Rating :modelValue="averageRating" readonly :cancel="false" />
-              <span class="text-sm text-surface-500">({{ book.reviews.length }} đánh giá)</span>
-            </div>
-
-            <p class="text-lg text-surface-500 dark:text-surface-400 mb-6">Tác giả: <span class="font-semibold text-surface-800 dark:text-surface-100">{{ book.author || 'Đang cập nhật' }}</span></p>
-
-            <!-- Price Box -->
-            <div class="bg-surface-50 dark:bg-surface-900 border border-surface-200 dark:border-surface-700 rounded-xl p-6 mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div>
-                <div class="text-sm text-surface-500 uppercase tracking-wider font-semibold mb-1">Giá bán</div>
-                <div class="flex items-baseline gap-3">
-                  <span class="text-3xl font-bold text-primary">{{ formatCurrency(book.sale_price || book.price) }}</span>
-                  <span v-if="book.sale_price && book.price > book.sale_price" class="text-lg text-surface-400 line-through">
-                    {{ formatCurrency(book.price) }}
-                  </span>
-                </div>
-              </div>
-
-              <!-- Nút tuỳ theo trạng thái sở hữu E-book -->
-              <div v-if="book.type === 'ebook' && ownershipData.owned" class="flex flex-col items-center gap-2">
-                <Button 
-                  label="Đã sở hữu - Đọc ngay" 
-                  icon="pi pi-book" 
-                  severity="success"
-                  size="large"
-                  class="owned-btn"
-                  @click="goToReader"
-                />
-                <span class="text-xs text-green-600 font-medium">
-                  <i class="pi pi-check-circle"></i> Bạn đã mua E-book này
-                </span>
-              </div>
-
-              <Button 
-                v-else
-                label="Thêm vào giỏ hàng" 
-                icon="pi pi-shopping-cart" 
-                size="large" 
-                @click="addToCart"
-              />
-            </div>
-
-            <!-- Details -->
-            <div class="grid grid-cols-2 gap-4 mb-8 text-sm">
-              <div class="p-3 bg-surface-50 dark:bg-surface-900 rounded-lg">
-                <div class="text-surface-500 mb-1">Nhà bán (Vendor)</div>
-                <div class="font-semibold">{{ book.vendor?.name || 'KomiBook' }}</div>
-              </div>
-              <div class="p-3 bg-surface-50 dark:bg-surface-900 rounded-lg">
-                <div class="text-surface-500 mb-1">Tình trạng</div>
-                <div class="font-semibold text-green-600">Còn hàng ({{ book.stock }})</div>
-              </div>
-              <div class="p-3 bg-surface-50 dark:bg-surface-900 rounded-lg">
-                <div class="text-surface-500 mb-1">ISBN</div>
-                <div class="font-semibold">{{ book.isbn || 'N/A' }}</div>
-              </div>
-            </div>
-
-            <!-- Description -->
-            <div class="mt-auto pt-6 border-t border-surface-200 dark:border-surface-700">
-              <h3 class="text-lg font-bold mb-3">Giới thiệu sách</h3>
-              <div class="prose dark:prose-invert max-w-none text-surface-600 dark:text-surface-300 leading-relaxed whitespace-pre-line">
-                {{ book.description || 'Chưa có thông tin giới thiệu cho cuốn sách này.' }}
-              </div>
-            </div>
-
-            <!-- Reviews Section -->
-            <div class="mt-8 pt-8 border-t border-surface-200 dark:border-surface-700">
-              <h3 class="text-xl font-bold mb-6">Đánh giá từ khách hàng</h3>
-              
-              <!-- Review Form -->
-              <div class="bg-surface-50 dark:bg-surface-900 rounded-xl p-6 mb-8 border border-surface-200 dark:border-surface-700">
-                <h4 class="font-semibold mb-3">Viết đánh giá của bạn</h4>
-                <div class="flex flex-col gap-4">
-                  <div>
-                    <label class="block text-sm mb-2 text-surface-600">Đánh giá sao</label>
-                    <Rating v-model="reviewForm.rating" :cancel="false" />
-                  </div>
-                  <div>
-                    <label class="block text-sm mb-2 text-surface-600">Nội dung</label>
-                    <Textarea v-model="reviewForm.comment" rows="3" class="w-full !rounded-lg" placeholder="Chia sẻ cảm nhận của bạn về cuốn sách này..."></Textarea>
-                  </div>
-                  <div class="flex justify-end">
-                    <Button label="Gửi đánh giá" :loading="isSubmittingReview" @click="submitReview" />
-                  </div>
-                </div>
-              </div>
-
-              <!-- Reviews List -->
-              <div v-if="book.reviews && book.reviews.length > 0" class="space-y-6">
-                <div v-for="review in book.reviews" :key="review.id" class="border-b border-surface-100 dark:border-surface-800 pb-6 last:border-0 last:pb-0">
-                  <div class="flex items-center gap-3 mb-2">
-                    <div class="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold">
-                      {{ review.user?.name?.charAt(0) || 'U' }}
-                    </div>
-                    <div>
-                      <div class="font-medium">{{ review.user?.name || 'Người dùng ẩn danh' }}</div>
-                      <div class="text-xs text-surface-400">{{ new Date(review.created_at).toLocaleDateString('vi-VN') }}</div>
-                    </div>
-                  </div>
-                  <Rating :modelValue="review.rating" readonly :cancel="false" class="mb-2 !text-sm" />
-                  <p class="text-surface-700 dark:text-surface-300 text-sm leading-relaxed">{{ review.comment }}</p>
-                </div>
-              </div>
-              <div v-else class="text-center py-8 text-surface-500 bg-surface-50 dark:bg-surface-900 rounded-xl">
-                Chưa có đánh giá nào. Hãy là người đầu tiên đánh giá cuốn sách này!
-              </div>
-            </div>
-
-          </div>
+      <!-- Loading State (MD3 Shimmer) -->
+      <div v-if="loading" class="grid grid-cols-1 lg:grid-cols-12 gap-xxl">
+        <div class="lg:col-span-5 aspect-[3/4] bg-surface-container-low rounded-[40px] animate-pulse"></div>
+        <div class="lg:col-span-7 space-y-8">
+           <div class="h-16 w-3/4 bg-surface-container-low rounded-2xl animate-pulse"></div>
+           <div class="h-8 w-1/4 bg-surface-container-low rounded-full animate-pulse"></div>
+           <div class="space-y-4">
+              <div class="h-4 w-full bg-surface-container-low rounded animate-pulse"></div>
+              <div class="h-4 w-full bg-surface-container-low rounded animate-pulse"></div>
+              <div class="h-4 w-2/3 bg-surface-container-low rounded animate-pulse"></div>
+           </div>
         </div>
       </div>
 
-      <!-- ═══ SERIES BOOKS SECTION ═══ -->
-      <div v-if="seriesBooks.length > 0" class="mt-8">
-        <div class="bg-white dark:bg-surface-800 rounded-xl shadow-sm border border-surface-200 dark:border-surface-700 p-6 md:p-8">
-          <div class="flex items-center gap-3 mb-6">
-            <div class="w-10 h-10 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
-              <i class="pi pi-list text-amber-600 text-lg"></i>
+      <!-- Error State -->
+      <div v-else-if="!book" class="flex flex-col items-center justify-center py-32 bg-surface-container-lowest rounded-[48px] shadow-2xl border border-outline-variant/10 text-center animate-fade-in">
+        <div class="w-24 h-24 bg-error/10 rounded-full flex items-center justify-center mb-8">
+           <span class="material-symbols-outlined text-[56px] text-error">sentiment_dissatisfied</span>
+        </div>
+        <h2 class="text-3xl font-black text-on-surface mb-4 tracking-tight">Tác phẩm chưa xuất hiện</h2>
+        <p class="text-on-surface-variant mb-10 max-w-md mx-auto font-medium leading-relaxed">Có thể sách đã được ẩn hoặc chuyển đến một không gian khác.</p>
+        <router-link to="/" class="bg-primary text-on-primary px-10 py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-primary/20 hover:scale-105 active:scale-95 transition-all">
+          Khám phá sách khác
+        </router-link>
+      </div>
+
+      <!-- ═══ MAIN CONTENT (PREMIUM) ═══ -->
+      <div v-else class="animate-fade-in">
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-xxl items-start">
+          
+          <!-- ─── LEFT COLUMN: COVER & INTERACTIVE ─── -->
+          <div class="lg:col-span-5 sticky top-xl">
+            <div class="perspective-1000 group">
+              <div class="relative transform-gpu transition-all duration-700 ease-out preserve-3d group-hover:rotate-y-12 group-hover:scale-[1.02]">
+                <!-- Main Cover -->
+                <div class="aspect-[3/4.5] bg-surface-container-low rounded-[40px] overflow-hidden shadow-[0_60px_120px_rgba(0,0,0,0.15)] border border-outline-variant/10 relative z-20">
+                  <img v-if="book.cover_image" :src="book.cover_image" :alt="book.title" class="w-full h-full object-cover" />
+                  <div v-else class="w-full h-full flex items-center justify-center text-outline/20">
+                    <span class="material-symbols-outlined text-[120px]">menu_book</span>
+                  </div>
+                  
+                  <!-- Sale Overlay Badge -->
+                  <div v-if="book.sale_price && book.price > book.sale_price" class="absolute top-8 right-8 bg-error text-on-error text-xs font-black px-5 py-2.5 rounded-2xl shadow-2xl z-30 transform rotate-12 scale-110">
+                    GIẢM {{ Math.round((1 - book.sale_price / book.price) * 100) }}%
+                  </div>
+
+                  <!-- Type Badge -->
+                  <div class="absolute bottom-8 left-8 flex gap-2 z-30">
+                     <span class="px-5 py-2 bg-black/60 backdrop-blur-xl text-white text-[10px] font-black uppercase tracking-widest rounded-full border border-white/20">
+                        {{ book.type === 'ebook' ? 'Digital Edition' : 'Physical Book' }}
+                     </span>
+                  </div>
+                </div>
+
+                <!-- Spine detail -->
+                <div class="absolute inset-y-0 left-0 w-12 bg-black/10 blur-xl rounded-l-[40px] pointer-events-none z-30"></div>
+              </div>
             </div>
-            <div>
-              <h2 class="text-xl font-bold">Các tập khác trong Series</h2>
-              <p class="text-sm text-surface-500">{{ book?.series?.title }}</p>
+            
+            <!-- Floating Quick Stats -->
+            <div class="mt-12 grid grid-cols-3 gap-6 animate-slide-up">
+              <div v-for="stat in quickStats" :key="stat.label" class="bg-surface-container-lowest/60 backdrop-blur-md p-6 rounded-[32px] border border-outline-variant/10 text-center hover:border-primary/30 transition-all group">
+                <span class="material-symbols-outlined text-primary mb-3 group-hover:scale-110 transition-transform">{{ stat.icon }}</span>
+                <div class="text-xl font-black text-on-surface tracking-tighter">{{ stat.value }}</div>
+                <div class="text-[9px] uppercase tracking-[0.2em] text-outline font-black mt-1 opacity-50">{{ stat.label }}</div>
+              </div>
             </div>
           </div>
-          
-          <div class="series-grid">
-            <div 
-              v-for="sb in seriesBooks" 
-              :key="sb.id" 
-              class="series-book-card"
-              @click="$router.push({ name: 'book-detail', params: { slug: sb.slug } })"
-            >
-              <div class="series-book-cover">
-                <img v-if="sb.cover_image" :src="sb.cover_image" :alt="sb.title" />
-                <div v-else class="series-book-placeholder">
-                  <i class="pi pi-image"></i>
+
+          <!-- ─── RIGHT COLUMN: RICH DETAILS ─── -->
+          <div class="lg:col-span-7 flex flex-col gap-12">
+            
+            <!-- Core Info Section -->
+            <div class="bg-surface-container-lowest/80 backdrop-blur-xl rounded-[48px] shadow-sm p-10 md:p-14 border border-outline-variant/10 animate-slide-up">
+              <div class="flex flex-wrap gap-3 mb-8">
+                <span v-if="book.category" class="px-5 py-2 bg-primary/10 text-primary text-[10px] font-black uppercase tracking-[0.2em] rounded-full border border-primary/20">
+                  {{ book.category.name }}
+                </span>
+                <span class="px-5 py-2 bg-secondary/10 text-secondary text-[10px] font-black uppercase tracking-[0.2em] rounded-full border border-secondary/20">
+                  Phát hành 2024
+                </span>
+              </div>
+              
+              <h1 class="text-5xl md:text-7xl font-black text-on-surface mb-6 leading-[0.9] tracking-tighter">{{ book.title }}</h1>
+              
+              <div class="flex flex-wrap items-center gap-8 mb-12">
+                <div class="flex items-center gap-2">
+                   <div class="flex">
+                      <span v-for="i in 5" :key="i" class="material-symbols-outlined text-2xl" :style="{ 'font-variation-settings': i <= averageRating ? `'FILL' 1` : `'FILL' 0`, color: i <= averageRating ? '#ba0035' : '#c3c6ce' }">star</span>
+                   </div>
+                   <span class="text-lg font-black text-on-surface tracking-tighter">{{ averageRating }}.0 / 5.0</span>
+                </div>
+                <div class="h-6 w-px bg-outline-variant/30 hidden md:block"></div>
+                <div class="flex items-center gap-3">
+                   <div class="w-12 h-12 rounded-2xl bg-surface-container-high flex items-center justify-center text-primary font-black">
+                      {{ book.author?.charAt(0) }}
+                   </div>
+                   <div>
+                      <p class="text-[10px] font-black uppercase tracking-widest text-outline opacity-40">Tác giả</p>
+                      <p class="text-xl font-black text-on-surface tracking-tight">{{ book.author }}</p>
+                   </div>
                 </div>
               </div>
-              <div class="series-book-info">
-                <span class="series-book-title">{{ sb.title }}</span>
-                <span class="series-book-author">{{ sb.author }}</span>
-                <span class="series-book-price">{{ formatCurrency(sb.sale_price || sb.price) }}</span>
+
+              <!-- Price & CTA -->
+              <div class="bg-surface-container-low/40 rounded-[40px] p-10 border border-outline-variant/10 mb-12">
+                 <div class="flex flex-col md:flex-row items-center justify-between gap-8">
+                    <div class="text-center md:text-left">
+                       <p class="text-[10px] font-black uppercase tracking-[0.3em] text-primary mb-2">Giá niêm yết</p>
+                       <div class="flex items-center gap-4">
+                          <span class="text-5xl font-black text-primary tracking-tighter">{{ formatCurrency(book.sale_price || book.price) }}</span>
+                          <span v-if="book.sale_price && book.price > book.sale_price" class="text-2xl text-outline/40 line-through font-bold">{{ formatCurrency(book.price) }}</span>
+                       </div>
+                    </div>
+
+                    <div class="flex flex-col gap-3 w-full md:w-auto">
+                       <!-- Ownership Logic -->
+                       <template v-if="book.type === 'ebook' && ownershipData.owned">
+                          <button @click="goToReader" class="bg-on-surface text-surface px-12 py-5 rounded-[24px] font-black text-xs uppercase tracking-[0.2em] shadow-2xl hover:opacity-90 active:scale-95 transition-all flex items-center justify-center gap-4">
+                            <span class="material-symbols-outlined text-[24px] fill-1">auto_stories</span>
+                            Đọc Sách Ngay
+                          </button>
+                          <div class="flex items-center justify-between px-4">
+                             <span class="text-[9px] font-black uppercase tracking-widest text-outline">Đã đọc {{ readingProgress }}%</span>
+                             <div class="w-24 h-1 bg-surface-container-highest rounded-full overflow-hidden">
+                                <div class="h-full bg-primary" :style="{ width: readingProgress + '%' }"></div>
+                             </div>
+                          </div>
+                       </template>
+                       <template v-else>
+                          <div class="flex flex-col sm:flex-row gap-4">
+                            <button @click="addToCart" class="px-8 py-5 rounded-[24px] border-2 border-primary text-primary font-black text-xs uppercase tracking-[0.2em] hover:bg-primary/5 transition-all flex items-center justify-center gap-3">
+                              <span class="material-symbols-outlined text-[24px]">shopping_bag</span>
+                              Giỏ hàng
+                            </button>
+                            <button @click="buyNow" class="bg-primary text-on-primary px-12 py-5 rounded-[24px] font-black text-xs uppercase tracking-[0.2em] shadow-xl shadow-primary/20 hover:scale-105 active:scale-95 transition-all">
+                              Mua ngay
+                            </button>
+                          </div>
+                       </template>
+                    </div>
+                 </div>
+              </div>
+
+              <!-- Metadata Grid -->
+              <div class="grid grid-cols-2 md:grid-cols-4 gap-8 mb-12 py-10 border-y border-outline-variant/10">
+                <div v-for="meta in bookMeta" :key="meta.label" class="space-y-2">
+                   <p class="text-[9px] font-black uppercase tracking-[0.2em] text-outline opacity-40">{{ meta.label }}</p>
+                   <p class="text-base font-black text-on-surface tracking-tight">{{ meta.value }}</p>
+                </div>
+              </div>
+
+              <!-- Description -->
+              <div class="prose max-w-none">
+                <div class="flex items-center gap-4 mb-8">
+                   <div class="w-1.5 h-8 bg-primary rounded-full"></div>
+                   <h3 class="text-3xl font-black text-on-surface tracking-tighter">Hành trình tâm hồn</h3>
+                </div>
+                <p class="font-literata text-xl text-on-surface-variant leading-relaxed text-justify opacity-80 first-letter:text-6xl first-letter:font-black first-letter:text-primary first-letter:mr-4 first-letter:float-left first-letter:leading-[1]">
+                  {{ book.description }}
+                </p>
               </div>
             </div>
+
+            <!-- Enhanced Reviews Section -->
+            <section class="bg-surface-container-lowest/80 backdrop-blur-xl rounded-[48px] shadow-sm p-10 md:p-14 border border-outline-variant/10 animate-slide-up">
+              <header class="flex flex-col md:flex-row md:items-center justify-between gap-8 mb-16">
+                <div>
+                  <h3 class="text-3xl font-black text-on-surface tracking-tight mb-2 flex items-center gap-4">
+                    <span class="material-symbols-outlined text-secondary text-4xl">forum_heart</span>
+                    Cảm nhận độc giả
+                  </h3>
+                  <p class="text-on-surface-variant font-medium opacity-60">Kết nối cùng hàng ngàn trái tim yêu sách.</p>
+                </div>
+                <button @click="showReviewModal = true" class="bg-surface-container-high text-primary px-10 py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-primary hover:text-on-primary transition-all shadow-sm">
+                  Viết chia sẻ
+                </button>
+              </header>
+
+              <!-- Review List -->
+              <div v-if="book.reviews?.length > 0" class="space-y-12">
+                <article v-for="review in book.reviews" :key="review.id" class="flex gap-8 group animate-fade-in">
+                  <div class="shrink-0">
+                     <div class="w-16 h-16 rounded-[22px] bg-gradient-to-br from-primary/10 to-secondary/10 flex items-center justify-center text-primary font-black text-2xl shadow-inner border border-outline-variant/20">
+                       {{ review.user?.name?.charAt(0) || 'U' }}
+                     </div>
+                  </div>
+                  <div class="flex-1 space-y-4">
+                    <div class="flex justify-between items-center">
+                      <div>
+                         <h4 class="font-black text-on-surface text-lg tracking-tight">{{ review.user?.name || 'Độc giả ẩn danh' }}</h4>
+                         <div class="flex items-center gap-3 mt-1">
+                            <div class="flex">
+                              <span v-for="i in 5" :key="i" class="material-symbols-outlined text-[16px]" :style="{ 'font-variation-settings': i <= review.rating ? `'FILL' 1` : `'FILL' 0`, color: i <= review.rating ? '#ba0035' : '#c3c6ce' }">star</span>
+                            </div>
+                            <span class="text-[10px] font-black text-outline uppercase tracking-widest">{{ formatDate(review.created_at) }}</span>
+                         </div>
+                      </div>
+                    </div>
+                    <p class="text-lg text-on-surface-variant leading-relaxed opacity-90">{{ review.comment }}</p>
+                    <div class="flex gap-6 pt-2">
+                       <button class="flex items-center gap-2 text-[11px] font-black text-outline uppercase tracking-widest hover:text-primary transition-all">
+                          <span class="material-symbols-outlined text-[18px]">thumb_up</span>
+                          Hữu ích (12)
+                       </button>
+                       <button class="flex items-center gap-2 text-[11px] font-black text-outline uppercase tracking-widest hover:text-primary transition-all">
+                          <span class="material-symbols-outlined text-[18px]">reply</span>
+                          Phản hồi
+                       </button>
+                    </div>
+                  </div>
+                </article>
+              </div>
+              <div v-else class="text-center py-24 bg-surface-container-low/40 rounded-[40px] border-2 border-dashed border-outline-variant/20">
+                <span class="material-symbols-outlined text-7xl text-outline/20 mb-8">rate_review</span>
+                <h4 class="text-xl font-black text-on-surface mb-2">Chưa có lời bộc bạch nào</h4>
+                <p class="text-on-surface-variant font-medium opacity-60 max-w-xs mx-auto">Hãy là người đầu tiên chia sẻ cảm nhận về kiệt tác này.</p>
+              </div>
+            </section>
+
+            <!-- Series Carousel (Premium) -->
+            <section v-if="seriesBooks.length > 0" class="animate-slide-up">
+              <div class="flex items-center justify-between mb-10">
+                <div class="flex items-center gap-4">
+                   <div class="w-1.5 h-8 bg-secondary rounded-full"></div>
+                   <h3 class="text-3xl font-black text-on-surface tracking-tighter">Trọn bộ tuyệt phẩm</h3>
+                </div>
+              </div>
+              <div class="grid grid-cols-2 sm:grid-cols-4 gap-8">
+                <div v-for="sb in seriesBooks" :key="sb.id" class="group cursor-pointer">
+                  <div @click="$router.push({ name: 'book-detail', params: { slug: sb.slug } })" class="aspect-[2/3.2] rounded-[28px] overflow-hidden shadow-lg mb-6 relative">
+                    <img :src="sb.cover_image" class="w-full h-full object-cover transition-all duration-700 group-hover:scale-110 group-hover:rotate-1" />
+                    <div class="absolute inset-0 bg-gradient-to-t from-primary/80 to-transparent opacity-0 group-hover:opacity-100 transition-all duration-500 flex items-end p-6">
+                       <span class="bg-white text-primary px-6 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-2xl w-full text-center">Khám phá</span>
+                    </div>
+                  </div>
+                  <h4 class="text-base font-black text-on-surface line-clamp-1 group-hover:text-primary transition-colors tracking-tight">{{ sb.title }}</h4>
+                  <div class="text-sm font-black text-primary mt-2">{{ formatCurrency(sb.sale_price || sb.price) }}</div>
+                </div>
+              </div>
+            </section>
+
           </div>
         </div>
       </div>
 
     </div>
+
+    <!-- Review Modal (MD3 Dialog) -->
+    <Dialog v-model:visible="showReviewModal" header="Viết chia sẻ" :modal="true" class="!max-w-2xl !w-[90vw] !rounded-[40px] !bg-surface-container-lowest overflow-hidden">
+      <div class="flex flex-col gap-10 py-8 px-4">
+        <div class="text-center">
+          <p class="text-[10px] font-black uppercase tracking-[0.3em] text-primary mb-6">Bạn cảm thấy tác phẩm thế nào?</p>
+          <div class="flex items-center justify-center gap-4">
+            <button v-for="i in 5" :key="i" @click="reviewForm.rating = i" class="group relative">
+              <span class="material-symbols-outlined text-[56px] transition-all duration-300" :style="{ 'font-variation-settings': i <= reviewForm.rating ? `'FILL' 1` : `'FILL' 0`, color: i <= reviewForm.rating ? '#ba0035' : '#e2e2e2' }" :class="i <= reviewForm.rating ? 'scale-110' : 'hover:scale-105'">star</span>
+              <div v-if="i === reviewForm.rating" class="absolute -bottom-2 left-1/2 -translate-x-1/2 w-1.5 h-1.5 bg-primary rounded-full"></div>
+            </button>
+          </div>
+        </div>
+        
+        <div class="space-y-4">
+          <label class="text-xs font-black uppercase tracking-widest text-outline">Suy tư của bạn</label>
+          <Textarea v-model="reviewForm.comment" rows="5" class="!w-full !p-8 !bg-surface-container-low !border-none !rounded-[32px] !font-medium !text-lg focus:!ring-4 focus:!ring-primary/5 transition-all" placeholder="Những trang sách đã chạm đến trái tim bạn như thế nào?..." />
+        </div>
+
+        <div class="flex flex-col sm:flex-row gap-4">
+          <button @click="showReviewModal = false" class="flex-1 py-5 rounded-[22px] bg-surface-container-high text-on-surface-variant font-black text-xs uppercase tracking-widest transition-all">Gác bút (Hủy)</button>
+          <button @click="submitReview" :disabled="isSubmittingReview" class="flex-[2] bg-primary text-on-primary py-5 rounded-[22px] font-black text-xs uppercase tracking-widest shadow-xl shadow-primary/20 flex items-center justify-center gap-3 active:scale-95 transition-all">
+            <span v-if="isSubmittingReview" class="material-symbols-outlined animate-spin">progress_activity</span>
+            <span v-else class="material-symbols-outlined">send</span>
+            Gửi tâm tình
+          </button>
+        </div>
+      </div>
+    </Dialog>
   </div>
 </template>
 
@@ -207,11 +309,8 @@ import { useToast } from 'primevue/usetoast'
 import { useAuthStore } from '@/stores/auth'
 import { useCartStore } from '@/stores/cart'
 import apiClient from '@/services/axios'
-
-import Button from 'primevue/button'
-import Badge from 'primevue/badge'
-import Rating from 'primevue/rating'
 import Textarea from 'primevue/textarea'
+import Dialog from 'primevue/dialog'
 
 const route = useRoute()
 const router = useRouter()
@@ -223,6 +322,22 @@ const book = ref(null)
 const loading = ref(true)
 const seriesBooks = ref([])
 const ownershipData = ref({ owned: false, order_id: null, book_id: null })
+const recentAnnotations = ref([])
+const readingProgress = ref(45) 
+const showReviewModal = ref(false)
+
+const quickStats = computed(() => [
+  { label: 'Đánh giá', value: book.value?.reviews?.length || 0, icon: 'star_rate' },
+  { label: 'Yêu thích', value: '4.2k', icon: 'favorite' },
+  { label: 'Khám phá', value: '1.2k', icon: 'visibility' }
+])
+
+const bookMeta = computed(() => [
+  { label: 'Nhà xuất bản', value: book.value?.vendor?.name || 'KomiBook Studio' },
+  { label: 'Năm phát hành', value: '2024 (Digital)' },
+  { label: 'Số trang', value: '458 trang' },
+  { label: 'Mã ISBN', value: book.value?.isbn || '978-604-XXX' }
+])
 
 const fetchBookDetail = async () => {
   loading.value = true
@@ -231,19 +346,14 @@ const fetchBookDetail = async () => {
     const responseData = response.data.data || response.data
     book.value = responseData
 
-    // Song song: Kiểm tra sở hữu e-book & lấy series books
     const promises = []
-    
-    // Check ownership nếu đã đăng nhập và sách là ebook
     if (authStore.isAuthenticated && responseData.type === 'ebook') {
       promises.push(checkEbookOwnership(responseData.id))
+      promises.push(fetchRecentAnnotations(responseData.id))
     }
-
-    // Lấy sách cùng series
     if (responseData.series) {
       promises.push(fetchSeriesBooks(responseData.id))
     }
-
     await Promise.allSettled(promises)
   } catch (error) {
     console.error('Lỗi tải chi tiết sách:', error)
@@ -261,6 +371,15 @@ const checkEbookOwnership = async (bookId) => {
   }
 }
 
+const fetchRecentAnnotations = async (bookId) => {
+  try {
+    const res = await apiClient.get(`/api/books/${bookId}/recent-annotations`)
+    recentAnnotations.value = res.data.data || []
+  } catch (error) {
+    console.warn('Không thể tải ghi chú:', error)
+  }
+}
+
 const fetchSeriesBooks = async (bookId) => {
   try {
     const res = await apiClient.get(`/api/books/${bookId}/series`)
@@ -274,10 +393,7 @@ const goToReader = () => {
   if (ownershipData.value.order_id && ownershipData.value.book_id) {
     router.push({
       name: 'ebook-reader',
-      params: {
-        orderId: ownershipData.value.order_id,
-        bookId: ownershipData.value.book_id
-      }
+      params: { orderId: ownershipData.value.order_id, bookId: ownershipData.value.book_id }
     })
   }
 }
@@ -296,20 +412,15 @@ const submitReview = async () => {
     toast.add({ severity: 'warn', summary: 'Cảnh báo', detail: 'Vui lòng chọn số sao đánh giá.', life: 3000 })
     return
   }
-
   isSubmittingReview.value = true
   try {
     const response = await apiClient.post(`/api/books/${book.value.id}/reviews`, reviewForm.value)
     toast.add({ severity: 'success', summary: 'Thành công', detail: response.data.message || 'Cảm ơn bạn đã đánh giá!', life: 3000 })
-    
-    // Thêm review mới vào danh sách hiện tại
     if (!book.value.reviews) book.value.reviews = []
     book.value.reviews.unshift(response.data.data)
-    
-    // Reset form
     reviewForm.value = { rating: 5, comment: '' }
+    showReviewModal.value = false
   } catch (error) {
-    console.error(error)
     const msg = error.response?.data?.message || 'Có lỗi xảy ra khi gửi đánh giá'
     if (error.response?.status === 401) {
       toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Bạn cần đăng nhập để đánh giá.', life: 5000 })
@@ -323,26 +434,20 @@ const submitReview = async () => {
 
 const addToCart = () => {
   if (!book.value) return
-  
   cartStore.addToCart({
-    id: book.value.id,
-    title: book.value.title,
-    slug: book.value.slug,
-    author: book.value.author,
-    cover_image: book.value.cover_image,
-    price: book.value.price,
-    sale_price: book.value.sale_price,
-    type: book.value.type,
-    vendor: book.value.vendor,
+    id: book.value.id, title: book.value.title, slug: book.value.slug,
+    author: book.value.author, cover_image: book.value.cover_image,
+    price: book.value.price, sale_price: book.value.sale_price,
+    type: book.value.type, vendor: book.value.vendor,
     vendor_id: book.value.vendor?.id
   })
+  toast.add({ severity: 'success', summary: 'Thành công', detail: `Đã thêm "${book.value.title}" vào giỏ hàng!`, life: 3000 })
+}
 
-  toast.add({
-    severity: 'success',
-    summary: 'Thành công',
-    detail: `Đã thêm "${book.value.title}" vào giỏ hàng!`,
-    life: 3000
-  })
+const buyNow = () => {
+  if (!book.value) return
+  addToCart()
+  router.push('/cart')
 }
 
 const formatCurrency = (value) => {
@@ -350,107 +455,72 @@ const formatCurrency = (value) => {
   return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(value)
 }
 
-// Watch route changes for navigating between series books
+const formatDate = (dateString) => {
+  if (!dateString) return ''
+  return new Intl.DateTimeFormat('vi-VN', { day: '2-digit', month: 'short', year: 'numeric' }).format(new Date(dateString))
+}
+
 watch(() => route.params.slug, (newSlug) => {
   if (newSlug) {
     seriesBooks.value = []
     ownershipData.value = { owned: false, order_id: null, book_id: null }
+    recentAnnotations.value = []
     fetchBookDetail()
   }
 })
 
 onMounted(() => {
-  if (route.params.slug) {
-    fetchBookDetail()
-  }
+  if (route.params.slug) fetchBookDetail()
 })
 </script>
 
 <style scoped>
-/* ═══ OWNED BUTTON ═══ */
-.owned-btn {
-  background: linear-gradient(to bottom, #22c55e, #16a34a) !important;
-  border: none !important;
-  color: white !important;
-  font-weight: 700 !important;
-  box-shadow: 0 4px 14px rgba(34, 197, 94, 0.35) !important;
-  transition: all 0.3s ease !important;
-}
-.owned-btn:hover {
-  box-shadow: 0 6px 20px rgba(34, 197, 94, 0.45) !important;
-  transform: translateY(-2px);
+@import url('https://fonts.googleapis.com/css2?family=Literata:ital,wght@0,400;0,700;1,400;1,700&family=Outfit:wght@100;400;900&display=swap');
+
+.font-outfit {
+  font-family: 'Outfit', sans-serif;
 }
 
-/* ═══ SERIES GRID ═══ */
-.series-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-  gap: 16px;
+.font-literata {
+  font-family: 'Literata', serif;
 }
 
-.series-book-card {
-  cursor: pointer;
-  border-radius: 12px;
-  overflow: hidden;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  transition: all 0.3s ease;
-}
-.series-book-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 8px 24px rgba(0,0,0,0.1);
-  border-color: #818cf8;
+.perspective-1000 {
+  perspective: 1000px;
 }
 
-.series-book-cover {
-  width: 100%;
-  aspect-ratio: 2 / 3;
-  overflow: hidden;
-  background: #e2e8f0;
-}
-.series-book-cover img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  transition: transform 0.4s ease;
-}
-.series-book-card:hover .series-book-cover img {
-  transform: scale(1.05);
-}
-.series-book-placeholder {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #94a3b8;
-  font-size: 28px;
+.preserve-3d {
+  transform-style: preserve-3d;
 }
 
-.series-book-info {
-  padding: 10px 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+.rotate-y-12 {
+  transform: rotateY(-12deg);
 }
-.series-book-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: #1e293b;
-  line-height: 1.3;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
 }
-.series-book-author {
-  font-size: 11px;
-  color: #94a3b8;
+
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(40px); }
+  to { opacity: 1; transform: translateY(0); }
 }
-.series-book-price {
-  font-size: 13px;
-  font-weight: 700;
-  color: #6366f1;
-  margin-top: 4px;
+
+.animate-fade-in {
+  animation: fade-in 1s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-slide-up {
+  animation: slide-up 1.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.fill-1 {
+  font-variation-settings: 'FILL' 1;
+}
+
+/* Hide scrollbar */
+::-webkit-scrollbar {
+  width: 0px;
 }
 </style>

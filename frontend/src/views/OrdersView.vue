@@ -1,201 +1,250 @@
 <template>
-  <div class="container mx-auto px-4 py-8">
-    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 md:p-8">
-      <div class="flex items-center justify-between mb-8">
-        <div>
-          <h1 class="text-2xl font-bold text-gray-900">Lịch sử Đơn hàng</h1>
-          <p class="text-gray-500 mt-1">Quản lý và theo dõi các đơn hàng bạn đã mua trên KomiBook</p>
-        </div>
-      </div>
+  <div class="min-h-screen bg-background py-xl px-gutter">
+    <div class="max-w-[1200px] mx-auto flex flex-col lg:flex-row gap-xl">
+      
+      <!-- Sidebar -->
+      <UserSidebar :user="authStore.user" />
 
-      <div v-if="loading" class="flex justify-center items-center py-12">
-        <i class="pi pi-spin pi-spinner text-4xl text-primary"></i>
-      </div>
-
-      <div v-else-if="orders.length === 0" class="text-center py-16 bg-gray-50 rounded-xl border border-dashed border-gray-200">
-        <i class="pi pi-box text-6xl text-gray-300 mb-4"></i>
-        <h3 class="text-xl font-semibold text-gray-700 mb-2">Chưa có đơn hàng nào</h3>
-        <p class="text-gray-500 mb-6">Bạn chưa thực hiện giao dịch nào trên hệ thống.</p>
-        <router-link to="/" class="inline-flex items-center justify-center px-6 py-3 bg-primary text-white rounded-xl font-medium hover:bg-primary/90 transition-colors">
-          Khám phá sách ngay
-        </router-link>
-      </div>
-
-      <div v-else class="space-y-6">
-        <!-- Order Card -->
-        <div v-for="order in orders" :key="order.id" class="border border-gray-100 rounded-xl overflow-hidden hover:border-primary/20 transition-colors shadow-sm">
-          <!-- Order Header -->
-          <div class="bg-gray-50/50 px-6 py-4 border-b border-gray-100 flex flex-wrap items-center justify-between gap-4">
-            <div class="flex items-center gap-6">
-              <div>
-                <p class="text-xs text-gray-500 font-medium uppercase tracking-wider mb-1">Mã đơn hàng</p>
-                <p class="font-bold text-gray-900">#{{ order.order_code || order.id }}</p>
-              </div>
-              <div class="hidden sm:block w-px h-8 bg-gray-200"></div>
-              <div>
-                <p class="text-xs text-gray-500 font-medium uppercase tracking-wider mb-1">Ngày đặt</p>
-                <p class="font-medium text-gray-700">{{ formatDate(order.created_at) }}</p>
-              </div>
+      <!-- Main Content -->
+      <main class="flex-1 space-y-lg">
+        <div class="bg-surface-container-lowest rounded-3xl border border-outline-variant/30 soft-shadow overflow-hidden min-h-[600px]">
+          <div class="p-lg md:p-xl border-b border-outline-variant/10 flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <h1 class="text-2xl font-black text-on-surface tracking-tight mb-1">Đơn hàng của tôi</h1>
+              <p class="text-sm text-on-surface-variant font-medium">Theo dõi lịch sử mua sắm và trạng thái đơn hàng của bạn.</p>
             </div>
-            <div class="flex items-center gap-3">
-              <span class="px-3 py-1 text-sm font-medium rounded-full" :class="getStatusClass(order.status)">
-                {{ getStatusText(order.status) }}
-              </span>
-              <span class="px-3 py-1 text-sm font-medium rounded-full bg-blue-50 text-blue-700 border border-blue-100">
-                {{ order.payment_method }}
-              </span>
+            
+            <div class="flex gap-2 p-1 bg-surface-container-low rounded-xl">
+              <button 
+                v-for="filter in statusFilters" 
+                :key="filter.value"
+                @click="currentFilter = filter.value"
+                class="px-4 py-1.5 rounded-lg text-xs font-bold transition-all border-none cursor-pointer"
+                :class="currentFilter === filter.value ? 'bg-primary text-on-primary shadow-sm' : 'text-outline hover:text-on-surface'"
+              >
+                {{ filter.label }}
+              </button>
             </div>
           </div>
 
-          <!-- Order Items -->
-          <div class="px-6 py-4">
-            <div class="space-y-4">
-              <div v-for="item in order.items" :key="item.id" class="flex gap-4 items-start">
-                <div class="w-16 h-20 bg-gray-100 rounded-lg overflow-hidden shrink-0 shadow-sm border border-gray-100">
-                  <img v-if="item.book?.cover_image" :src="getCoverUrl(item.book.cover_image)" :alt="item.book.title" class="w-full h-full object-cover">
-                  <div v-else class="w-full h-full flex items-center justify-center text-gray-400">
-                    <i class="pi pi-image text-xl"></i>
+          <div class="p-lg md:p-xl">
+            <!-- Loading -->
+            <div v-if="loading" class="py-20 flex flex-col items-center gap-4">
+              <div class="w-12 h-12 border-4 border-primary/20 border-t-primary rounded-full animate-spin"></div>
+              <p class="text-sm font-bold text-outline">Đang tải đơn hàng...</p>
+            </div>
+
+            <!-- Empty State -->
+            <div v-else-if="filteredOrders.length === 0" class="py-20 text-center animate-fade-in">
+              <div class="w-24 h-24 bg-surface-container-high rounded-full flex items-center justify-center mx-auto mb-lg text-outline/30">
+                <span class="material-symbols-outlined text-5xl">order_approve</span>
+              </div>
+              <h3 class="text-xl font-bold text-on-surface mb-2">Chưa có đơn hàng nào</h3>
+              <p class="text-on-surface-variant mb-xl max-w-sm mx-auto text-sm leading-relaxed">
+                Có vẻ như bạn chưa đặt mua sản phẩm nào. Hãy khám phá kho sách khổng lồ của chúng tôi!
+              </p>
+              <button @click="$router.push('/catalog')" class="bg-primary text-on-primary px-xl py-md rounded-2xl font-bold shadow-md hover:bg-primary/90 transition-all active:scale-95">
+                Khám phá ngay
+              </button>
+            </div>
+
+            <!-- Orders List -->
+            <div v-else class="space-y-lg">
+              <div v-for="order in filteredOrders" :key="order.id" class="bg-surface-container-low/30 rounded-2xl border border-outline-variant/20 overflow-hidden hover:border-primary/30 transition-all group animate-fade-in">
+                <!-- Order Header -->
+                <div class="p-lg bg-surface-container-low/50 border-b border-outline-variant/10 flex flex-wrap items-center justify-between gap-4">
+                  <div class="flex items-center gap-4">
+                    <div class="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
+                      <span class="material-symbols-outlined">inventory_2</span>
+                    </div>
+                    <div>
+                      <div class="text-sm font-black text-on-surface uppercase tracking-wider">#{{ order.order_code || order.id }}</div>
+                      <div class="text-[10px] font-bold text-outline">{{ formatDate(order.created_at) }}</div>
+                    </div>
+                  </div>
+                  <div class="flex items-center gap-3">
+                    <span :class="['px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider shadow-sm', getStatusStyle(order.status)]">
+                      {{ getStatusText(order.status) }}
+                    </span>
+                    <span class="px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider bg-surface-container-highest text-on-surface-variant border border-outline-variant/30">
+                      {{ order.payment_method }}
+                    </span>
                   </div>
                 </div>
-                <div class="flex-grow min-w-0">
-                  <h4 class="font-semibold text-gray-900 truncate">{{ item.book?.title || 'Sách không còn tồn tại' }}</h4>
-                  <p class="text-sm text-gray-500 mt-1">Số lượng: {{ item.quantity }}</p>
-                  <p class="text-sm font-medium text-primary mt-1">{{ formatCurrency(item.price) }}</p>
+
+                <!-- Order Items -->
+                <div class="p-lg space-y-md">
+                  <div v-for="item in order.items" :key="item.id" class="flex items-start gap-md">
+                    <div class="w-16 h-20 rounded-lg overflow-hidden bg-surface-container-high shrink-0 shadow-sm border border-outline-variant/10">
+                      <img v-if="item.book?.cover_image" :src="getCoverUrl(item.book.cover_image)" :alt="item.book.title" class="w-full h-full object-cover" />
+                      <div v-else class="w-full h-full flex items-center justify-center text-outline">
+                        <span class="material-symbols-outlined text-xl">image</span>
+                      </div>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                      <h4 class="text-sm font-bold text-on-surface truncate leading-tight mb-1">{{ item.book?.title || 'Sách không còn tồn tại' }}</h4>
+                      <div class="flex items-center gap-2 mb-1">
+                        <span class="text-[10px] font-black text-outline uppercase tracking-tighter px-1.5 py-0.5 bg-surface-container-low rounded border border-outline-variant/20">
+                          {{ item.book?.type === 'ebook' ? 'E-book' : 'Sách giấy' }}
+                        </span>
+                        <span class="text-xs text-on-surface-variant font-medium">x{{ item.quantity }}</span>
+                      </div>
+                      <div class="text-sm font-bold text-primary">{{ formatCurrency(item.price) }}</div>
+                    </div>
+                    <div v-if="order.status !== 'cancelled'" class="shrink-0 flex flex-col gap-2">
+                      <button 
+                        v-if="item.book?.type === 'ebook' && order.status === 'completed'" 
+                        @click="$router.push(`/reader/${order.id}/${item.book.id}`)" 
+                        class="px-4 py-2 rounded-xl bg-primary/10 text-primary hover:bg-primary hover:text-on-primary transition-all border-none cursor-pointer flex items-center gap-1 text-xs font-bold"
+                      >
+                        <span class="material-symbols-outlined text-[18px]">auto_stories</span>
+                        Đọc ngay
+                      </button>
+                      <button 
+                        v-if="item.book?.type === 'physical'" 
+                        @click="$router.push(`/tracking/${order.id}`)" 
+                        class="px-4 py-2 rounded-xl bg-secondary/10 text-secondary hover:bg-secondary hover:text-on-secondary transition-all border-none cursor-pointer flex items-center gap-1 text-xs font-bold"
+                      >
+                        <span class="material-symbols-outlined text-[18px]">local_shipping</span>
+                        Theo dõi
+                      </button>
+                    </div>
+                  </div>
                 </div>
-                <div class="shrink-0 pt-1" v-if="item.book?.type === 'ebook' && order.status === 'completed'">
-                  <router-link :to="`/reader/${order.id}/${item.book.id}`" class="text-sm font-medium text-primary hover:text-primary/80 flex items-center gap-1 bg-primary/5 px-3 py-1.5 rounded-lg">
-                    <i class="pi pi-book text-xs"></i>
-                    Đọc sách
-                  </router-link>
+
+                <!-- Order Footer -->
+                <div class="p-lg pt-0 flex items-center justify-between">
+                  <div class="flex flex-col">
+                    <span class="text-[10px] font-bold text-outline uppercase tracking-wider mb-1">Tổng thanh toán</span>
+                    <span class="text-lg font-black text-primary">{{ formatCurrency(order.total_amount) }}</span>
+                  </div>
+                  <button @click="showOrderDetail(order)" class="text-xs font-black uppercase text-secondary hover:underline bg-transparent border-none cursor-pointer flex items-center gap-1">
+                    Xem chi tiết
+                    <span class="material-symbols-outlined text-[16px]">chevron_right</span>
+                  </button>
                 </div>
               </div>
             </div>
           </div>
-
-          <!-- Order Footer -->
-          <div class="bg-gray-50/50 px-6 py-4 border-t border-gray-100 flex items-center justify-between">
-            <p class="text-sm text-gray-500">
-              Giao đến: <span class="font-medium text-gray-700">{{ order.shipping_address || 'Không yêu cầu giao hàng' }}</span>
-            </p>
-            <div class="text-right">
-              <p class="text-sm text-gray-500 mb-0.5">Tổng tiền</p>
-              <p class="text-lg font-bold text-primary">{{ formatCurrency(order.total_amount) }}</p>
-            </div>
-          </div>
         </div>
-      </div>
-
+      </main>
     </div>
+
+    <!-- Order Detail Modal (Optional but good) -->
+    <Dialog v-model:visible="orderDetailVisible" :header="selectedOrder ? 'Chi tiết đơn hàng #' + (selectedOrder.order_code || selectedOrder.id) : 'Chi tiết đơn hàng'" :modal="true" class="!rounded-3xl !border-none !shadow-2xl" :style="{width: '600px'}">
+      <div v-if="selectedOrder" class="space-y-xl py-md animate-fade-in">
+         <div class="p-lg bg-surface-container-low rounded-2xl border border-outline-variant/10 space-y-md">
+            <div class="flex justify-between">
+              <span class="text-sm text-on-surface-variant font-medium">Địa chỉ giao hàng</span>
+              <span class="text-sm font-bold text-on-surface text-right max-w-[250px]">{{ selectedOrder.shipping_address }}</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-sm text-on-surface-variant font-medium">Phương thức</span>
+              <span class="text-sm font-bold text-on-surface">{{ selectedOrder.payment_method }}</span>
+            </div>
+            <div class="flex justify-between pt-md border-t border-outline-variant/10">
+              <span class="text-base font-bold text-on-surface">Tổng cộng</span>
+              <span class="text-xl font-black text-primary">{{ formatCurrency(selectedOrder.total_amount) }}</span>
+            </div>
+         </div>
+      </div>
+    </Dialog>
+
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { ref, onMounted, computed } from 'vue'
+import { useAuthStore } from '@/stores/auth'
 import { useToast } from 'primevue/usetoast'
-import axios from '@/services/axios'
+import apiClient from '@/services/axios'
 
-const route = useRoute()
-const router = useRouter()
+import UserSidebar from '@/components/profile/UserSidebar.vue'
+import Dialog from 'primevue/dialog'
+
+const authStore = useAuthStore()
 const toast = useToast()
 
 const orders = ref([])
 const loading = ref(true)
+const currentFilter = ref('all')
+const orderDetailVisible = ref(false)
+const selectedOrder = ref(null)
+
+const statusFilters = [
+  { label: 'Tất cả', value: 'all' },
+  { label: 'Chờ xử lý', value: 'pending' },
+  { label: 'Đã hoàn thành', value: 'completed' },
+  { label: 'Đã hủy', value: 'cancelled' }
+]
+
+const filteredOrders = computed(() => {
+  if (currentFilter.value === 'all') return orders.value
+  return orders.value.filter(o => o.status === currentFilter.value)
+})
 
 const fetchOrders = async () => {
   loading.value = true
   try {
-    const response = await axios.get('/api/my-orders')
-    const fetchedOrders = response.data.data || response.data || []
-    // Sắp xếp đơn hàng mới nhất lên đầu
-    orders.value = fetchedOrders.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+    const res = await apiClient.get('/api/my-orders')
+    const fetched = res.data.data || res.data || []
+    orders.value = fetched.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
   } catch (error) {
-    console.error('Lỗi khi tải lịch sử đơn hàng:', error)
-    toast.add({
-      severity: 'error',
-      summary: 'Lỗi',
-      detail: 'Không thể tải lịch sử đơn hàng',
-      life: 3000
-    })
-  } finally {
-    loading.value = false
-  }
+    toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Không thể tải đơn hàng', life: 3000 })
+  } finally { loading.value = false }
 }
 
-const checkPaymentStatus = () => {
-  if (route.query.payment === 'success') {
-    toast.add({
-      severity: 'success',
-      summary: 'Thanh toán thành công',
-      detail: 'Cảm ơn bạn đã mua hàng bằng VNPAY!',
-      life: 5000
-    })
-    // Xóa query parameter để không hiện lại khi f5
-    router.replace({ query: {} })
-  } else if (route.query.payment === 'failed') {
-    toast.add({
-      severity: 'error',
-      summary: 'Thanh toán thất bại',
-      detail: 'Giao dịch VNPAY đã bị hủy hoặc có lỗi xảy ra.',
-      life: 5000
-    })
-    router.replace({ query: {} })
-  } else if (route.query.payment === 'invalid_signature') {
-    toast.add({
-      severity: 'warn',
-      summary: 'Lỗi bảo mật',
-      detail: 'Chữ ký giao dịch không hợp lệ.',
-      life: 5000
-    })
-    router.replace({ query: {} })
-  }
+const showOrderDetail = (order) => {
+  selectedOrder.value = order
+  orderDetailVisible.value = true
 }
 
-onMounted(() => {
-  checkPaymentStatus()
-  fetchOrders()
-})
-
-// Helpers
 const formatCurrency = (value) => {
   return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(value)
 }
 
 const formatDate = (dateString) => {
   if (!dateString) return ''
-  const date = new Date(dateString)
   return new Intl.DateTimeFormat('vi-VN', {
-    hour: '2-digit', minute: '2-digit',
-    day: '2-digit', month: '2-digit', year: 'numeric'
-  }).format(date)
+    day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
+  }).format(new Date(dateString))
 }
 
 const getCoverUrl = (path) => {
   if (!path) return ''
   if (path.startsWith('http')) return path
-  const baseUrl = import.meta.env.VITE_API_URL || ''
+  const baseUrl = import.meta.env.VITE_API_URL || 'http://komibook.test'
   return `${baseUrl}/storage/${path}`
 }
 
 const getStatusText = (status) => {
-  const map = {
-    'pending': 'Chờ xử lý',
-    'processing': 'Đang xử lý / Đã thanh toán',
-    'shipped': 'Đang giao hàng',
-    'completed': 'Hoàn thành',
-    'cancelled': 'Đã hủy'
-  }
+  const map = { pending: 'Chờ xử lý', processing: 'Đang xử lý', completed: 'Hoàn thành', cancelled: 'Đã hủy' }
   return map[status] || status
 }
 
-const getStatusClass = (status) => {
+const getStatusStyle = (status) => {
   const map = {
-    'pending': 'bg-amber-50 text-amber-700 border border-amber-200',
-    'processing': 'bg-blue-50 text-blue-700 border border-blue-200',
-    'shipped': 'bg-indigo-50 text-indigo-700 border border-indigo-200',
-    'completed': 'bg-emerald-50 text-emerald-700 border border-emerald-200',
-    'cancelled': 'bg-red-50 text-red-700 border border-red-200'
+    pending: 'bg-amber-100 text-amber-700 border border-amber-200',
+    processing: 'bg-blue-100 text-blue-700 border border-blue-200',
+    completed: 'bg-emerald-100 text-emerald-700 border border-emerald-200',
+    cancelled: 'bg-error-container text-error border border-error/20'
   }
-  return map[status] || 'bg-gray-50 text-gray-700 border border-gray-200'
+  return map[status] || 'bg-surface-container-high text-on-surface-variant'
 }
+
+onMounted(() => {
+  fetchOrders()
+})
 </script>
+
+<style scoped>
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-in {
+  animation: fade-in 0.4s ease-out forwards;
+}
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+</style>

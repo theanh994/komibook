@@ -45,18 +45,22 @@ class OrderController extends Controller
 
         $filename = basename($book->file_path);
         
-        $url = URL::temporarySignedRoute(
+        $relativeUrl = URL::temporarySignedRoute(
             'api.ebook.stream', 
             now()->addMinutes(10), 
-            ['filename' => $filename]
+            ['filename' => $filename],
+            false // Generate signature for relative URL only
         );
+
+        $url = rtrim(config('app.url'), '/') . $relativeUrl;
 
         return response()->json(['url' => $url]);
     }
     
     public function streamEbook(Request $request, $filename)
     {
-        if (!$request->hasValidSignature()) {
+        // Verify relative signature to avoid proxy host/scheme mismatches
+        if (!$request->hasValidSignature(false)) {
             abort(401, 'Link đã hết hạn hoặc không hợp lệ.');
         }
 

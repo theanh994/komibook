@@ -52,6 +52,13 @@ Route::middleware('auth:sanctum')->group(function () {
     
     // VNPAY Create payment
     Route::post('/vnpay/create', [\App\Http\Controllers\Api\VnpayController::class, 'createPayment']);
+
+    // Book Annotations
+    Route::get('/annotations', [\App\Http\Controllers\Api\BookAnnotationController::class, 'index']);
+    Route::post('/annotations', [\App\Http\Controllers\Api\BookAnnotationController::class, 'store']);
+    Route::put('/annotations/{id}', [\App\Http\Controllers\Api\BookAnnotationController::class, 'update']);
+    Route::delete('/annotations/{id}', [\App\Http\Controllers\Api\BookAnnotationController::class, 'destroy']);
+    Route::get('/books/{id}/recent-annotations', [\App\Http\Controllers\Api\BookAnnotationController::class, 'recent']);
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -89,9 +96,8 @@ Route::middleware('auth:sanctum')->prefix('admin')->name('admin.')->group(functi
 
 Route::get('/flash-sales', [\App\Http\Controllers\Api\CouponController::class, 'flashSales']);
 
-// Route để stream e-book (Dùng signed URL, không cần auth middleware vì link chỉ có hiệu lực với chữ ký hợp lệ)
+// Route để stream e-book (Dùng signed URL, xử lý bảo mật bên trong controller bằng relative signature)
 Route::get('/ebooks/{filename}/stream', [\App\Http\Controllers\Api\OrderController::class, 'streamEbook'])
-    ->middleware('signed')
     ->name('api.ebook.stream');
 
 // VNPAY Webhooks/Return (no auth required because it's called by VNPAY)

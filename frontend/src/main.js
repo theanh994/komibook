@@ -10,6 +10,9 @@ import App from './App.vue'
 import router from './router'
 import './assets/main.css'
 
+import Dialog from 'primevue/dialog'
+import Toast from 'primevue/toast'
+
 const app = createApp(App)
 
 app.use(createPinia())
@@ -25,5 +28,8 @@ app.use(PrimeVue, {
 app.use(ToastService)
 app.use(ConfirmationService)
 app.directive('tooltip', Tooltip)
+
+app.component('Dialog', Dialog)
+app.component('Toast', Toast)
 
 app.mount('#app')

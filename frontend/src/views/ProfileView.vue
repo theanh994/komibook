@@ -1,306 +1,257 @@
 <template>
-  <div class="min-h-screen bg-slate-50 py-10 px-4 sm:px-6 lg:px-8">
-    <div class="max-w-4xl mx-auto space-y-8">
+  <div class="min-h-screen bg-background py-xl px-gutter">
+    <div class="max-w-[1200px] mx-auto flex flex-col lg:flex-row gap-xl">
       
-      <!-- Header -->
-      <div class="flex items-center gap-6 mb-8">
-        <!-- Avatar Upload -->
-        <div class="relative group cursor-pointer" @click="$refs.avatarInput.click()">
-          <div class="w-24 h-24 rounded-full overflow-hidden border-4 border-white shadow-sm">
-            <img v-if="authStore.user?.avatar" :src="avatarUrl" alt="Avatar" class="w-full h-full object-cover" />
-            <div v-else class="w-full h-full bg-indigo-100 flex items-center justify-center text-indigo-500 text-3xl font-semibold">
-              {{ authStore.user?.name?.charAt(0)?.toUpperCase() || 'U' }}
-            </div>
-          </div>
-          <div class="absolute inset-0 bg-black/40 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-            <i class="pi pi-camera text-white text-xl"></i>
-          </div>
-          <input type="file" ref="avatarInput" class="hidden" accept="image/*" @change="onAvatarSelected" />
-        </div>
+      <!-- Sidebar -->
+      <UserSidebar :user="authStore.user" @avatar-click="$refs.avatarInput.click()" />
+      <input type="file" ref="avatarInput" class="hidden" accept="image/*" @change="onAvatarSelected" />
+
+      <!-- Main Content -->
+      <main class="flex-1 space-y-lg">
         
-        <div>
-          <h1 class="text-3xl font-bold text-slate-900 tracking-tight">Hồ sơ cá nhân</h1>
-          <p class="text-slate-500 mt-2">Quản lý thông tin và bảo mật tài khoản của bạn.</p>
-        </div>
-      </div>
-
-      <TabView>
-        <TabPanel header="Hồ sơ">
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mt-4">
-            
-            <!-- Card 1: Thông tin chung -->
-            <div class="bg-white rounded-xl shadow-sm shadow-slate-200/50 border border-slate-200/60 p-6 md:p-8 flex flex-col h-full">
-              <div class="mb-6">
-                <h2 class="text-lg font-semibold text-slate-800">Thông tin chung</h2>
-                <p class="text-sm text-slate-500">Cập nhật họ tên, số điện thoại và địa chỉ của bạn.</p>
-              </div>
-              
-              <form @submit.prevent="handleUpdateInfo" class="flex flex-col gap-5 flex-grow">
-                <div class="flex flex-col gap-1.5">
-                  <label for="email" class="text-sm font-medium text-slate-700">Email</label>
-                  <InputText
-                    id="email"
-                    v-model="infoForm.email"
-                    disabled
-                    class="profile-input bg-slate-50 opacity-70"
-                  />
-                </div>
-
-                <div class="flex flex-col gap-1.5">
-                  <label for="name" class="text-sm font-medium text-slate-700">Họ và tên</label>
-                  <InputText
-                    id="name"
-                    v-model="infoForm.name"
-                    required
-                    placeholder="Ví dụ: Nguyễn Văn A"
-                    class="profile-input"
-                  />
-                </div>
-
-                <div class="flex flex-col gap-1.5">
-                  <label for="phone" class="text-sm font-medium text-slate-700">Số điện thoại</label>
-                  <InputText
-                    id="phone"
-                    v-model="infoForm.phone"
-                    placeholder="Ví dụ: 0901234567"
-                    class="profile-input"
-                  />
-                </div>
-
-                <div class="flex flex-col gap-1.5">
-                  <label for="address" class="text-sm font-medium text-slate-700">Địa chỉ</label>
-                  <Textarea
-                    id="address"
-                    v-model="infoForm.address"
-                    rows="3"
-                    placeholder="Địa chỉ giao hàng mặc định"
-                    class="profile-input resize-none"
-                  />
-                </div>
-
-                <div class="mt-auto pt-4">
-                  <Button
-                    type="submit"
-                    label="Lưu thông tin"
-                    :loading="loadingInfo"
-                    class="profile-btn w-full !bg-gradient-to-b !from-indigo-500 !to-indigo-600 hover:!from-indigo-600 hover:!to-indigo-700 !text-white !border-none !rounded-lg !shadow-sm !font-medium !text-sm !py-2.5 transition-all duration-300 ease-out"
-                  />
-                </div>
-              </form>
-            </div>
-
-            <!-- Card 2: Đổi mật khẩu -->
-            <div class="bg-white rounded-xl shadow-sm shadow-slate-200/50 border border-slate-200/60 p-6 md:p-8 flex flex-col h-full">
-              <div class="mb-6">
-                <h2 class="text-lg font-semibold text-slate-800">Đổi mật khẩu</h2>
-                <p class="text-sm text-slate-500">Đảm bảo tài khoản của bạn sử dụng mật khẩu dài và an toàn.</p>
-              </div>
-              
-              <form @submit.prevent="handleUpdatePassword" class="flex flex-col gap-5 flex-grow">
-                <div class="flex flex-col gap-1.5">
-                  <label for="current_password" class="text-sm font-medium text-slate-700">Mật khẩu hiện tại</label>
-                  <Password
-                    id="current_password"
-                    v-model="passwordForm.current_password"
-                    :feedback="false"
-                    toggleMask
-                    placeholder="Nhập mật khẩu hiện tại"
-                    required
-                    inputClass="w-full profile-input"
-                  />
-                </div>
-
-                <div class="flex flex-col gap-1.5">
-                  <label for="new_password" class="text-sm font-medium text-slate-700">Mật khẩu mới</label>
-                  <Password
-                    id="new_password"
-                    v-model="passwordForm.new_password"
-                    toggleMask
-                    placeholder="Tối thiểu 8 ký tự"
-                    required
-                    inputClass="w-full profile-input"
-                  />
-                </div>
-
-                <div class="flex flex-col gap-1.5">
-                  <label for="new_password_confirmation" class="text-sm font-medium text-slate-700">Xác nhận mật khẩu mới</label>
-                  <Password
-                    id="new_password_confirmation"
-                    v-model="passwordForm.new_password_confirmation"
-                    :feedback="false"
-                    toggleMask
-                    placeholder="Nhập lại mật khẩu mới"
-                    required
-                    inputClass="w-full profile-input"
-                  />
-                </div>
-
-                <div class="mt-auto pt-4">
-                  <Button
-                    type="submit"
-                    label="Đổi mật khẩu"
-                    :loading="loadingPassword"
-                    class="profile-btn w-full !bg-white hover:!bg-slate-50 !text-slate-800 !border !border-slate-300 !rounded-lg !shadow-sm !font-medium !text-sm !py-2.5 transition-all duration-300 ease-out"
-                  />
-                </div>
-              </form>
-            </div>
-
+        <div class="bg-surface-container-lowest rounded-3xl border border-outline-variant/30 soft-shadow overflow-hidden">
+          <div class="p-lg md:p-xl border-b border-outline-variant/10">
+            <h1 class="text-2xl font-black text-on-surface tracking-tight mb-2">Hồ sơ cá nhân</h1>
+            <p class="text-sm text-on-surface-variant font-medium">Quản lý thông tin tài khoản và bảo mật của bạn.</p>
           </div>
-        </TabPanel>
 
-        <TabPanel header="Sổ địa chỉ">
-          <div class="bg-white rounded-xl shadow-sm border border-slate-200/60 p-6 mt-4">
-            <div class="flex justify-between items-center mb-6">
-              <h2 class="text-lg font-semibold text-slate-800">Danh sách địa chỉ</h2>
-              <Button label="Thêm địa chỉ" icon="pi pi-plus" size="small" @click="openAddressModal()" />
-            </div>
+          <!-- Tabs -->
+          <div class="px-md pt-md flex gap-md overflow-x-auto no-scrollbar border-b border-outline-variant/10">
+            <button 
+              v-for="tab in tabs" 
+              :key="tab.id"
+              @click="activeTab = tab.id"
+              class="px-lg py-md text-sm font-bold transition-all border-none bg-transparent cursor-pointer relative whitespace-nowrap"
+              :class="activeTab === tab.id ? 'text-primary' : 'text-outline hover:text-on-surface'"
+            >
+              {{ tab.label }}
+              <div v-if="activeTab === tab.id" class="absolute bottom-0 left-0 right-0 h-1 bg-primary rounded-t-full"></div>
+            </button>
+          </div>
 
-            <div v-if="loadingAddresses" class="text-center py-8 text-slate-500">
-              <i class="pi pi-spin pi-spinner text-2xl"></i>
-            </div>
-            
-            <div v-else-if="addresses.length === 0" class="text-center py-8 text-slate-500">
-              Bạn chưa thêm địa chỉ nào.
-            </div>
-
-            <div v-else class="space-y-4">
-              <div v-for="addr in addresses" :key="addr.id" class="border border-slate-200 rounded-lg p-4 flex justify-between items-start transition hover:border-indigo-300">
-                <div>
-                  <div class="flex items-center gap-2 mb-1">
-                    <span class="font-semibold text-slate-800">{{ addr.receiver_name }}</span>
-                    <span class="text-slate-500 text-sm">| {{ addr.phone }}</span>
-                    <span v-if="addr.is_default" class="bg-indigo-100 text-indigo-700 text-xs px-2 py-0.5 rounded-full font-medium ml-2">Mặc định</span>
+          <div class="p-lg md:p-xl">
+            <!-- Tab: Thông tin chung -->
+            <div v-if="activeTab === 'general'" class="animate-fade-in">
+              <form @submit.prevent="handleUpdateInfo" class="grid grid-cols-1 md:grid-cols-2 gap-xl">
+                <div class="space-y-6">
+                  <div class="space-y-2">
+                    <label class="text-sm font-bold text-on-surface-variant ml-1">Email (Không thể thay đổi)</label>
+                    <div class="relative">
+                      <InputText v-model="infoForm.email" disabled class="w-full !pl-10 !rounded-2xl !bg-surface-container-high !border-none !text-outline" />
+                      <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-[20px]">alternate_email</span>
+                    </div>
                   </div>
-                  <p class="text-slate-600 text-sm">{{ addr.address }}</p>
+
+                  <div class="space-y-2">
+                    <label class="text-sm font-bold text-on-surface-variant ml-1">Họ và tên</label>
+                    <div class="relative">
+                      <InputText v-model="infoForm.name" placeholder="Nhập họ và tên..." class="w-full !pl-10 !rounded-2xl !border-outline-variant/40" />
+                      <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-[20px]">person</span>
+                    </div>
+                  </div>
+
+                  <div class="space-y-2">
+                    <label class="text-sm font-bold text-on-surface-variant ml-1">Số điện thoại</label>
+                    <div class="relative">
+                      <InputText v-model="infoForm.phone" placeholder="Nhập số điện thoại..." class="w-full !pl-10 !rounded-2xl !border-outline-variant/40" />
+                      <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-[20px]">call</span>
+                    </div>
+                  </div>
                 </div>
-                <div class="flex gap-2">
-                  <Button v-if="!addr.is_default" label="Đặt mặc định" class="p-button-text p-button-sm p-button-secondary" @click="setDefaultAddress(addr.id)" />
-                  <Button icon="pi pi-pencil" class="p-button-text p-button-sm" @click="openAddressModal(addr)" />
-                  <Button icon="pi pi-trash" class="p-button-text p-button-sm p-button-danger" @click="confirmDeleteAddress(addr.id)" />
+
+                <div class="space-y-6">
+                  <div class="space-y-2 h-full flex flex-col">
+                    <label class="text-sm font-bold text-on-surface-variant ml-1">Địa chỉ cá nhân</label>
+                    <div class="relative flex-1">
+                      <Textarea v-model="infoForm.address" placeholder="Nhập địa chỉ của bạn..." class="w-full !pl-10 !rounded-2xl !border-outline-variant/40 h-full min-h-[150px]" />
+                      <span class="material-symbols-outlined absolute left-3 top-4 text-outline text-[20px]">home</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="md:col-span-2 pt-lg flex justify-end">
+                  <button 
+                    type="submit"
+                    :disabled="loadingInfo"
+                    class="bg-primary text-on-primary px-xl py-md rounded-2xl font-bold shadow-md hover:bg-primary/90 transition-all active:scale-95 disabled:opacity-50 flex items-center gap-2"
+                  >
+                    <span v-if="loadingInfo" class="pi pi-spin pi-spinner mr-2"></span>
+                    <span v-else class="material-symbols-outlined text-[20px]">save</span>
+                    Lưu thông tin
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            <!-- Tab: Sổ địa chỉ -->
+            <div v-if="activeTab === 'addresses'" class="animate-fade-in space-y-md">
+              <div class="flex justify-between items-center mb-lg">
+                <h3 class="text-lg font-bold text-on-surface">Địa chỉ giao hàng</h3>
+                <button @click="openAddressModal()" class="bg-primary-container text-on-primary-container px-lg py-sm rounded-xl font-bold text-xs hover:opacity-80 transition-all border-none cursor-pointer flex items-center gap-2">
+                  <span class="material-symbols-outlined text-[18px]">add</span>
+                  Thêm mới
+                </button>
+              </div>
+
+              <div v-if="loadingAddresses" class="py-xl flex justify-center">
+                <i class="pi pi-spin pi-spinner text-3xl text-primary"></i>
+              </div>
+              
+              <div v-else-if="addresses.length === 0" class="py-xl text-center space-y-md">
+                <div class="w-16 h-16 bg-surface-container-high rounded-full flex items-center justify-center mx-auto text-outline">
+                  <span class="material-symbols-outlined text-3xl">location_off</span>
+                </div>
+                <p class="text-sm text-outline font-medium">Bạn chưa có địa chỉ giao hàng nào.</p>
+              </div>
+
+              <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-md">
+                <div v-for="addr in addresses" :key="addr.id" class="p-lg rounded-2xl border-2 transition-all group" :class="addr.is_default ? 'border-primary bg-primary-container/5' : 'border-outline-variant/20 hover:border-outline-variant/60'">
+                  <div class="flex justify-between items-start mb-md">
+                    <div class="flex flex-col">
+                      <div class="flex items-center gap-2 mb-1">
+                        <span class="font-bold text-on-surface">{{ addr.receiver_name }}</span>
+                        <span v-if="addr.is_default" class="px-2 py-0.5 bg-primary text-on-primary text-[10px] font-black uppercase tracking-wider rounded-md">Mặc định</span>
+                      </div>
+                      <span class="text-xs text-on-surface-variant font-bold flex items-center gap-1">
+                        <span class="material-symbols-outlined text-[14px]">call</span>
+                        {{ addr.phone }}
+                      </span>
+                    </div>
+                    <div class="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button @click="openAddressModal(addr)" class="w-8 h-8 rounded-full bg-surface-container-high text-on-surface-variant hover:text-primary transition-all border-none cursor-pointer flex items-center justify-center">
+                        <span class="material-symbols-outlined text-[18px]">edit</span>
+                      </button>
+                      <button v-if="!addr.is_default" @click="confirmDeleteAddress(addr.id)" class="w-8 h-8 rounded-full bg-surface-container-high text-on-surface-variant hover:text-error transition-all border-none cursor-pointer flex items-center justify-center">
+                        <span class="material-symbols-outlined text-[18px]">delete</span>
+                      </button>
+                    </div>
+                  </div>
+                  <p class="text-sm text-on-surface-variant leading-relaxed line-clamp-2">{{ addr.address }}</p>
+                  <button v-if="!addr.is_default" @click="setDefaultAddress(addr.id)" class="mt-md text-[11px] font-black uppercase text-secondary hover:underline bg-transparent border-none cursor-pointer">Đặt làm mặc định</button>
                 </div>
               </div>
             </div>
+
+            <!-- Tab: Bảo mật -->
+            <div v-if="activeTab === 'security'" class="w-full block">
+              <div class="animate-fade-in py-lg flex flex-col items-center">
+                <div class="w-full max-w-[480px]">
+                  <div class="text-center mb-xl">
+                    <div class="w-16 h-16 bg-error-container/20 text-error rounded-full flex items-center justify-center mx-auto mb-md">
+                      <span class="material-symbols-outlined text-3xl">lock</span>
+                    </div>
+                    <h2 class="text-xl font-black text-on-surface mb-2">Thay đổi mật khẩu</h2>
+                    <p class="text-sm text-on-surface-variant font-medium">Bạn nên sử dụng mật khẩu mạnh để bảo vệ tài khoản.</p>
+                  </div>
+
+                  <form @submit.prevent="handleUpdatePassword" class="space-y-6">
+                    <div class="flex flex-col gap-2">
+                      <label class="text-sm font-bold text-on-surface-variant ml-1">Mật khẩu hiện tại</label>
+                      <Password v-model="passwordForm.current_password" toggleMask placeholder="••••••••" class="w-full" inputClass="w-full !rounded-2xl !border-outline-variant/40 !py-3 !px-4" :feedback="false" />
+                    </div>
+
+                    <div class="flex flex-col gap-2">
+                      <label class="text-sm font-bold text-on-surface-variant ml-1">Mật khẩu mới</label>
+                      <Password v-model="passwordForm.new_password" toggleMask placeholder="Tối thiểu 8 ký tự" class="w-full" inputClass="w-full !rounded-2xl !border-outline-variant/40 !py-3 !px-4" />
+                    </div>
+
+                    <div class="flex flex-col gap-2">
+                      <label class="text-sm font-bold text-on-surface-variant ml-1">Xác nhận mật khẩu mới</label>
+                      <Password v-model="passwordForm.new_password_confirmation" toggleMask placeholder="Nhập lại mật khẩu mới" class="w-full" inputClass="w-full !rounded-2xl !border-outline-variant/40 !py-3 !px-4" :feedback="false" />
+                    </div>
+
+                    <div class="pt-6">
+                      <button 
+                        type="submit"
+                        :disabled="loadingPassword"
+                        class="w-full bg-primary text-on-primary px-xl py-3.5 rounded-2xl font-bold shadow-md hover:opacity-90 transition-all active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-2 border-none cursor-pointer"
+                      >
+                        <span v-if="loadingPassword" class="pi pi-spin pi-spinner mr-2"></span>
+                        <span v-else class="material-symbols-outlined text-[20px]">security</span>
+                        Cập nhật mật khẩu
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            </div>
+
           </div>
-        </TabPanel>
-      </TabView>
+        </div>
+      </main>
     </div>
 
     <!-- Address Modal -->
-    <Dialog v-model:visible="addressDialog" :header="isEditAddress ? 'Cập nhật địa chỉ' : 'Thêm địa chỉ mới'" :modal="true" :style="{width: '450px'}">
-      <div class="flex flex-col gap-4 mt-2">
-        <div class="flex flex-col gap-1.5">
-          <label class="text-sm font-medium text-slate-700">Tên người nhận</label>
-          <InputText v-model="addressForm.receiver_name" placeholder="Ví dụ: Nguyễn Văn A" autofocus />
+    <Dialog v-model:visible="addressDialog" :header="isEditAddress ? 'Cập nhật địa chỉ' : 'Thêm địa chỉ mới'" :modal="true" class="!rounded-3xl !border-none !shadow-2xl" :style="{width: '450px'}">
+      <div class="flex flex-col gap-6 mt-4">
+        <div class="space-y-2">
+          <label class="text-sm font-bold text-on-surface-variant ml-1">Tên người nhận</label>
+          <InputText v-model="addressForm.receiver_name" placeholder="Ví dụ: Nguyễn Văn A" class="w-full !rounded-xl !border-outline-variant/40" autofocus />
         </div>
-        <div class="flex flex-col gap-1.5">
-          <label class="text-sm font-medium text-slate-700">Số điện thoại</label>
-          <InputText v-model="addressForm.phone" placeholder="Ví dụ: 0901234567" />
+        <div class="space-y-2">
+          <label class="text-sm font-bold text-on-surface-variant ml-1">Số điện thoại</label>
+          <InputText v-model="addressForm.phone" placeholder="Ví dụ: 0901234567" class="w-full !rounded-xl !border-outline-variant/40" />
         </div>
-        <div class="flex flex-col gap-1.5">
-          <label class="text-sm font-medium text-slate-700">Địa chỉ cụ thể</label>
-          <Textarea v-model="addressForm.address" rows="3" placeholder="Số nhà, Tên đường..." class="resize-none" />
+        <div class="space-y-2">
+          <label class="text-sm font-bold text-on-surface-variant ml-1">Địa chỉ chi tiết</label>
+          <Textarea v-model="addressForm.address" rows="3" placeholder="Số nhà, Tên đường..." class="w-full !rounded-xl !border-outline-variant/40 resize-none" />
         </div>
-        <div class="flex items-center gap-2 mt-2">
+        <div class="flex items-center gap-3 p-md bg-surface-container-low rounded-2xl border border-outline-variant/20">
           <Checkbox v-model="addressForm.is_default" :binary="true" inputId="is_default" />
-          <label for="is_default" class="text-sm text-slate-700 cursor-pointer">Đặt làm địa chỉ mặc định</label>
+          <label for="is_default" class="text-sm font-bold text-on-surface cursor-pointer">Đặt làm địa chỉ mặc định</label>
         </div>
       </div>
       <template #footer>
-        <Button label="Hủy" icon="pi pi-times" class="p-button-text" @click="addressDialog = false" />
-        <Button label="Lưu" icon="pi pi-check" :loading="savingAddress" @click="saveAddress" autofocus />
+        <div class="flex gap-2 justify-end pt-md">
+          <button @click="addressDialog = false" class="px-lg py-sm rounded-xl text-sm font-bold text-outline hover:bg-surface-container-high transition-all border-none bg-transparent cursor-pointer">Hủy</button>
+          <button @click="saveAddress" :loading="savingAddress" class="px-xl py-sm rounded-xl text-sm font-bold bg-primary text-on-primary shadow-md hover:bg-primary/90 transition-all active:scale-95 border-none cursor-pointer flex items-center gap-2">
+            <span v-if="savingAddress" class="pi pi-spin pi-spinner"></span>
+            Lưu địa chỉ
+          </button>
+        </div>
       </template>
     </Dialog>
 
     <Toast />
-    <ConfirmDialog></ConfirmDialog>
+    <ConfirmDialog />
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, computed } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from 'primevue/usetoast'
 import { useConfirm } from 'primevue/useconfirm'
 import apiClient from '@/services/axios'
 
+import UserSidebar from '@/components/profile/UserSidebar.vue'
 import InputText from 'primevue/inputtext'
 import Password from 'primevue/password'
 import Textarea from 'primevue/textarea'
-import Button from 'primevue/button'
-import Toast from 'primevue/toast'
-import TabView from 'primevue/tabview'
-import TabPanel from 'primevue/tabpanel'
-import Dialog from 'primevue/dialog'
 import Checkbox from 'primevue/checkbox'
+import Dialog from 'primevue/dialog'
+import Toast from 'primevue/toast'
 import ConfirmDialog from 'primevue/confirmdialog'
 
 const authStore = useAuthStore()
 const toast = useToast()
 const confirm = useConfirm()
 
-// Thông tin chung & Đổi mật khẩu
+const activeTab = ref('general')
+const tabs = [
+  { id: 'general', label: 'Thông tin chung' },
+  { id: 'addresses', label: 'Sổ địa chỉ' },
+  { id: 'security', label: 'Bảo mật' }
+]
+
+// Forms
 const loadingInfo = ref(false)
+const infoForm = reactive({ email: '', name: '', phone: '', address: '' })
+
 const loadingPassword = ref(false)
+const passwordForm = reactive({ current_password: '', new_password: '', new_password_confirmation: '' })
 
-const infoForm = reactive({
-  email: '',
-  name: '',
-  phone: '',
-  address: ''
-})
-
-const passwordForm = reactive({
-  current_password: '',
-  new_password: '',
-  new_password_confirmation: ''
-})
-
-// Avatar
-const avatarUrl = computed(() => {
-  if (!authStore.user?.avatar) return ''
-  
-  if (authStore.user.avatar.startsWith('http')) return authStore.user.avatar
-  
-  // Trong môi trường dev với Laravel Herd, backend thường được host ở http://komibook.test
-  // Nếu đã build prod, cần lấy theo VITE_API_URL
-  const baseUrl = import.meta.env.VITE_API_URL || 'http://komibook.test'
-  
-  // URL cho local storage
-  return `${baseUrl}/storage/${authStore.user.avatar}`
-})
-
-const onAvatarSelected = async (event) => {
-  const file = event.target.files[0]
-  if (!file) return
-  
-  // Xóa giá trị input để có thể chọn lại cùng 1 file
-  event.target.value = ''
-  
-  const formData = new FormData()
-  formData.append('avatar', file)
-  
-  try {
-    const res = await apiClient.post('/api/profile/avatar', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data'
-      }
-    })
-    // Cập nhật lại user trong store
-    await authStore.fetchUser()
-    toast.add({ severity: 'success', summary: 'Thành công', detail: 'Đổi ảnh đại diện thành công', life: 3000 })
-  } catch(e) {
-    let msg = 'Không thể tải lên ảnh đại diện'
-    if (e.response?.data?.errors?.avatar) {
-      msg = e.response.data.errors.avatar[0]
-    } else if (e.response?.data?.message) {
-      msg = e.response.data.message
-    }
-    toast.add({ severity: 'error', summary: 'Lỗi', detail: msg, life: 5000 })
-  }
-}
-
-// Sổ địa chỉ
+// Addresses
 const addresses = ref([])
 const loadingAddresses = ref(false)
 const addressDialog = ref(false)
@@ -308,21 +259,29 @@ const isEditAddress = ref(false)
 const savingAddress = ref(false)
 const addressForm = ref({ id: null, receiver_name: '', phone: '', address: '', is_default: false })
 
+onMounted(() => {
+  if (authStore.user) {
+    infoForm.email = authStore.user.email || ''
+    infoForm.name = authStore.user.name || ''
+    infoForm.phone = authStore.user.phone || ''
+    infoForm.address = authStore.user.address || ''
+  }
+  fetchAddresses()
+})
+
 const fetchAddresses = async () => {
   loadingAddresses.value = true
   try {
     const res = await apiClient.get('/api/profile/addresses')
     addresses.value = res.data.data
-  } catch(error) {
-    console.error(error)
-  }
+  } catch(error) { console.error(error) }
   loadingAddresses.value = false
 }
 
 const openAddressModal = (addr = null) => {
   if (addr) {
     isEditAddress.value = true
-    addressForm.value = { ...addr }
+    addressForm.value = { ...addr, is_default: !!addr.is_default }
   } else {
     isEditAddress.value = false
     addressForm.value = { id: null, receiver_name: '', phone: '', address: '', is_default: false }
@@ -335,7 +294,6 @@ const saveAddress = async () => {
     toast.add({ severity: 'warn', summary: 'Cảnh báo', detail: 'Vui lòng điền đầy đủ thông tin', life: 3000 })
     return
   }
-
   savingAddress.value = true
   try {
     if (isEditAddress.value) {
@@ -348,15 +306,14 @@ const saveAddress = async () => {
     fetchAddresses()
   } catch(e) {
     toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Có lỗi xảy ra', life: 3000 })
-  }
-  savingAddress.value = false
+  } finally { savingAddress.value = false }
 }
 
 const confirmDeleteAddress = (id) => {
   confirm.require({
     message: 'Bạn có chắc chắn muốn xóa địa chỉ này?',
-    header: 'Xác nhận',
-    icon: 'pi pi-exclamation-triangle',
+    header: 'Xác nhận xóa',
+    icon: 'pi pi-exclamation-triangle text-error',
     acceptLabel: 'Xóa',
     rejectLabel: 'Hủy',
     acceptClass: 'p-button-danger',
@@ -365,9 +322,7 @@ const confirmDeleteAddress = (id) => {
         await apiClient.delete(`/api/profile/addresses/${id}`)
         toast.add({ severity: 'success', summary: 'Đã xóa', detail: 'Xóa địa chỉ thành công', life: 3000 })
         fetchAddresses()
-      } catch(e) {
-        toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Không thể xóa địa chỉ', life: 3000 })
-      }
+      } catch(e) { toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Không thể xóa', life: 3000 }) }
     }
   })
 }
@@ -376,98 +331,59 @@ const setDefaultAddress = async (id) => {
   try {
     await apiClient.patch(`/api/profile/addresses/${id}/default`)
     fetchAddresses()
-    toast.add({ severity: 'success', summary: 'Thành công', detail: 'Đã cập nhật địa chỉ mặc định', life: 3000 })
-  } catch(e) {
-    toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Có lỗi xảy ra', life: 3000 })
-  }
+    toast.add({ severity: 'success', summary: 'Thành công', detail: 'Đã cập nhật mặc định', life: 3000 })
+  } catch(e) { toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Có lỗi xảy ra', life: 3000 }) }
 }
-
-// Khởi tạo
-onMounted(() => {
-  if (authStore.user) {
-    infoForm.email = authStore.user.email || ''
-    infoForm.name = authStore.user.name || ''
-    infoForm.phone = authStore.user.phone || ''
-    infoForm.address = authStore.user.address || ''
-  }
-  fetchAddresses()
-})
 
 const handleUpdateInfo = async () => {
   loadingInfo.value = true
   try {
-    const payload = {
-      name: infoForm.name,
-      phone: infoForm.phone,
-      address: infoForm.address
-    }
-    const res = await authStore.updateProfile(payload)
-    toast.add({ severity: 'success', summary: 'Thành công', detail: res.message || 'Cập nhật thông tin thành công.', life: 3000 })
+    await authStore.updateProfile({ ...infoForm })
+    toast.add({ severity: 'success', summary: 'Thành công', detail: 'Cập nhật thông tin thành công', life: 3000 })
   } catch (error) {
-    let errorMessage = 'Có lỗi xảy ra.'
-    if (error.response?.data?.message) {
-      errorMessage = error.response.data.message
-    } else if (error.response?.data?.errors) {
-      errorMessage = Object.values(error.response.data.errors)[0][0]
-    }
-    toast.add({ severity: 'error', summary: 'Lỗi', detail: errorMessage, life: 3000 })
-  } finally {
-    loadingInfo.value = false
-  }
+    toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Không thể cập nhật thông tin', life: 3000 })
+  } finally { loadingInfo.value = false }
 }
 
 const handleUpdatePassword = async () => {
   if (passwordForm.new_password !== passwordForm.new_password_confirmation) {
-    toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Mật khẩu xác nhận không khớp.', life: 3000 })
+    toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Mật khẩu xác nhận không khớp', life: 3000 })
     return
   }
-
   loadingPassword.value = true
   try {
-    const res = await authStore.updatePassword({ ...passwordForm })
-    toast.add({ severity: 'success', summary: 'Thành công', detail: res.message || 'Đổi mật khẩu thành công.', life: 3000 })
-    // Reset form
+    await authStore.updatePassword({ ...passwordForm })
+    toast.add({ severity: 'success', summary: 'Thành công', detail: 'Đổi mật khẩu thành công', life: 3000 })
     passwordForm.current_password = ''
     passwordForm.new_password = ''
     passwordForm.new_password_confirmation = ''
   } catch (error) {
-    let errorMessage = 'Có lỗi xảy ra.'
-    if (error.response?.data?.message) {
-      errorMessage = error.response.data.message
-    } else if (error.response?.data?.errors) {
-      errorMessage = Object.values(error.response.data.errors)[0][0]
-    }
-    toast.add({ severity: 'error', summary: 'Lỗi', detail: errorMessage, life: 3000 })
-  } finally {
-    loadingPassword.value = false
-  }
+    toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Mật khẩu hiện tại không đúng', life: 3000 })
+  } finally { loadingPassword.value = false }
+}
+
+const onAvatarSelected = async (event) => {
+  const file = event.target.files[0]
+  if (!file) return
+  event.target.value = ''
+  const formData = new FormData()
+  formData.append('avatar', file)
+  try {
+    await apiClient.post('/api/profile/avatar', formData, { headers: { 'Content-Type': 'multipart/form-data' } })
+    await authStore.fetchUser()
+    toast.add({ severity: 'success', summary: 'Thành công', detail: 'Đổi ảnh đại diện thành công', life: 3000 })
+  } catch(e) { toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Không thể tải lên ảnh', life: 5000 }) }
 }
 </script>
 
 <style scoped>
-/* UUPM: Focus ring cho PrimeVue inputs */
-:deep(.profile-input) {
-  border-radius: 0.5rem;
-  border-color: var(--color-slate-300);
-  font-size: 0.875rem;
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
 }
-:deep(.profile-input:focus),
-:deep(.profile-input.p-focus) {
-  box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.3);
-  border-color: var(--color-indigo-400);
+.animate-fade-in {
+  animation: fade-in 0.4s ease-out forwards;
 }
-
-/* UUPM: Hover effect cho Button */
-.profile-btn:hover {
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
-  transform: translateY(-2px);
-}
-
-:deep(.p-tabview-nav) {
-  background: transparent;
-  border-bottom: 2px solid var(--color-slate-200);
-}
-:deep(.p-tabview-title) {
-  font-weight: 600;
-}
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 </style>
