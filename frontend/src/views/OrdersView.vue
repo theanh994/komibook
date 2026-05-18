@@ -1,6 +1,6 @@
 <template>
-  <div class="min-h-screen bg-background py-xl px-gutter">
-    <div class="max-w-[1200px] mx-auto flex flex-col lg:flex-row gap-xl">
+  <div class="min-h-screen bg-background">
+    <div class="w-full px-gutter max-w-[1280px] mx-auto py-xl flex flex-col lg:flex-row gap-xl">
       
       <!-- Sidebar -->
       <UserSidebar :user="authStore.user" />
@@ -212,9 +212,16 @@ const formatDate = (dateString) => {
 
 const getCoverUrl = (path) => {
   if (!path) return ''
-  if (path.startsWith('http')) return path
-  const baseUrl = import.meta.env.VITE_API_URL || 'http://komibook.test'
-  return `${baseUrl}/storage/${path}`
+  // Nếu là path đã có sẵn /storage/ (từ backend mới)
+  if (path.startsWith('/storage/')) return path
+  
+  // Nếu là URL tuyệt đối từ domain cũ, chuyển về tương đối
+  if (path.includes('/storage/')) {
+    return path.substring(path.indexOf('/storage/'))
+  }
+
+  // Fallback cho path cũ
+  return `/storage/${path}`
 }
 
 const getStatusText = (status) => {

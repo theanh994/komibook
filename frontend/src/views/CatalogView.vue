@@ -123,14 +123,21 @@
                 @click="goToDetail(book.slug)"
               >
                 <div class="relative pt-[140%] bg-surface-variant/30">
-                  <img v-if="book.cover_image" :src="book.cover_image" :alt="book.title" class="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" loading="lazy" />
+                  <img v-if="book.cover_image" :src="getCoverUrl(book.cover_image)" :alt="book.title" class="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" loading="lazy" />
                   <div v-else class="absolute inset-0 flex items-center justify-center"><span class="material-symbols-outlined text-outline text-4xl">image</span></div>
+                  
+                  <!-- Wishlist Button -->
+                  <button 
+                    @click.stop="toggleWishlist(book.id)"
+                    class="absolute top-2 right-2 w-8 h-8 rounded-full bg-white/80 backdrop-blur shadow-sm flex items-center justify-center transition-all hover:scale-110 active:scale-95 z-10"
+                    :class="wishlistStore.isFavorite(book.id) ? 'text-error' : 'text-outline hover:text-error'"
+                  >
+                    <span class="material-symbols-outlined text-[18px]" :class="wishlistStore.isFavorite(book.id) ? 'fill-1' : ''">favorite</span>
+                  </button>
                   <span v-if="book.sale_price && book.price > book.sale_price" class="absolute top-2 left-2 bg-secondary text-on-secondary text-[11px] font-bold px-2 py-0.5 rounded-md shadow-sm">
                     -{{ Math.round((1 - book.sale_price / book.price) * 100) }}%
                   </span>
-                  <div v-if="book.type === 'ebook'" class="absolute top-2 right-2 bg-surface-container-lowest/90 backdrop-blur-sm px-sm py-xs rounded text-primary text-[11px] font-semibold flex items-center gap-xs">
-                    <span class="material-symbols-outlined text-[14px]">menu_book</span> Ebook
-                  </div>
+
                 </div>
                 <div class="p-md flex flex-col flex-grow">
                   <span class="text-[10px] font-bold text-outline uppercase tracking-wider mb-1">{{ book.category?.name || 'Sách' }}</span>
@@ -178,10 +185,12 @@ import Skeleton from 'primevue/skeleton'
 import Paginator from 'primevue/paginator'
 import RadioButton from 'primevue/radiobutton'
 import InputNumber from 'primevue/inputnumber'
+import { useWishlistStore } from '@/stores/wishlist'
 
 const router = useRouter()
 const route = useRoute()
 const cartStore = useCartStore()
+const wishlistStore = useWishlistStore()
 const toast = useToast()
 
 const categories = ref([])
@@ -268,6 +277,28 @@ const buyNow = (book) => {
   router.push('/cart')
 }
 
+const toggleWishlist = async (bookId) => {
+  try {
+    const res = await wishlistStore.toggleWishlist(bookId)
+    if (res.status === 'added') {
+      toast.add({ severity: 'success', summary: 'Đã lưu', detail: 'Đã thêm vào danh sách yêu thích', life: 2000 })
+    } else if (res.status === 'removed') {
+      toast.add({ severity: 'info', summary: 'Đã bỏ', detail: 'Đã xóa khỏi danh sách yêu thích', life: 2000 })
+    } else if (res.status === 'unauthorized') {
+      toast.add({ severity: 'warn', summary: 'Thông báo', detail: 'Vui lòng đăng nhập để lưu yêu thích', life: 3000 })
+    }
+  } catch (error) {
+    toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Có lỗi xảy ra', life: 3000 })
+  }
+}
+
+const getCoverUrl = (path) => {
+  if (!path) return ''
+  if (path.startsWith('/storage/')) return path
+  if (path.includes('/storage/')) return path.substring(path.indexOf('/storage/'))
+  return `/storage/${path}`
+}
+
 // Handle search query from header
 watch(() => route.query.search, (newSearch) => {
   if (newSearch) {
@@ -280,6 +311,7 @@ watch(() => route.query.search, (newSearch) => {
 onMounted(() => {
   fetchCategories()
   if (!route.query.search) fetchBooks()
+  wishlistStore.fetchWishlistIds()
 })
 </script>
 

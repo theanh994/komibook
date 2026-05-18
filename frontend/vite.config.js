@@ -31,6 +31,11 @@ export default defineConfig({
         changeOrigin: true,
         cookieDomainRewrite: 'komibook.id.vn',
         headers: { Accept: 'application/json' }
+      },
+      '/storage': {
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true,
+        cookieDomainRewrite: 'komibook.id.vn'
       }
     }
   }

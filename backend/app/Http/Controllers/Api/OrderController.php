@@ -27,10 +27,10 @@ class OrderController extends Controller
             ->where('id', $order_id)
             ->firstOrFail();
 
-        // Tạm thời bỏ qua check trạng thái thanh toán để test cho dễ
-        // if (!$order->isPaid() && !$order->isCompleted()) {
-        //     return response()->json(['message' => 'Đơn hàng chưa hoàn thành'], 403);
-        // }
+        // Kiểm tra đơn hàng đã thanh toán hoặc hoàn thành
+        if (!$order->isPaid() && !$order->isCompleted()) {
+            return response()->json(['message' => 'Đơn hàng chưa được thanh toán. Vui lòng thanh toán trước khi đọc.'], 403);
+        }
 
         $orderItem = $order->orderItems()->where('book_id', $book_id)->firstOrFail();
         $book = $orderItem->book;
@@ -64,14 +64,12 @@ class OrderController extends Controller
             abort(401, 'Link đã hết hạn hoặc không hợp lệ.');
         }
 
+        // Chặn path traversal attack
+        $filename = basename($filename);
         $path = storage_path('app/private/ebooks/' . $filename);
         
         if (!file_exists($path)) {
-            // Create a dummy file for testing if it doesn't exist
-            if (!file_exists(storage_path('app/private/ebooks'))) {
-                mkdir(storage_path('app/private/ebooks'), 0755, true);
-            }
-            file_put_contents($path, '%PDF-1.4 Dummy PDF Content for Testing');
+            abort(404, 'File e-book không tồn tại trên hệ thống.');
         }
 
         return Response::file($path);

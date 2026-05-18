@@ -23,6 +23,8 @@ class UserResource extends JsonResource
             'email'      => $this->email,
             'phone'      => $this->phone,
             'address'    => $this->address,
+            'avatar'     => $this->avatar,
+            'avatar_url' => $this->avatar_url,
             'role'       => $this->role,
             'created_at' => $this->created_at?->toISOString(),
 
@@ -33,7 +35,7 @@ class UserResource extends JsonResource
                 fn () => $this->whenLoaded('vendor', fn () => [
                     'shop_name'   => $this->vendor->shop_name,
                     'slug'        => $this->vendor->slug,
-                    'logo'        => $this->vendor->logo,
+                    'logo'        => $this->vendor->logo ? '/storage/' . $this->vendor->logo : null,
                     'description' => $this->vendor->description,
                     'status'      => $this->vendor->status,
                 ])

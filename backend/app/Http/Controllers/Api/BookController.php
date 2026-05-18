@@ -29,7 +29,7 @@ class BookController extends Controller
 
         return response()->json([
             'status' => 'success',
-            'data'   => $books,
+            'data'   => BookResource::collection($books),
         ]);
     }
 

@@ -148,8 +148,38 @@ const router = createRouter({
         {
           path: 'coupons',
           name: 'admin-coupons',
-          component: () => import('@/views/admin/AdminCouponsView.vue'),
+          component: () => import('@/views/admin/PromotionsView.vue'),
           meta: { requiresAuth: true, role: 'admin', hideHeader: true, title: 'Quản lý Khuyến mãi' }
+        },
+        {
+          path: 'system-config',
+          name: 'admin-system-config',
+          component: () => import('@/views/admin/SystemConfigView.vue'),
+          meta: { requiresAuth: true, role: 'admin', hideHeader: true, title: 'Cấu hình hệ thống' }
+        },
+        {
+          path: 'finance-report',
+          name: 'admin-finance-report',
+          component: () => import('@/views/admin/FinanceReportView.vue'),
+          meta: { requiresAuth: true, role: 'admin', hideHeader: true, title: 'Báo cáo tài chính' }
+        },
+        {
+          path: 'customers',
+          name: 'admin-customers',
+          component: () => import('@/views/admin/CustomersView.vue'),
+          meta: { requiresAuth: true, role: 'admin', hideHeader: true, title: 'Danh sách Khách hàng' }
+        },
+        {
+          path: 'customers/:id',
+          name: 'admin-customer-detail',
+          component: () => import('@/views/admin/CustomerDetailView.vue'),
+          meta: { requiresAuth: true, role: 'admin', hideHeader: true, title: 'Chi tiết Khách hàng' }
+        },
+        {
+          path: 'reconciliation',
+          name: 'admin-reconciliation',
+          component: () => import('@/views/admin/ReconciliationView.vue'),
+          meta: { requiresAuth: true, role: 'admin', hideHeader: true, title: 'Đối soát & Báo cáo' }
         },
       ]
     },
@@ -165,16 +195,40 @@ const router = createRouter({
           meta: { requiresAuth: true, role: 'vendor', hideHeader: true, title: 'Dashboard' }
         },
         {
+          path: 'analytics',
+          name: 'vendor-analytics',
+          component: () => import('@/views/vendor/AnalyticsView.vue'),
+          meta: { requiresAuth: true, role: 'vendor', hideHeader: true, title: 'Phân tích Độc giả' }
+        },
+        {
           path: 'books',
           name: 'vendor-books',
           component: () => import('@/views/vendor/BooksView.vue'),
           meta: { requiresAuth: true, role: 'vendor', hideHeader: true, title: 'Quản lý Sách' }
         },
         {
+          path: 'warehouses',
+          name: 'vendor-warehouses',
+          component: () => import('@/views/vendor/WarehousesView.vue'),
+          meta: { requiresAuth: true, role: 'vendor', hideHeader: true, title: 'Quản lý Kho hàng' }
+        },
+        {
           path: 'orders',
           name: 'vendor-orders',
           component: () => import('@/views/vendor/OrdersView.vue'),
           meta: { requiresAuth: true, role: 'vendor', hideHeader: true, title: 'Quản lý Đơn hàng' }
+        },
+        {
+          path: 'orders/:id',
+          name: 'vendor-order-detail',
+          component: () => import('@/views/vendor/OrderDetailView.vue'),
+          meta: { requiresAuth: true, role: 'vendor', hideHeader: true, title: 'Chi tiết Đơn hàng' }
+        },
+        {
+          path: 'finance',
+          name: 'vendor-finance',
+          component: () => import('@/views/vendor/FinanceView.vue'),
+          meta: { requiresAuth: true, role: 'vendor', hideHeader: true, title: 'Doanh thu & Rút tiền' }
         },
       ]
     }

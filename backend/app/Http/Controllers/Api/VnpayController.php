@@ -20,9 +20,9 @@ class VnpayController extends Controller
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
-        $vnp_TmnCode = trim(env('VNPAY_TMN_CODE'));
-        $vnp_HashSecret = trim(env('VNPAY_HASH_SECRET'));
-        $vnp_Url = trim(env('VNPAY_URL'));
+        $vnp_TmnCode = trim(config('services.vnpay.tmn_code', ''));
+        $vnp_HashSecret = trim(config('services.vnpay.hash_secret', ''));
+        $vnp_Url = trim(config('services.vnpay.url', ''));
         $vnp_Returnurl = route('vnpay.return');
 
         $vnp_TxnRef = (string)$order->id . '_' . time(); // Thêm time() để id giao dịch unique bên VNPAY
@@ -116,10 +116,10 @@ class VnpayController extends Controller
             }
         }
 
-        $secureHash = hash_hmac('sha512', $hashData, env('VNPAY_HASH_SECRET'));
+        $secureHash = hash_hmac('sha512', $hashData, config('services.vnpay.hash_secret', ''));
         
         // Return URL chỉ dùng để chuyển hướng người dùng về trang giao diện
-        $frontendUrl = env('FRONTEND_URL', 'http://localhost:5173') . '/orders';
+        $frontendUrl = config('app.frontend_url', 'http://localhost:5173') . '/orders';
 
         if ($secureHash == $vnp_SecureHash) {
             if ($request->input('vnp_ResponseCode') == '00') {
@@ -157,7 +157,7 @@ class VnpayController extends Controller
         }
 
         // Verify checksum
-        $secureHash = hash_hmac('sha512', $hashData, env('VNPAY_HASH_SECRET'));
+        $secureHash = hash_hmac('sha512', $hashData, config('services.vnpay.hash_secret', ''));
         $vnp_Amount = $inputData['vnp_Amount']/100;
         
         $orderIdArr = explode('_', $inputData['vnp_TxnRef']);
@@ -176,7 +176,7 @@ class VnpayController extends Controller
                                 $order->save();
 
                                 // Dispatch Job để xử lý (trừ tồn kho, lưu thay đổi, gửi mail...)
-                                ProcessOrder::dispatch($order);
+                                ProcessOrder::dispatch($order->id);
 
                                 $returnData['RspCode'] = '00';
                                 $returnData['Message'] = 'Confirm Success';

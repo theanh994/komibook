@@ -69,6 +69,22 @@ class Vendor extends Model
         return $this->hasMany(Order::class)->withoutGlobalScopes();
     }
 
+    /**
+     * Tất cả kho hàng của vendor.
+     */
+    public function warehouses(): HasMany
+    {
+        return $this->hasMany(Warehouse::class);
+    }
+
+    /**
+     * Tất cả yêu cầu rút tiền của vendor.
+     */
+    public function payoutRequests(): HasMany
+    {
+        return $this->hasMany(PayoutRequest::class);
+    }
+
     // ─── Helper Methods ───────────────────────────────────────────────────────
 
     public function isActive(): bool

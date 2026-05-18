@@ -81,8 +81,17 @@
         >
           <!-- Cover -->
           <div class="relative pt-[140%] bg-surface-variant/30">
-            <img v-if="book.cover_image" :src="book.cover_image" :alt="book.title" class="absolute inset-0 w-full h-full object-cover p-2 rounded-t-lg transition-transform duration-500 group-hover:scale-105" loading="lazy" />
+            <img v-if="book.cover_image" :src="getCoverUrl(book.cover_image)" :alt="book.title" class="absolute inset-0 w-full h-full object-cover p-2 rounded-t-lg transition-transform duration-500 group-hover:scale-105" loading="lazy" />
             <div v-else class="absolute inset-0 flex items-center justify-center"><span class="material-symbols-outlined text-outline text-4xl">image</span></div>
+            
+            <!-- Wishlist Button -->
+            <button 
+              @click.stop="toggleWishlist(book.id)"
+              class="absolute top-2 right-2 w-8 h-8 rounded-full bg-white/80 backdrop-blur shadow-sm flex items-center justify-center transition-all hover:scale-110 active:scale-95 z-10"
+              :class="wishlistStore.isFavorite(book.id) ? 'text-error' : 'text-outline hover:text-error'"
+            >
+              <span class="material-symbols-outlined text-[18px]" :class="wishlistStore.isFavorite(book.id) ? 'fill-1' : ''">favorite</span>
+            </button>
             <!-- Sold Badge -->
             <div v-if="book.total_sold" class="absolute bottom-2 left-2 right-2 bg-inverse-surface/70 backdrop-blur-sm rounded-md py-1 px-2 text-center">
               <span class="text-inverse-on-surface text-[11px] font-medium">Đã bán: {{ book.total_sold }}</span>
@@ -153,8 +162,17 @@
           >
             <!-- Cover -->
             <div class="relative pt-[140%] bg-surface-variant/30">
-              <img v-if="book.cover_image" :src="book.cover_image" :alt="book.title" class="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" loading="lazy" />
+              <img v-if="book.cover_image" :src="getCoverUrl(book.cover_image)" :alt="book.title" class="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" loading="lazy" />
               <div v-else class="absolute inset-0 flex items-center justify-center"><span class="material-symbols-outlined text-outline text-4xl">image</span></div>
+              
+              <!-- Wishlist Button -->
+              <button 
+                @click.stop="toggleWishlist(book.id)"
+                class="absolute top-2 right-2 w-8 h-8 rounded-full bg-white/80 backdrop-blur shadow-sm flex items-center justify-center transition-all hover:scale-110 active:scale-95 z-10"
+                :class="wishlistStore.isFavorite(book.id) ? 'text-error' : 'text-outline hover:text-error'"
+              >
+                <span class="material-symbols-outlined text-[18px]" :class="wishlistStore.isFavorite(book.id) ? 'fill-1' : ''">favorite</span>
+              </button>
               <!-- Sale Badge -->
               <span
                 v-if="book.sale_price && book.price > book.sale_price"
@@ -218,9 +236,12 @@ import { useCartStore } from '@/stores/cart'
 import { useToast } from 'primevue/usetoast'
 import Skeleton from 'primevue/skeleton'
 import Paginator from 'primevue/paginator'
+import { useWishlistStore } from '@/stores/wishlist'
+import Toast from 'primevue/toast'
 
 const router = useRouter()
 const cartStore = useCartStore()
+const wishlistStore = useWishlistStore()
 const toast = useToast()
 
 // ─── State ──────────────────────────────────────────────────────────
@@ -336,11 +357,34 @@ const buyNow = (book) => {
   router.push('/cart')
 }
 
+const getCoverUrl = (path) => {
+  if (!path) return ''
+  if (path.startsWith('/storage/')) return path
+  if (path.includes('/storage/')) return path.substring(path.indexOf('/storage/'))
+  return `/storage/${path}`
+}
+
+const toggleWishlist = async (bookId) => {
+  try {
+    const res = await wishlistStore.toggleWishlist(bookId)
+    if (res.status === 'added') {
+      toast.add({ severity: 'success', summary: 'Đã lưu', detail: 'Đã thêm vào danh sách yêu thích', life: 2000 })
+    } else if (res.status === 'removed') {
+      toast.add({ severity: 'info', summary: 'Đã bỏ', detail: 'Đã xóa khỏi danh sách yêu thích', life: 2000 })
+    } else if (res.status === 'unauthorized') {
+      toast.add({ severity: 'warn', summary: 'Thông báo', detail: 'Vui lòng đăng nhập để lưu yêu thích', life: 3000 })
+    }
+  } catch (error) {
+    toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Có lỗi xảy ra', life: 3000 })
+  }
+}
+
 // ─── Init ───────────────────────────────────────────────────────────
 onMounted(() => {
   fetchFlashSales()
   fetchTopSellingBooks()
   fetchBooks()
+  wishlistStore.fetchWishlistIds()
 })
 </script>
 

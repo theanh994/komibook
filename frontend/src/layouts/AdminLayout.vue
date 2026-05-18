@@ -20,14 +20,29 @@ const vendorMenuItems = [
     route: '/vendor/dashboard',
   },
   {
+    label: 'Phân tích Độc giả',
+    icon: 'pi pi-chart-line',
+    route: '/vendor/analytics',
+  },
+  {
     label: 'Quản lý Sách',
     icon: 'pi pi-book',
     route: '/vendor/books',
   },
   {
+    label: 'Quản lý Kho hàng',
+    icon: 'pi pi-box',
+    route: '/vendor/warehouses',
+  },
+  {
     label: 'Quản lý Đơn hàng',
     icon: 'pi pi-shopping-bag',
     route: '/vendor/orders',
+  },
+  {
+    label: 'Doanh thu & Rút tiền',
+    icon: 'pi pi-wallet',
+    route: '/vendor/finance',
   },
 ]
 
@@ -43,9 +58,29 @@ const adminMenuItems = [
     route: '/admin/users',
   },
   {
+    label: 'Khách hàng',
+    icon: 'pi pi-id-card',
+    route: '/admin/customers',
+  },
+  {
     label: 'Khuyến mãi',
     icon: 'pi pi-ticket',
     route: '/admin/coupons',
+  },
+  {
+    label: 'Báo cáo tài chính',
+    icon: 'pi pi-chart-line',
+    route: '/admin/finance-report',
+  },
+  {
+    label: 'Đối soát',
+    icon: 'pi pi-check-square',
+    route: '/admin/reconciliation',
+  },
+  {
+    label: 'Cấu hình hệ thống',
+    icon: 'pi pi-cog',
+    route: '/admin/system-config',
   },
 ]
 

@@ -1,6 +1,6 @@
 <template>
-  <div class="min-h-screen bg-background py-xl px-gutter">
-    <div class="max-w-[1200px] mx-auto flex flex-col lg:flex-row gap-xl">
+  <div class="min-h-screen bg-background">
+    <div class="w-full px-gutter max-w-[1280px] mx-auto py-xl flex flex-col lg:flex-row gap-xl">
       
       <!-- Sidebar -->
       <UserSidebar :user="authStore.user" @avatar-click="$refs.avatarInput.click()" />

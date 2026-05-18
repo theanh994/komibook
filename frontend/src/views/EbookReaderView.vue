@@ -8,7 +8,7 @@
     <!-- ─── PREMIUM DESKTOP SIDEBAR ─── -->
     <nav 
       v-show="!focusMode"
-      class="hidden md:flex flex-col h-full py-xl w-72 bg-surface-container-lowest dark:bg-surface-container border-r border-outline-variant/30 shadow-[4px_0_24px_rgba(0,0,0,0.05)] z-50 flex-shrink-0 transition-all duration-500 ease-in-out"
+      class="hidden md:flex flex-col h-full py-xl w-72 bg-surface-container-low dark:bg-surface-container border-r border-outline-variant/50 shadow-[4px_0_24px_rgba(0,0,0,0.1)] z-50 flex-shrink-0 transition-all duration-500 ease-in-out"
     >
       <!-- Brand & Header -->
       <div class="px-8 mb-xl flex items-center gap-4 group cursor-pointer" @click="$router.push('/')">
@@ -57,7 +57,7 @@
     </nav>
 
     <!-- ─── MOBILE PREMIUM HEADER ─── -->
-    <header class="md:hidden flex justify-between items-center px-6 w-full h-20 bg-surface-container-lowest/90 backdrop-blur-xl border-b border-outline-variant/10 z-50 sticky top-0 transition-all duration-300">
+    <header class="md:hidden flex justify-between items-center px-6 w-full h-20 bg-surface-container-low/95 backdrop-blur-xl border-b border-outline-variant/30 z-50 sticky top-0 transition-all duration-300">
       <div class="flex items-center gap-4">
         <button @click="$router.push('/my-library')" class="w-10 h-10 rounded-full bg-surface-container-high flex items-center justify-center text-on-surface-variant active:scale-90 transition-all">
           <span class="material-symbols-outlined text-[22px]">arrow_back</span>
@@ -79,7 +79,7 @@
         
         <!-- Premium Floating Controls -->
         <div 
-          class="hidden lg:flex absolute right-6 top-1/2 -translate-y-1/2 flex-col gap-6 bg-white/90 dark:bg-surface-container-lowest/90 backdrop-blur-3xl rounded-[32px] shadow-[0_24px_60px_rgba(0,0,0,0.15)] border border-outline-variant/20 p-4 z-50 transition-all duration-500"
+          class="hidden lg:flex fixed right-6 top-1/2 -translate-y-1/2 flex-col gap-6 bg-surface-container-low/95 dark:bg-surface-container/95 backdrop-blur-3xl rounded-[32px] shadow-[0_10px_40px_rgba(0,0,0,0.2)] border border-outline-variant/40 p-4 z-50 transition-all duration-500"
           :class="focusMode ? 'opacity-20 hover:opacity-100 translate-x-8 hover:translate-x-0' : 'opacity-100'"
         >
           <div class="flex flex-col gap-2">
@@ -106,8 +106,8 @@
         </div>
 
         <!-- Reader Workspace with its own scroll container -->
-        <div class="flex-1 w-full overflow-y-auto no-scrollbar scroll-smooth" ref="scrollContainer">
-          <div class="flex flex-col items-center py-xl px-gutter relative min-h-full">
+        <div class="flex-1 w-full overflow-y-auto overflow-x-hidden scroll-smooth" ref="scrollContainer">
+          <div class="flex flex-col items-center py-xl px-2 relative min-h-full">
             
             <!-- PDF Background Shadow Decor -->
           <div class="absolute inset-0 pointer-events-none overflow-hidden opacity-20">
@@ -115,8 +115,8 @@
           </div>
 
           <div 
-            class="w-full max-w-4xl relative transition-all duration-700 ease-[cubic-bezier(0.34,1.56,0.64,1)]" 
-            :style="{ transform: `scale(${scale})`, transformOrigin: 'top center' }"
+            class="w-full max-w-3xl relative transition-all duration-700 ease-[cubic-bezier(0.34,1.56,0.64,1)]" 
+            :style="{ transform: `scale(${scale})`, transformOrigin: 'top center', perspective: '1500px' }"
           >
             
             <!-- Shimmer Loading -->
@@ -140,34 +140,40 @@
 
             <!-- The PDF Content -->
             <div 
-              class="pdf-wrapper relative rounded-2xl shadow-[0_40px_100px_rgba(0,0,0,0.12)] border border-outline-variant/10 overflow-hidden bg-white transition-all duration-500 perspective-1000"
-              :class="{'opacity-0 scale-95': loading, 'opacity-100 scale-100': !loading}"
-              :style="{ filter: themeClasses[currentTheme].filter }"
+              class="pdf-wrapper relative rounded-2xl shadow-[0_40px_100px_rgba(0,0,0,0.12)] border border-outline-variant/30 overflow-hidden bg-white transition-all duration-300 select-none"
+              :class="[
+                {'opacity-0 scale-95': loading, 'opacity-100 scale-100': !loading},
+                isFlippingNext ? 'animate-page-flip-next' : '',
+                isFlippingPrev ? 'animate-page-flip-prev' : '',
+                isDragging ? 'cursor-grabbing' : 'cursor-grab'
+              ]"
+              :style="[ { filter: themeClasses[currentTheme].filter }, dragTransform ]"
+              @dblclick="handleDoubleClick"
+              @pointerdown="startDrag"
+              @pointermove="onDrag"
+              @pointerup="endDrag"
+              @pointercancel="endDrag"
+              @pointerleave="endDrag"
             >
-              <transition name="page-flip" mode="out-in">
-                <div :key="currentPage" class="w-full h-full origin-left">
-                  <VuePdfEmbed 
-                    v-if="pdfUrl"
-                    ref="pdfRef"
-                    :source="pdfUrl" 
-                    :page="currentPage"
-                    :scale="scale"
-                    :text-layer="false"
-                    :annotation-layer="false"
-                    @loaded="onPdfLoaded"
-                    @rendered="onPdfRendered"
-                    @error="onPdfError"
-                    class="w-full" 
-                  />
-                </div>
-              </transition>
+              <VuePdfEmbed 
+                v-if="pdfUrl"
+                ref="pdfRef"
+                :source="pdfUrl" 
+                :page="currentPage"
+                :text-layer="false"
+                :annotation-layer="false"
+                @loaded="onPdfLoaded"
+                @rendered="onPdfRendered"
+                @error="onPdfError"
+                class="w-full" 
+              />
             </div>
 
-             <div v-if="!loading && !error" class="mt-12 mb-32 flex flex-col items-center gap-4 animate-fade-in delay-700">
+             <div v-if="!loading && !error" class="mt-12 mb-32 flex flex-col items-center gap-4 animate-fade-in delay-700 pointer-events-none">
                  <div class="h-1.5 w-32 bg-primary/20 rounded-full overflow-hidden">
                     <div class="h-full bg-primary animate-progress-loading"></div>
                  </div>
-                 <p class="text-[10px] font-black uppercase tracking-[0.3em] text-outline opacity-40">Mẹo: Sử dụng phím mũi tên để chuyển trang</p>
+                 <p class="text-[10px] font-black uppercase tracking-[0.3em] text-outline opacity-40">Mẹo: Vuốt hoặc nhấn đúp chuột để chuyển trang</p>
               </div>
             </div>
           </div>
@@ -175,13 +181,13 @@
 
         <!-- Absolute Navigation Controls (Always floating at bottom) -->
         <div 
-          class="absolute bottom-6 left-1/2 -translate-x-1/2 max-w-[400px] w-[calc(100%-40px)] bg-[#1e1e1e] dark:bg-surface-container-highest backdrop-blur-3xl border border-white/10 rounded-[32px] px-6 py-4 z-50 flex items-center justify-between shadow-[0_32px_80px_rgba(0,0,0,0.3)] transition-all duration-500"
-          :class="focusMode ? 'opacity-30 hover:opacity-100 scale-95' : 'opacity-100 scale-100'"
+          class="fixed bottom-6 max-w-[400px] w-[calc(100%-40px)] bg-surface-container-high/95 dark:bg-surface-container-highest/95 backdrop-blur-3xl border border-outline-variant/30 rounded-[32px] px-6 py-4 z-[90] flex items-center justify-between shadow-[0_20px_60px_rgba(0,0,0,0.2)] transition-all duration-500"
+          :class="focusMode ? 'left-1/2 -translate-x-1/2 opacity-30 hover:opacity-100 translate-y-12 hover:translate-y-0' : 'left-1/2 -translate-x-1/2 lg:left-auto lg:translate-x-0 lg:right-6 opacity-100'"
         >
           <button 
             @click="prevPage" 
             :disabled="currentPage <= 1"
-            class="w-12 h-12 rounded-full flex items-center justify-center bg-white/10 text-white hover:bg-primary transition-all disabled:opacity-20 disabled:hover:bg-white/10"
+            class="w-12 h-12 rounded-full flex items-center justify-center bg-outline-variant/20 text-on-surface hover:bg-primary hover:text-on-primary transition-all disabled:opacity-20"
           >
             <span class="material-symbols-outlined text-[28px]">arrow_back_ios_new</span>
           </button>
@@ -192,18 +198,18 @@
                 type="number" 
                 v-model.number="inputPage"
                 @keyup.enter="jumpToPage"
-                class="w-14 h-14 bg-white/10 border-none text-center rounded-2xl font-black text-2xl text-white focus:bg-primary transition-all outline-none"
+                class="w-14 h-14 bg-outline-variant/20 border-none text-center rounded-2xl font-black text-2xl text-on-surface focus:bg-primary focus:text-on-primary transition-all outline-none"
                 min="1"
                 :max="totalPages"
               />
-              <span class="text-xl font-bold text-white/40">/ {{ totalPages }}</span>
+              <span class="text-xl font-bold text-on-surface-variant">/ {{ totalPages }}</span>
             </div>
           </div>
 
           <button 
             @click="nextPage" 
             :disabled="currentPage >= totalPages"
-            class="w-12 h-12 rounded-full flex items-center justify-center bg-white/10 text-white hover:bg-primary transition-all disabled:opacity-20 disabled:hover:bg-white/10"
+            class="w-12 h-12 rounded-full flex items-center justify-center bg-outline-variant/20 text-on-surface hover:bg-primary hover:text-on-primary transition-all disabled:opacity-20"
           >
             <span class="material-symbols-outlined text-[28px]">arrow_forward_ios</span>
           </button>
@@ -386,7 +392,7 @@
     </Drawer>
 
     <!-- ─── PREMIUM MOBILE BOTTOM BAR ─── -->
-    <nav v-show="!focusMode" class="md:hidden bg-surface-container-lowest/90 backdrop-blur-3xl border-t border-outline-variant/10 flex justify-around items-center h-24 px-6 pb-safe shadow-[0_-20px_40px_rgba(0,0,0,0.05)] z-50">
+    <nav v-show="!focusMode" class="md:hidden bg-surface-container-low/95 backdrop-blur-3xl border-t border-outline-variant/30 flex justify-around items-center h-24 px-6 pb-safe shadow-[0_-20px_40px_rgba(0,0,0,0.1)] z-[100] fixed bottom-0 w-full">
       <button 
         v-for="tab in tabs" 
         :key="tab.id"
@@ -516,6 +522,65 @@ const isDrawerVisible = ref(false)
 const showSettings = ref(false)
 const outline = ref([])
 const annotations = ref([])
+const isFlippingNext = ref(false)
+const isFlippingPrev = ref(false)
+const isDragging = ref(false)
+const dragStartX = ref(0)
+const currentDragX = ref(0)
+
+function triggerFlip(direction = 'next') {
+  isFlippingNext.value = false
+  isFlippingPrev.value = false
+  setTimeout(() => {
+    if (direction === 'next') isFlippingNext.value = true
+    else isFlippingPrev.value = true
+  }, 10)
+}
+
+const dragTransform = computed(() => {
+  if (!isDragging.value) return {}
+  const diff = currentDragX.value - dragStartX.value
+  const rotation = Math.max(-20, Math.min(20, diff * 0.05))
+  return {
+    transform: `rotateY(${rotation}deg)`,
+    transition: 'none'
+  }
+})
+
+const startDrag = (e) => {
+  isDragging.value = true
+  dragStartX.value = e.clientX
+  currentDragX.value = e.clientX
+  e.preventDefault()
+}
+
+const onDrag = (e) => {
+  if (!isDragging.value) return
+  currentDragX.value = e.clientX
+}
+
+const endDrag = (e) => {
+  if (!isDragging.value) return
+  isDragging.value = false
+  const diff = currentDragX.value - dragStartX.value
+  if (diff > 100) {
+    prevPage()
+  } else if (diff < -100) {
+    nextPage()
+  }
+  dragStartX.value = 0
+  currentDragX.value = 0
+}
+
+const handleDoubleClick = (e) => {
+  const rect = e.currentTarget.getBoundingClientRect()
+  const clickX = e.clientX - rect.left
+  if (clickX < rect.width / 2) {
+    prevPage()
+  } else {
+    nextPage()
+  }
+}
 
 function selectTab(tabId) {
   if (tabId === 'reader') {
@@ -609,6 +674,7 @@ const zoomOut = () => scale.value = Math.max(scale.value - 0.2, 0.5)
 
 const prevPage = () => {
   if (currentPage.value > 1) {
+    triggerFlip('prev')
     loading.value = true
     currentPage.value--
     inputPage.value = currentPage.value
@@ -618,6 +684,7 @@ const prevPage = () => {
 
 const nextPage = () => {
   if (currentPage.value < totalPages.value) {
+    triggerFlip('next')
     loading.value = true
     currentPage.value++
     inputPage.value = currentPage.value
@@ -632,6 +699,7 @@ const jumpToPage = () => {
     return
   }
   p = Math.max(1, Math.min(p, totalPages.value))
+  triggerFlip(p > currentPage.value ? 'next' : 'prev')
   loading.value = true
   currentPage.value = p
   inputPage.value = p
@@ -719,6 +787,7 @@ const goToTocItem = async (item) => {
         const pageIndex = await pdfDocument.value.getPageIndex(destArray[0])
         const p = pageIndex + 1
         activeTab.value = 'reader'
+        triggerFlip(p > currentPage.value ? 'next' : 'prev')
         loading.value = true
         currentPage.value = p
         inputPage.value = p
@@ -832,20 +901,24 @@ onUnmounted(() => {
   padding: 0 1.5rem !important;
 }
 
-/* Page Flip Transition */
-.page-flip-enter-active,
-.page-flip-leave-active {
-  transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
-  transform-style: preserve-3d;
+/* Page Flip Animation */
+@keyframes page-flip-next {
+  0% { transform: rotateY(0deg) scale(1); opacity: 1; }
+  50% { transform: rotateY(-15deg) scale(0.95); opacity: 0.5; }
+  100% { transform: rotateY(0deg) scale(1); opacity: 1; }
 }
 
-.page-flip-enter-from {
-  opacity: 0;
-  transform: rotateY(-20deg) scale(0.95);
+@keyframes page-flip-prev {
+  0% { transform: rotateY(0deg) scale(1); opacity: 1; }
+  50% { transform: rotateY(15deg) scale(0.95); opacity: 0.5; }
+  100% { transform: rotateY(0deg) scale(1); opacity: 1; }
 }
 
-.page-flip-leave-to {
-  opacity: 0;
-  transform: rotateY(20deg) scale(0.95);
+.animate-page-flip-next {
+  animation: page-flip-next 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+.animate-page-flip-prev {
+  animation: page-flip-prev 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
 }
 </style>

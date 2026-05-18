@@ -269,9 +269,16 @@ const goToDashboard = () => {
 
 const getAvatarUrl = (avatar) => {
   if (!avatar) return ''
-  if (avatar.startsWith('http')) return avatar
-  const baseUrl = import.meta.env.VITE_API_URL || 'http://komibook.test'
-  return `${baseUrl}/storage/${avatar}`
+  // Nếu là path đã có sẵn /storage/ (từ backend mới)
+  if (avatar.startsWith('/storage/')) return avatar
+  
+  // Nếu là URL tuyệt đối từ domain cũ (ví dụ komibook.test), chuyển về tương đối
+  if (avatar.includes('/storage/')) {
+    return avatar.substring(avatar.indexOf('/storage/'))
+  }
+
+  // Fallback cho path cũ
+  return `/storage/${avatar}`
 }
 </script>
 

@@ -59,7 +59,7 @@
               <div class="relative transform-gpu transition-all duration-700 ease-out preserve-3d group-hover:rotate-y-12 group-hover:scale-[1.02]">
                 <!-- Main Cover -->
                 <div class="aspect-[3/4.5] bg-surface-container-low rounded-[40px] overflow-hidden shadow-[0_60px_120px_rgba(0,0,0,0.15)] border border-outline-variant/10 relative z-20">
-                  <img v-if="book.cover_image" :src="book.cover_image" :alt="book.title" class="w-full h-full object-cover" />
+                  <img v-if="book.cover_image" :src="getCoverUrl(book.cover_image)" :alt="book.title" class="w-full h-full object-cover" />
                   <div v-else class="w-full h-full flex items-center justify-center text-outline/20">
                     <span class="material-symbols-outlined text-[120px]">menu_book</span>
                   </div>
@@ -69,12 +69,7 @@
                     GIẢM {{ Math.round((1 - book.sale_price / book.price) * 100) }}%
                   </div>
 
-                  <!-- Type Badge -->
-                  <div class="absolute bottom-8 left-8 flex gap-2 z-30">
-                     <span class="px-5 py-2 bg-black/60 backdrop-blur-xl text-white text-[10px] font-black uppercase tracking-widest rounded-full border border-white/20">
-                        {{ book.type === 'ebook' ? 'Digital Edition' : 'Physical Book' }}
-                     </span>
-                  </div>
+
                 </div>
 
                 <!-- Spine detail -->
@@ -153,14 +148,18 @@
                           </div>
                        </template>
                        <template v-else>
-                          <div class="flex flex-col sm:flex-row gap-4">
-                            <button @click="addToCart" class="px-8 py-5 rounded-[24px] border-2 border-primary text-primary font-black text-xs uppercase tracking-[0.2em] hover:bg-primary/5 transition-all flex items-center justify-center gap-3">
-                              <span class="material-symbols-outlined text-[24px]">shopping_bag</span>
-                              Giỏ hàng
-                            </button>
-                            <button @click="buyNow" class="bg-primary text-on-primary px-12 py-5 rounded-[24px] font-black text-xs uppercase tracking-[0.2em] shadow-xl shadow-primary/20 hover:scale-105 active:scale-95 transition-all">
-                              Mua ngay
-                            </button>
+                          <div class="flex flex-col sm:flex-row gap-4 items-center">
+                             <button @click="addToCart" class="px-8 py-5 rounded-[24px] border-2 border-primary text-primary font-black text-xs uppercase tracking-[0.2em] hover:bg-primary/5 transition-all flex items-center justify-center gap-3">
+                               <span class="material-symbols-outlined text-[24px]">shopping_bag</span>
+                               Giỏ hàng
+                             </button>
+                             <button @click="buyNow" class="bg-primary text-on-primary px-12 py-5 rounded-[24px] font-black text-xs uppercase tracking-[0.2em] shadow-xl shadow-primary/20 hover:scale-105 active:scale-95 transition-all">
+                               Mua ngay
+                             </button>
+                             <!-- Wishlist Toggle -->
+                             <button @click="toggleWishlist" class="w-16 h-16 rounded-[24px] border-2 border-outline-variant/30 flex items-center justify-center hover:bg-surface-container-high transition-all group/heart shadow-sm">
+                               <span class="material-symbols-outlined text-[28px] transition-all" :class="wishlistStore.isFavorite(book?.id) ? 'text-error fill-1 scale-110' : 'text-outline group-hover/heart:text-error'">favorite</span>
+                             </button>
                           </div>
                        </template>
                     </div>
@@ -311,12 +310,14 @@ import { useCartStore } from '@/stores/cart'
 import apiClient from '@/services/axios'
 import Textarea from 'primevue/textarea'
 import Dialog from 'primevue/dialog'
+import { useWishlistStore } from '@/stores/wishlist'
 
 const route = useRoute()
 const router = useRouter()
 const toast = useToast()
 const authStore = useAuthStore()
 const cartStore = useCartStore()
+const wishlistStore = useWishlistStore()
 
 const book = ref(null)
 const loading = ref(true)
@@ -450,6 +451,22 @@ const buyNow = () => {
   router.push('/cart')
 }
 
+const toggleWishlist = async () => {
+  if (!book.value) return
+  try {
+    const res = await wishlistStore.toggleWishlist(book.value.id)
+    if (res.status === 'added') {
+      toast.add({ severity: 'success', summary: 'Đã lưu', detail: 'Đã thêm vào danh sách yêu thích', life: 2000 })
+    } else if (res.status === 'removed') {
+      toast.add({ severity: 'info', summary: 'Đã bỏ', detail: 'Đã xóa khỏi danh sách yêu thích', life: 2000 })
+    } else if (res.status === 'unauthorized') {
+      toast.add({ severity: 'warn', summary: 'Thông báo', detail: 'Vui lòng đăng nhập để lưu yêu thích', life: 3000 })
+    }
+  } catch (error) {
+    toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Có lỗi xảy ra', life: 3000 })
+  }
+}
+
 const formatCurrency = (value) => {
   if (!value) return '0 đ'
   return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(value)
@@ -458,6 +475,13 @@ const formatCurrency = (value) => {
 const formatDate = (dateString) => {
   if (!dateString) return ''
   return new Intl.DateTimeFormat('vi-VN', { day: '2-digit', month: 'short', year: 'numeric' }).format(new Date(dateString))
+}
+
+const getCoverUrl = (path) => {
+  if (!path) return ''
+  if (path.startsWith('/storage/')) return path
+  if (path.includes('/storage/')) return path.substring(path.indexOf('/storage/'))
+  return `/storage/${path}`
 }
 
 watch(() => route.params.slug, (newSlug) => {
@@ -471,6 +495,7 @@ watch(() => route.params.slug, (newSlug) => {
 
 onMounted(() => {
   if (route.params.slug) fetchBookDetail()
+  wishlistStore.fetchWishlistIds()
 })
 </script>
 

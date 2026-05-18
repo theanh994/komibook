@@ -12,15 +12,33 @@ class ResetPasswordQueued extends ResetPassword implements ShouldQueue
     use Queueable;
 
     /**
+     * Số lần thử lại tối đa.
+     * @var int
+     */
+    public $tries = 3;
+
+    /**
      * Ghi đè phương thức khởi tạo.
      */
     public function __construct($token)
     {
         parent::__construct($token);
         
-        // Thiết lập hàng đợi trong constructor để tránh lỗi "Incompatible definition"
+        // Thiết lập hàng đợi trong constructor
         $this->queue = 'emails';
-        $this->tries = 3;
+    }
+
+    /**
+     * Xây dựng URL cho liên kết đặt lại mật khẩu.
+     * Vì đây là SPA, chúng ta cần trỏ link về Frontend thay vì Backend API.
+     *
+     * @param  mixed  $notifiable
+     * @return string
+     */
+    protected function resetUrl($notifiable)
+    {
+        $frontendUrl = config('app.frontend_url', 'https://komibook.id.vn');
+        return $frontendUrl . '/reset-password?token=' . $this->token . '&email=' . urlencode($notifiable->getEmailForPasswordReset());
     }
 
     /**

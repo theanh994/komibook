@@ -395,9 +395,16 @@ const formatTime = (date) => {
 
 const getCoverUrl = (path) => {
   if (!path) return ''
-  if (path.startsWith('http')) return path
-  const baseUrl = import.meta.env.VITE_API_URL || 'http://komibook.test'
-  return `${baseUrl}/storage/${path}`
+  // Nếu là path đã có sẵn /storage/ (từ backend mới)
+  if (path.startsWith('/storage/')) return path
+  
+  // Nếu là URL tuyệt đối từ domain cũ, chuyển về tương đối
+  if (path.includes('/storage/')) {
+    return path.substring(path.indexOf('/storage/'))
+  }
+
+  // Fallback cho path cũ
+  return `/storage/${path}`
 }
 
 const getStatusText = (status) => {

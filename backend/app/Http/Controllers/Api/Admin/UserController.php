@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Models\Vendor;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
@@ -92,6 +93,42 @@ class UserController extends Controller
             'status'  => 'success',
             'message' => "Đã cập nhật role thành '{$newRole}'.",
             'data'    => $user,
+        ]);
+    }
+
+    /**
+     * GET /api/admin/users/{id}
+     *
+     * Xem chi tiết một user kèm các thống kê mua hàng / bán hàng.
+     */
+    public function show(int $id): JsonResponse
+    {
+        $user = User::with(['addresses' => function($q) {
+            $q->orderBy('is_default', 'desc');
+        }])->findOrFail($id);
+
+        $data = $user->toArray();
+        
+        // Lấy thêm số lượng đơn hàng và tổng chi tiêu
+        $orderStats = DB::table('orders')
+            ->where('user_id', $user->id)
+            ->where('status', 'completed')
+            ->selectRaw('COUNT(id) as total_orders, SUM(total_amount) as total_spent')
+            ->first();
+
+        $data['total_orders'] = $orderStats->total_orders ?? 0;
+        $data['total_spent'] = $orderStats->total_spent ?? 0;
+
+        if ($user->role === 'vendor') {
+            $vendor = Vendor::withoutGlobalScopes()->where('user_id', $user->id)->first();
+            if ($vendor) {
+                $data['vendor_info'] = $vendor;
+            }
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'data' => $data
         ]);
     }
 }

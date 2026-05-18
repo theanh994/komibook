@@ -10,8 +10,8 @@ use Illuminate\Support\Facades\Route;
 
 Route::prefix('auth')->name('auth.')->group(function () {
     Route::post('/register', [AuthController::class, 'register'])->name('register');
-    Route::post('/login',    [AuthController::class, 'login'])->name('login');
-    Route::post('/forgot-password', [AuthController::class, 'forgotPassword'])->name('forgot-password');
+    Route::post('/login',    [AuthController::class, 'login'])->name('login')->middleware('throttle:login');
+    Route::post('/forgot-password', [AuthController::class, 'forgotPassword'])->name('forgot-password')->middleware('throttle:forgot-password');
     Route::post('/reset-password',  [AuthController::class, 'resetPassword'])->name('reset-password');
 });
 
@@ -43,7 +43,7 @@ Route::middleware('auth:sanctum')->prefix('profile')->name('profile.')->group(fu
 });
 
 Route::middleware('auth:sanctum')->group(function () {
-    Route::post('/checkout', [\App\Http\Controllers\Api\CheckoutController::class, 'store']);
+    Route::post('/checkout', [\App\Http\Controllers\Api\CheckoutController::class, 'store'])->middleware('throttle:checkout');
     Route::post('/books/{id}/reviews', [\App\Http\Controllers\Api\BookController::class, 'addReview']);
     Route::get('/books/{id}/check-ownership', [\App\Http\Controllers\Api\BookController::class, 'checkOwnership']);
     Route::post('/coupons/apply', [\App\Http\Controllers\Api\CouponController::class, 'apply']);
@@ -59,13 +59,18 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/annotations/{id}', [\App\Http\Controllers\Api\BookAnnotationController::class, 'update']);
     Route::delete('/annotations/{id}', [\App\Http\Controllers\Api\BookAnnotationController::class, 'destroy']);
     Route::get('/books/{id}/recent-annotations', [\App\Http\Controllers\Api\BookAnnotationController::class, 'recent']);
+
+    // Wishlist
+    Route::get('/wishlist', [\App\Http\Controllers\Api\WishlistController::class, 'index']);
+    Route::post('/wishlist/{bookId}/toggle', [\App\Http\Controllers\Api\WishlistController::class, 'toggle']);
+    Route::get('/wishlist/{bookId}/check', [\App\Http\Controllers\Api\WishlistController::class, 'check']);
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Vendor routes — Quản lý gian hàng (yêu cầu role: vendor)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-Route::middleware('auth:sanctum')->prefix('vendor')->name('vendor.')->group(function () {
+Route::middleware(['auth:sanctum', 'role:vendor'])->prefix('vendor')->name('vendor.')->group(function () {
     // Thống kê dashboard
     Route::get('dashboard-stats', [\App\Http\Controllers\Api\Vendor\DashboardController::class, 'stats'])->name('dashboard.stats');
 
@@ -76,22 +81,48 @@ Route::middleware('auth:sanctum')->prefix('vendor')->name('vendor.')->group(func
     Route::patch('orders/bulk-status', [\App\Http\Controllers\Api\Vendor\OrderController::class, 'bulkUpdateStatus'])->name('orders.bulkUpdateStatus');
     Route::get('orders/{order}',      [\App\Http\Controllers\Api\Vendor\OrderController::class, 'show'])->name('orders.show');
     Route::patch('orders/{order}/status', [\App\Http\Controllers\Api\Vendor\OrderController::class, 'updateStatus'])->name('orders.updateStatus');
+
+    // Quản lý kho hàng (Warehouse)
+    Route::get('warehouses', [\App\Http\Controllers\Api\Vendor\WarehouseController::class, 'index'])->name('warehouses.index');
+    Route::get('warehouses/stats', [\App\Http\Controllers\Api\Vendor\WarehouseController::class, 'stats'])->name('warehouses.stats');
+    Route::post('warehouses', [\App\Http\Controllers\Api\Vendor\WarehouseController::class, 'store'])->name('warehouses.store');
+    Route::post('warehouses/adjust', [\App\Http\Controllers\Api\Vendor\WarehouseController::class, 'adjustStock'])->name('warehouses.adjust');
+
+    // Quản lý tài chính / doanh thu (Finance)
+    Route::get('finance', [\App\Http\Controllers\Api\Vendor\FinanceController::class, 'index'])->name('finance.index');
+    Route::post('finance/payout', [\App\Http\Controllers\Api\Vendor\FinanceController::class, 'requestPayout'])->name('finance.payout');
+    
+    // Phân tích độc giả / báo cáo (Analytics)
+    Route::get('analytics', [\App\Http\Controllers\Api\Vendor\AnalyticsController::class, 'index'])->name('analytics.index');
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Admin routes — Quản trị hệ thống (yêu cầu role: admin)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-Route::middleware('auth:sanctum')->prefix('admin')->name('admin.')->group(function () {
+Route::middleware(['auth:sanctum', 'role:admin'])->prefix('admin')->name('admin.')->group(function () {
     // Thống kê tổng quan
     Route::get('stats', [\App\Http\Controllers\Api\Admin\DashboardController::class, 'stats'])->name('stats');
 
     // Quản lý Users
     Route::get('users',              [\App\Http\Controllers\Api\Admin\UserController::class, 'index'])->name('users.index');
+    Route::get('users/{id}',         [\App\Http\Controllers\Api\Admin\UserController::class, 'show'])->name('users.show');
     Route::patch('users/{id}/role',  [\App\Http\Controllers\Api\Admin\UserController::class, 'updateRole'])->name('users.updateRole');
 
     // Quản lý Coupons
     Route::apiResource('coupons', \App\Http\Controllers\Api\Admin\CouponController::class);
+
+    // Báo cáo tài chính
+    Route::get('finance-report', [\App\Http\Controllers\Api\Admin\FinanceReportController::class, 'index'])->name('finance-report.index');
+
+    // Đối soát doanh thu
+    Route::get('reconciliation', [\App\Http\Controllers\Api\Admin\ReconciliationController::class, 'index'])->name('reconciliation.index');
+    Route::patch('reconciliation/{id}/approve', [\App\Http\Controllers\Api\Admin\ReconciliationController::class, 'approve'])->name('reconciliation.approve');
+    Route::patch('reconciliation/{id}/reject', [\App\Http\Controllers\Api\Admin\ReconciliationController::class, 'reject'])->name('reconciliation.reject');
+
+    // Cấu hình hệ thống
+    Route::get('config', [\App\Http\Controllers\Api\Admin\SystemConfigController::class, 'show'])->name('config.show');
+    Route::put('config', [\App\Http\Controllers\Api\Admin\SystemConfigController::class, 'update'])->name('config.update');
 });
 
 Route::get('/flash-sales', [\App\Http\Controllers\Api\CouponController::class, 'flashSales']);
@@ -100,6 +131,13 @@ Route::get('/flash-sales', [\App\Http\Controllers\Api\CouponController::class, '
 Route::get('/ebooks/{filename}/stream', [\App\Http\Controllers\Api\OrderController::class, 'streamEbook'])
     ->name('api.ebook.stream');
 
-// VNPAY Webhooks/Return (no auth required because it's called by VNPAY)
 Route::get('/vnpay/return', [\App\Http\Controllers\Api\VnpayController::class, 'vnpayReturn'])->name('vnpay.return');
 Route::get('/vnpay/ipn', [\App\Http\Controllers\Api\VnpayController::class, 'vnpayIpn'])->name('vnpay.ipn');
+
+// Catch-all route cho API trả về JSON 404
+Route::fallback(function () {
+    return response()->json([
+        'status' => 'error',
+        'message' => 'API endpoint không tồn tại trên hệ thống.'
+    ], 404);
+});

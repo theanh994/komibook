@@ -77,6 +77,14 @@ class User extends Authenticatable
         return $this->hasMany(UserAddress::class);
     }
 
+    /**
+     * Danh sách sách yêu thích.
+     */
+    public function wishlistBooks()
+    {
+        return $this->belongsToMany(Book::class, 'wishlists')->withTimestamps();
+    }
+
     // ─── Role Helper Methods ──────────────────────────────────────────────────
 
     public function isAdmin(): bool
@@ -103,5 +111,13 @@ class User extends Authenticatable
     public function sendPasswordResetNotification($token): void
     {
         $this->notify(new ResetPasswordQueued($token));
+    }
+
+    /**
+     * Get the full URL for the avatar.
+     */
+    public function getAvatarUrlAttribute(): ?string
+    {
+        return $this->avatar ? '/storage/' . $this->avatar : null;
     }
 }

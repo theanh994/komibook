@@ -42,7 +42,7 @@ class OrderResource extends JsonResource
                             'id' => $item->book->id,
                             'title' => $item->book->title,
                             'cover_image' => $item->book->cover_image
-                                ? url('storage/' . $item->book->cover_image)
+                                ? '/storage/' . $item->book->cover_image
                                 : null,
                             'type' => $item->book->type,
                         ];

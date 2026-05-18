@@ -6,7 +6,7 @@
         <div class="relative mb-md group cursor-pointer" @click="$emit('avatar-click')">
           <div class="w-20 h-20 rounded-full overflow-hidden border-4 border-surface shadow-sm">
             <img v-if="user?.avatar" :src="getAvatarUrl(user.avatar)" alt="Avatar" class="w-full h-full object-cover" />
-            <div v-else class="w-full h-full bg-primary-container flex items-center justify-center text-on-primary-container text-2xl font-black">
+            <div v-else class="w-full h-full bg-primary-container flex items-center justify-center text-on-primary-container text-2xl font-bold">
               {{ user?.name?.charAt(0)?.toUpperCase() || 'U' }}
             </div>
           </div>
@@ -35,7 +35,7 @@
             {{ item.icon }}
           </span>
           <span class="font-bold text-sm">{{ item.label }}</span>
-          <div v-if="item.badge" class="ml-auto bg-error text-on-error text-[10px] px-1.5 py-0.5 rounded-full font-black">
+          <div v-if="item.badge" class="ml-auto bg-error text-on-error text-[10px] px-1.5 py-0.5 rounded-full font-bold">
             {{ item.badge }}
           </div>
         </router-link>
@@ -75,9 +75,16 @@ const menuItems = [
 
 const getAvatarUrl = (avatar) => {
   if (!avatar) return ''
-  if (avatar.startsWith('http')) return avatar
-  const baseUrl = import.meta.env.VITE_API_URL || 'http://komibook.test'
-  return `${baseUrl}/storage/${avatar}`
+  // Nếu là path đã có sẵn /storage/ (từ backend mới)
+  if (avatar.startsWith('/storage/')) return avatar
+  
+  // Nếu là URL tuyệt đối từ domain cũ (ví dụ komibook.test), chuyển về tương đối
+  if (avatar.includes('/storage/')) {
+    return avatar.substring(avatar.indexOf('/storage/'))
+  }
+
+  // Fallback cho path cũ
+  return `/storage/${avatar}`
 }
 
 const handleLogout = async () => {
