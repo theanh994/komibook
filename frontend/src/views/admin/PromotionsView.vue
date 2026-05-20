@@ -33,11 +33,10 @@ const submitted = ref(false)
 const categoryOptions = ref([])
 
 // ─── Flash Sale State ───
-const flashSales = ref([
-  { id: 1, title: 'Flash Sale Cuối Tuần', start: '2023-10-28 20:00', end: '2023-10-28 23:59', products: 15, maxDiscount: 50, status: 'active' },
-  { id: 2, title: 'Flash Sale 11/11', start: '2023-11-11 00:00', end: '2023-11-11 23:59', products: 45, maxDiscount: 70, status: 'upcoming' },
-  { id: 3, title: 'Flash Sale Thứ 6 Đen', start: '2023-10-20 18:00', end: '2023-10-21 06:00', products: 30, maxDiscount: 60, status: 'ended' },
-])
+const flashSales = ref([])
+const flashSaleDialog = ref(false)
+const deleteFlashSaleDialog = ref(false)
+const flashSale = ref({})
 
 // ─── KPI ───
 const kpis = computed(() => ({
@@ -75,6 +74,15 @@ const fetchCategories = async () => {
     ]
   } catch (e) {
     console.error('Failed to fetch categories', e)
+  }
+}
+
+const fetchFlashSales = async () => {
+  try {
+    const res = await apiClient.get('/api/admin/flash-sales')
+    flashSales.value = res.data.data
+  } catch (e) {
+    toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Không thể tải danh sách Flash Sale.', life: 3000 })
   }
 }
 
@@ -132,18 +140,82 @@ const deleteCoupon = async () => {
 }
 
 const openNew = () => {
-  coupon.value = {
-    code: '',
-    discount_percent: 10,
-    min_order_value: 0,
-    max_discount_amount: null,
-    usage_limit: 0,
-    category_id: null,
-    start_time: new Date(),
-    end_time: new Date(new Date().getTime() + 7 * 24 * 60 * 60 * 1000)
+  if (activeTab.value === 'vouchers') {
+    coupon.value = {
+      code: '',
+      discount_percent: 10,
+      min_order_value: 0,
+      max_discount_amount: null,
+      usage_limit: 0,
+      category_id: null,
+      start_time: new Date(),
+      end_time: new Date(new Date().getTime() + 7 * 24 * 60 * 60 * 1000)
+    }
+    submitted.value = false
+    couponDialog.value = true
+  } else {
+    flashSale.value = {
+      title: '',
+      start_time: new Date(),
+      end_time: new Date(new Date().getTime() + 24 * 60 * 60 * 1000),
+      is_active: true
+    }
+    submitted.value = false
+    flashSaleDialog.value = true
   }
-  submitted.value = false
-  couponDialog.value = true
+}
+
+const saveFlashSale = async () => {
+  submitted.value = true
+  if (flashSale.value.title && flashSale.value.start_time && flashSale.value.end_time) {
+    loading.value = true
+    try {
+      if (flashSale.value.id) {
+        await apiClient.put(`/api/admin/flash-sales/${flashSale.value.id}`, flashSale.value)
+        toast.add({ severity: 'success', summary: 'Thành công', detail: 'Đã cập nhật Flash Sale', life: 3000 })
+      } else {
+        await apiClient.post('/api/admin/flash-sales', flashSale.value)
+        toast.add({ severity: 'success', summary: 'Thành công', detail: 'Đã tạo Flash Sale mới', life: 3000 })
+      }
+      flashSaleDialog.value = false
+      flashSale.value = {}
+      fetchFlashSales()
+    } catch (e) {
+      const msg = e.response?.data?.message || 'Có lỗi xảy ra khi lưu Flash Sale.'
+      toast.add({ severity: 'error', summary: 'Lỗi', detail: msg, life: 4000 })
+    } finally {
+      loading.value = false
+    }
+  }
+}
+
+const editFlashSale = (f) => {
+  flashSale.value = {
+    ...f,
+    start_time: f.start ? new Date(f.start) : null,
+    end_time: f.end ? new Date(f.end) : null
+  }
+  flashSaleDialog.value = true
+}
+
+const confirmDeleteFlashSale = (f) => {
+  flashSale.value = f
+  deleteFlashSaleDialog.value = true
+}
+
+const deleteFlashSale = async () => {
+  loading.value = true
+  try {
+    await apiClient.delete(`/api/admin/flash-sales/${flashSale.value.id}`)
+    deleteFlashSaleDialog.value = false
+    flashSale.value = {}
+    toast.add({ severity: 'success', summary: 'Thành công', detail: 'Đã xóa Flash Sale', life: 3000 })
+    fetchFlashSales()
+  } catch {
+    toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Không thể xóa Flash Sale.', life: 3000 })
+  } finally {
+    loading.value = false
+  }
 }
 
 // ─── Formatters ───
@@ -178,11 +250,12 @@ const flashStatusConfig = {
 onMounted(() => {
   fetchCoupons()
   fetchCategories()
+  fetchFlashSales()
 })
 </script>
 
 <template>
-  <div class="px-lg md:px-xl pb-xxl max-w-container-max mx-auto w-full pt-6">
+  <div class="pb-xxl w-full pt-6">
     <!-- Header -->
     <div class="flex flex-col md:flex-row md:items-center justify-between gap-md mb-xl animate-fade-in">
       <div>
@@ -190,7 +263,7 @@ onMounted(() => {
         <p class="font-body-md text-body-md text-on-surface-variant mt-xs">Tạo và quản lý chương trình Flash Sale, mã giảm giá theo thời gian và danh mục.</p>
       </div>
       <button
-        @click="activeTab === 'vouchers' ? openNew() : null"
+        @click="openNew()"
         class="bg-primary text-on-primary font-label-md text-label-md px-lg py-sm rounded-lg hover:opacity-90 transition-opacity flex items-center gap-sm shadow-sm whitespace-nowrap"
       >
         <span class="material-symbols-outlined text-[18px]">add</span>
@@ -313,7 +386,11 @@ onMounted(() => {
 
       <!-- Flash Sale Cards -->
       <div v-else class="p-lg">
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-lg">
+        <div v-if="flashSales.length === 0" class="text-center py-xl text-on-surface-variant w-full col-span-full">
+          <span class="material-symbols-outlined text-[48px] block mb-2 text-outline">flash_off</span>
+          <p>Chưa có Flash Sale nào.</p>
+        </div>
+        <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-lg">
           <div
             v-for="sale in flashSales" :key="sale.id"
             class="bg-surface rounded-xl border border-outline-variant/30 p-lg hover:shadow-md transition-all group"
@@ -323,9 +400,9 @@ onMounted(() => {
                 <span class="material-symbols-outlined text-[14px]">{{ flashStatusConfig[sale.status].icon }}</span>
                 {{ flashStatusConfig[sale.status].label }}
               </span>
-              <button class="text-outline hover:text-primary transition-colors">
-                <span class="material-symbols-outlined text-[20px]">more_horiz</span>
-              </button>
+              <router-link :to="{ name: 'admin-flash-sale-detail', params: { id: sale.id } }" class="text-outline hover:text-primary transition-colors cursor-pointer p-1" title="Quản lý sản phẩm">
+                <span class="material-symbols-outlined text-[20px]">settings</span>
+              </router-link>
             </div>
             <h4 class="font-headline-md text-headline-md text-on-surface font-bold mb-2">{{ sale.title }}</h4>
             <div class="space-y-2 text-sm text-on-surface-variant">
@@ -343,15 +420,15 @@ onMounted(() => {
               </div>
             </div>
             <div class="mt-md pt-md border-t border-outline-variant/30 flex justify-end gap-sm">
-              <button class="text-sm text-primary hover:underline font-label-md">Chỉnh sửa</button>
-              <button class="text-sm text-red-500 hover:underline font-label-md">Xóa</button>
+              <button @click="editFlashSale(sale)" class="text-sm text-primary hover:underline font-label-md">Chỉnh sửa</button>
+              <button @click="confirmDeleteFlashSale(sale)" class="text-sm text-red-500 hover:underline font-label-md">Xóa</button>
             </div>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- Edit/Create Dialog -->
+    <!-- Edit/Create Voucher Dialog -->
     <Dialog v-model:visible="couponDialog" :style="{ width: '500px' }" header="Chi tiết mã giảm giá" :modal="true" class="p-fluid">
       <div class="flex flex-col gap-4">
         <div>
@@ -403,6 +480,31 @@ onMounted(() => {
       </template>
     </Dialog>
 
+    <!-- Edit/Create Flash Sale Dialog -->
+    <Dialog v-model:visible="flashSaleDialog" :style="{ width: '500px' }" header="Chi tiết Flash Sale" :modal="true" class="p-fluid">
+      <div class="flex flex-col gap-4">
+        <div>
+          <label for="fs_title" class="font-bold text-sm block mb-1">Tên chương trình</label>
+          <InputText id="fs_title" v-model.trim="flashSale.title" required="true" autofocus :class="{ 'p-invalid': submitted && !flashSale.title }" placeholder="Ví dụ: Siêu Sale Giữa Tháng" />
+          <small class="p-error" v-if="submitted && !flashSale.title">Bắt buộc nhập tên chương trình.</small>
+        </div>
+
+        <div>
+          <label class="font-bold text-sm block mb-1">Thời gian bắt đầu</label>
+          <DatePicker v-model="flashSale.start_time" showTime hourFormat="24" :manualInput="false" />
+        </div>
+
+        <div>
+          <label class="font-bold text-sm block mb-1">Thời gian kết thúc</label>
+          <DatePicker v-model="flashSale.end_time" showTime hourFormat="24" :manualInput="false" />
+        </div>
+      </div>
+      <template #footer>
+        <Button label="Hủy" icon="pi pi-times" text @click="flashSaleDialog = false" />
+        <Button label="Lưu lại" icon="pi pi-check" severity="primary" @click="saveFlashSale" :loading="loading" />
+      </template>
+    </Dialog>
+
     <!-- Delete Confirm Dialog -->
     <Dialog v-model:visible="deleteCouponDialog" :style="{ width: '450px' }" header="Xác nhận xóa" :modal="true">
       <div class="flex items-center gap-4">
@@ -412,6 +514,18 @@ onMounted(() => {
       <template #footer>
         <Button label="Không" icon="pi pi-times" text @click="deleteCouponDialog = false" />
         <Button label="Xóa ngay" icon="pi pi-check" severity="danger" @click="deleteCoupon" :loading="loading" />
+      </template>
+    </Dialog>
+
+    <!-- Delete Flash Sale Confirm Dialog -->
+    <Dialog v-model:visible="deleteFlashSaleDialog" :style="{ width: '450px' }" header="Xác nhận xóa Flash Sale" :modal="true">
+      <div class="flex items-center gap-4">
+        <span class="material-symbols-outlined text-[40px] text-red-500">warning</span>
+        <span v-if="flashSale">Bạn có chắc chắn muốn xóa Flash Sale <b>{{ flashSale.title }}</b>?</span>
+      </div>
+      <template #footer>
+        <Button label="Không" icon="pi pi-times" text @click="deleteFlashSaleDialog = false" />
+        <Button label="Xóa ngay" icon="pi pi-check" severity="danger" @click="deleteFlashSale" :loading="loading" />
       </template>
     </Dialog>
   </div>

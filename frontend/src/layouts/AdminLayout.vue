@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import Avatar from 'primevue/avatar'
@@ -58,11 +58,6 @@ const adminMenuItems = [
     route: '/admin/users',
   },
   {
-    label: 'Khách hàng',
-    icon: 'pi pi-id-card',
-    route: '/admin/customers',
-  },
-  {
     label: 'Khuyến mãi',
     icon: 'pi pi-ticket',
     route: '/admin/coupons',
@@ -76,6 +71,11 @@ const adminMenuItems = [
     label: 'Đối soát',
     icon: 'pi pi-check-square',
     route: '/admin/reconciliation',
+  },
+  {
+    label: 'Chiến dịch thông báo',
+    icon: 'pi pi-megaphone',
+    route: '/admin/notifications',
   },
   {
     label: 'Cấu hình hệ thống',
@@ -137,10 +137,23 @@ const shopName = computed(() => {
   if (authStore.isAdmin) return 'Quản trị viên'
   return authStore.user?.vendor?.shop_name || authStore.user?.name || 'Vendor'
 })
+
+onMounted(() => {
+  if (window.innerWidth <= 768) {
+    sidebarCollapsed.value = true
+  }
+})
 </script>
 
 <template>
   <div class="admin-layout">
+    <!-- Mobile Sidebar Backdrop -->
+    <div
+      v-if="!sidebarCollapsed"
+      class="sidebar-backdrop"
+      @click="sidebarCollapsed = true"
+    ></div>
+
     <!-- ═══ SIDEBAR ═══ -->
     <aside
       class="admin-sidebar"
@@ -435,7 +448,9 @@ const shopName = computed(() => {
 .admin-main {
   flex: 1;
   margin-left: 260px;
-  transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  width: calc(100% - 260px);
+  min-width: 0;
+  transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1), width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   display: flex;
   flex-direction: column;
   min-height: 100vh;
@@ -443,6 +458,7 @@ const shopName = computed(() => {
 
 .main-expanded {
   margin-left: 72px;
+  width: calc(100% - 72px);
 }
 
 /* ═══ TOPBAR ═══ */
@@ -593,13 +609,18 @@ const shopName = computed(() => {
 }
 
 /* ═══ RESPONSIVE ═══ */
-@media (max-width: 768px) {
+.sidebar-backdrop {
+  display: none;
+}
+
+@media (max-width: 1024px) {
   .admin-sidebar {
     width: 72px;
   }
 
   .admin-main {
     margin-left: 72px;
+    width: calc(100% - 72px);
   }
 
   .brand-text,
@@ -618,6 +639,51 @@ const shopName = computed(() => {
 
   .admin-content {
     padding: 16px;
+  }
+}
+
+@media (max-width: 768px) {
+  .sidebar-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(4px);
+    z-index: 990;
+    transition: opacity 0.3s ease;
+  }
+
+  .admin-sidebar {
+    width: 260px !important;
+    position: fixed;
+    transform: translateX(-100%);
+    transition: transform 0.3s ease;
+    z-index: 999;
+  }
+
+  .sidebar-collapsed {
+    transform: translateX(-100%) !important;
+  }
+
+  .admin-sidebar:not(.sidebar-collapsed) {
+    transform: translateX(0) !important;
+    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.25);
+  }
+
+  .admin-main {
+    margin-left: 0 !important;
+    width: 100% !important;
+  }
+
+  .main-expanded {
+    margin-left: 0 !important;
+    width: 100% !important;
+  }
+
+  .brand-text,
+  .nav-text,
+  .nav-label {
+    display: block !important;
   }
 }
 </style>

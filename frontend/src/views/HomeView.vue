@@ -10,8 +10,7 @@
               <span class="material-symbols-outlined text-[18px]" style="font-variation-settings: 'FILL' 1;">bolt</span>
             </div>
             <span class="text-white text-sm font-medium">
-              Nhập mã <span class="code-badge">{{ activeFlashSale.code }}</span> để giảm <span class="font-extrabold text-white">{{ activeFlashSale.discount_percent }}%</span>
-              <span v-if="activeFlashSale.category"> cho danh mục <b>{{ activeFlashSale.category?.name }}</b></span>!
+              ⚡ Flash Sale: <span class="font-extrabold text-white text-base mr-1">{{ activeFlashSale.title }}</span> đang diễn ra! Giảm giá trực tiếp cực sâu trên từng đầu sách.
             </span>
           </div>
           <div class="flex items-center gap-4">
@@ -23,6 +22,9 @@
               <span class="text-white font-bold text-lg -mt-3">:</span>
               <div class="timer-box"><span class="timer-num">{{ countdown.seconds }}</span><span class="timer-unit">Giây</span></div>
             </div>
+            <router-link to="/flash-sale" class="bg-white text-primary text-[11px] font-black uppercase tracking-widest px-4 py-2 rounded-xl shadow-lg hover:scale-105 active:scale-95 transition-all flex items-center gap-0.5 ml-2">
+              Săn ngay <span class="material-symbols-outlined text-[14px]">chevron_right</span>
+            </router-link>
           </div>
         </div>
       </div>

@@ -136,8 +136,7 @@ onMounted(fetchStats)
 
 <style scoped>
 .admin-dashboard {
-  max-width: 1100px;
-  margin: 0 auto;
+  max-width: 100%;
 }
 
 /* ═══ PAGE HEADER ═══ */

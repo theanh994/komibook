@@ -83,6 +83,14 @@ class BookController extends Controller
         // 3. Hỗ trợ sắp xếp (ví dụ: mới nhất)
         $query->orderBy('created_at', 'desc');
 
+        if ($request->boolean('all')) {
+            $books = $query->get();
+            return BookResource::collection($books)->additional([
+                'status'  => 'success',
+                'message' => 'Lấy danh sách sách thành công.',
+            ]);
+        }
+
         // 4. Phân trang
         $books = $query->paginate(12);
 

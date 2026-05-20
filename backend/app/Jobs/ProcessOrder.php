@@ -33,7 +33,7 @@ class ProcessOrder implements ShouldQueue
     {
         DB::transaction(function () {
             // Lấy order cùng với orderItems (bỏ qua Global Scope vendor để đảm bảo Job luôn lấy được đơn hàng)
-            $order = Order::withoutGlobalScopes()->with('orderItems')->findOrFail($this->orderId);
+            $order = Order::withoutGlobalScopes()->with(['orderItems.book', 'user'])->findOrFail($this->orderId);
 
             // Chuyển trạng thái sang processing
             $order->status = 'processing';
@@ -45,6 +45,34 @@ class ProcessOrder implements ShouldQueue
                 Book::withoutGlobalScopes()
                     ->where('id', $item->book_id)
                     ->decrement('stock', $item->quantity);
+            }
+
+            // Tạo thông báo cơ sở dữ liệu cho User
+            try {
+                \App\Models\UserNotification::create([
+                    'user_id' => $order->user_id,
+                    'title' => 'Đặt hàng thành công',
+                    'content' => "Đơn hàng {$order->order_code} đã thanh toán thành công và đang được xử lý.",
+                    'type' => 'order',
+                    'data' => [
+                        'order_id' => $order->id,
+                        'order_code' => $order->order_code,
+                        'icon' => 'shopping_bag',
+                        'colorClass' => 'bg-green-100 text-green-600'
+                    ]
+                ]);
+            } catch (\Exception $e) {
+                Log::error("Failed to create database notification: " . $e->getMessage());
+            }
+
+            // Gửi email xác nhận thành công cho Khách hàng
+            try {
+                if ($order->user && $order->user->email) {
+                    \Illuminate\Support\Facades\Mail::to($order->user->email)
+                        ->send(new \App\Mail\OrderSuccessMail($order));
+                }
+            } catch (\Exception $e) {
+                Log::error("Failed to send order success mail: " . $e->getMessage());
             }
             
             Log::info("Job ProcessOrder completed: Order [{$order->order_code}] successfully processed.");

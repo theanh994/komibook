@@ -71,7 +71,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="px-lg md:px-xl pb-xxl max-w-container-max mx-auto pt-6">
+  <div class="pb-xxl w-full pt-6">
     <!-- Header Section -->
     <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-xl gap-lg animate-fade-in">
       <div>

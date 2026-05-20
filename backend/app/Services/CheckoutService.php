@@ -55,30 +55,56 @@ class CheckoutService
             }
         }
 
-        // BƯỚC 2a: Redis Stock Lock
-        foreach ($items as $item) {
-            $bookId = $item['book_id'];
-            $quantity = $item['quantity'];
-            
-            if (!$books->has($bookId)) {
-                throw new Exception("Sản phẩm không tồn tại (ID: {$bookId})");
+        // BƯỚC 2a: Redis Stock Lock (có fallback)
+        $useRedis = false;
+        try {
+            // Thử ping Redis để xác định có kết nối được không
+            Redis::ping();
+            $useRedis = true;
+        } catch (\Exception $e) {
+            Log::warning("Redis is not available, falling back to database stock check: " . $e->getMessage());
+        }
+
+        if ($useRedis) {
+            foreach ($items as $item) {
+                $bookId = $item['book_id'];
+                $quantity = $item['quantity'];
+                
+                if (!$books->has($bookId)) {
+                    throw new Exception("Sản phẩm không tồn tại (ID: {$bookId})");
+                }
+                $book = $books->get($bookId);
+
+                $redisKey = "book_stock:{$bookId}";
+
+                // Nếu key chưa có trên Redis, load từ DB lên
+                if (!Redis::exists($redisKey)) {
+                    Redis::set($redisKey, $book->stock);
+                }
+
+                // Trừ tồn kho tạm thời trên Redis
+                $remaining = Redis::decrBy($redisKey, $quantity);
+
+                // Nếu < 0 tức là hết hàng -> Rollback Redis và báo lỗi
+                if ($remaining < 0) {
+                    Redis::incrBy($redisKey, $quantity); // Hoàn lại số lượng vừa trừ
+                    throw new Exception("Sản phẩm '{$book->title}' không đủ số lượng tồn kho.");
+                }
             }
-            $book = $books->get($bookId);
-
-            $redisKey = "book_stock:{$bookId}";
-
-            // Nếu key chưa có trên Redis, load từ DB lên
-            if (!Redis::exists($redisKey)) {
-                Redis::set($redisKey, $book->stock);
-            }
-
-            // Trừ tồn kho tạm thời trên Redis
-            $remaining = Redis::decrBy($redisKey, $quantity);
-
-            // Nếu < 0 tức là hết hàng -> Rollback Redis và báo lỗi
-            if ($remaining < 0) {
-                Redis::incrBy($redisKey, $quantity); // Hoàn lại số lượng vừa trừ
-                throw new Exception("Sản phẩm '{$book->title}' không đủ số lượng tồn kho.");
+        } else {
+            // DB fallback: kiểm tra tồn kho trực tiếp từ CSDL
+            foreach ($items as $item) {
+                $bookId = $item['book_id'];
+                $quantity = $item['quantity'];
+                
+                if (!$books->has($bookId)) {
+                    throw new Exception("Sản phẩm không tồn tại (ID: {$bookId})");
+                }
+                $book = $books->get($bookId);
+                
+                if ($book->stock < $quantity) {
+                    throw new Exception("Sản phẩm '{$book->title}' không đủ số lượng tồn kho.");
+                }
             }
         }
 
@@ -149,9 +175,15 @@ class CheckoutService
             DB::commit();
         } catch (Exception $e) {
             DB::rollBack();
-            // Rollback Redis stock nếu DB lưu thất bại
-            foreach ($items as $item) {
-                Redis::incrBy("book_stock:{$item['book_id']}", $item['quantity']);
+            if ($useRedis) {
+                // Rollback Redis stock nếu DB lưu thất bại
+                try {
+                    foreach ($items as $item) {
+                        Redis::incrBy("book_stock:{$item['book_id']}", $item['quantity']);
+                    }
+                } catch (\Exception $ex) {
+                    Log::error("Failed to rollback Redis stock: " . $ex->getMessage());
+                }
             }
             throw $e;
         }

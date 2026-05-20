@@ -1,16 +1,19 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useToast } from 'primevue/usetoast'
+import apiClient from '@/services/axios'
 
 const toast = useToast()
 
 const config = ref({
-  systemName: 'Komibook Premium',
-  hotline: '1900 1234',
-  email: 'support@komibook.com',
-  authorCommission: 70,
-  serviceFee: 2000,
+  systemName: '',
+  hotline: '',
+  email: '',
+  authorCommission: 0,
+  serviceFee: 0,
   defaultBorrowDays: 14,
+  maintenanceMode: false,
+  maxUploadSize: 5,
 })
 
 const gateways = ref([
@@ -19,19 +22,59 @@ const gateways = ref([
   { id: 'stripe', name: 'Credit Card (Stripe)', description: 'Thẻ quốc tế Visa/Master', icon: 'credit_card', color: '#73777e', enabled: false },
 ])
 
+const loading = ref(true)
 const saving = ref(false)
+
+const fetchConfig = async () => {
+  try {
+    const res = await apiClient.get('/api/admin/config')
+    const data = res.data.data
+    config.value = {
+      systemName: data.site_name,
+      hotline: data.hotline || '',
+      email: data.support_email,
+      authorCommission: data.commission_rate,
+      serviceFee: data.service_fee,
+      defaultBorrowDays: data.default_borrow_days,
+      maintenanceMode: data.maintenance_mode,
+      maxUploadSize: data.max_upload_size,
+    }
+  } catch (error) {
+    toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Không thể tải cấu hình hệ thống.', life: 3000 })
+  } finally {
+    loading.value = false
+  }
+}
 
 const handleSave = async () => {
   saving.value = true
-  setTimeout(() => {
-    saving.value = false
+  try {
+    const payload = {
+      site_name: config.value.systemName,
+      hotline: config.value.hotline,
+      support_email: config.value.email,
+      commission_rate: config.value.authorCommission,
+      service_fee: config.value.serviceFee,
+      default_borrow_days: config.value.defaultBorrowDays,
+      maintenance_mode: config.value.maintenanceMode,
+      max_upload_size: config.value.maxUploadSize,
+    }
+    await apiClient.put('/api/admin/config', payload)
     toast.add({ severity: 'success', summary: 'Thành công', detail: 'Cấu hình hệ thống đã được lưu.', life: 3000 })
-  }, 800)
+  } catch (error) {
+    toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Đã xảy ra lỗi khi lưu cấu hình.', life: 3000 })
+  } finally {
+    saving.value = false
+  }
 }
+
+onMounted(() => {
+  fetchConfig()
+})
 </script>
 
 <template>
-  <div class="px-lg md:px-xl pb-xxl max-w-container-max mx-auto w-full pt-6">
+  <div class="pb-xxl w-full pt-6">
     <!-- Page Header -->
     <div class="flex flex-col md:flex-row md:items-center justify-between gap-md mb-xl animate-fade-in">
       <div>
@@ -40,16 +83,23 @@ const handleSave = async () => {
       </div>
       <button
         @click="handleSave"
-        :disabled="saving"
+        :disabled="saving || loading"
         class="bg-primary text-on-primary font-label-md text-label-md px-lg py-sm rounded-lg hover:opacity-90 transition-opacity flex items-center gap-sm shadow-sm whitespace-nowrap disabled:opacity-50"
       >
-        <span class="material-symbols-outlined text-[18px]">save</span>
+        <span class="material-symbols-outlined text-[18px]" v-if="!saving">save</span>
+        <span class="material-symbols-outlined text-[18px] animate-spin" v-else>progress_activity</span>
         {{ saving ? 'Đang lưu...' : 'Lưu thay đổi' }}
       </button>
     </div>
 
+    <!-- Loading Skeleton -->
+    <div v-if="loading" class="grid grid-cols-1 lg:grid-cols-3 gap-lg animate-pulse">
+      <div class="lg:col-span-2 bg-surface-container-lowest h-96 rounded-xl shadow-soft"></div>
+      <div class="bg-surface-container-lowest h-96 rounded-xl shadow-soft"></div>
+    </div>
+
     <!-- Content Layout: Bento Grid Style -->
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-lg animate-slide-up">
+    <div v-else class="grid grid-cols-1 lg:grid-cols-3 gap-lg animate-slide-up">
       <!-- Left Column -->
       <div class="lg:col-span-2 space-y-lg">
         <!-- Section: General Info -->

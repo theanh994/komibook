@@ -110,4 +110,36 @@ class Book extends Model
     {
         return $this->sale_price ?? $this->price;
     }
+
+    protected static $activeFlashSaleBooks = null;
+
+    protected static function getActiveFlashSaleItem($bookId)
+    {
+        if (self::$activeFlashSaleBooks === null) {
+            $now = now();
+            $activeSale = \App\Models\FlashSale::where('is_active', true)
+                ->where('start_time', '<=', $now)
+                ->where('end_time', '>', $now)
+                ->first();
+
+            if ($activeSale) {
+                self::$activeFlashSaleBooks = $activeSale->items()->get()->keyBy('book_id');
+            } else {
+                self::$activeFlashSaleBooks = collect();
+            }
+        }
+
+        return self::$activeFlashSaleBooks->get($bookId);
+    }
+
+    public function getSalePriceAttribute($value)
+    {
+        $activeFlashSaleItem = self::getActiveFlashSaleItem($this->id);
+        if ($activeFlashSaleItem) {
+            $discountAmount = $this->price * ($activeFlashSaleItem->discount_percent / 100);
+            return max(0, (int)($this->price - $discountAmount));
+        }
+
+        return $value;
+    }
 }

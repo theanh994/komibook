@@ -21,25 +21,18 @@ const user = ref({
   avatar: null,
 })
 
-const membershipStats = ref({
-  tier: 'Free',
-  totalOrders: 15,
-  totalSpent: 2450000,
-  totalBooks: 42,
-  reviews: 7,
+const membershipStats = computed(() => {
+  return {
+    tier: 'Thành viên',
+    totalOrders: user.value.total_orders || 0,
+    totalSpent: user.value.total_spent || 0,
+    totalBooks: 0,
+    reviews: 0,
+  }
 })
 
-const recentOrders = ref([
-  { id: 'KB-0012', date: '2023-10-25', book: 'Doraemon Tập 45', amount: 89000, status: 'completed' },
-  { id: 'KB-0009', date: '2023-10-18', book: 'Conan Tập 102', amount: 35000, status: 'completed' },
-  { id: 'KB-0007', date: '2023-10-10', book: 'Dragon Ball Super', amount: 120000, status: 'pending' },
-])
-
-const readingHistory = ref([
-  { book: 'One Piece Tập 107', progress: 90, lastRead: '28/10/2023' },
-  { book: 'Doraemon Tập 45', progress: 100, lastRead: '25/10/2023' },
-  { book: 'Naruto Tập 72', progress: 35, lastRead: '20/10/2023' },
-])
+const recentOrders = ref([])
+const readingHistory = ref([])
 
 const getInitials = (name) => {
   if (!name) return '??'
@@ -75,13 +68,13 @@ onMounted(fetchUser)
 </script>
 
 <template>
-  <div class="px-lg md:px-xl pb-xxl max-w-container-max mx-auto w-full pt-6">
+  <div class="pb-xxl w-full pt-6">
     <!-- Breadcrumb + Actions -->
     <div class="flex items-center justify-between mb-xl animate-fade-in">
       <div class="flex items-center gap-sm text-on-surface-variant font-body-md text-body-md">
-        <button @click="router.push({ name: 'admin-customers' })" class="hover:text-primary transition-colors flex items-center gap-1">
+        <button @click="router.push({ name: 'admin-users' })" class="hover:text-primary transition-colors flex items-center gap-1">
           <span class="material-symbols-outlined text-[18px]">arrow_back</span>
-          Khách hàng
+          Quản lý Users
         </button>
         <span class="material-symbols-outlined text-[16px]">chevron_right</span>
         <span class="text-on-surface font-medium">{{ user.name }}</span>
@@ -149,6 +142,9 @@ onMounted(fetchUser)
                 <span class="text-[12px] font-medium" :class="item.progress === 100 ? 'text-green-600' : 'text-primary'">{{ item.progress }}%</span>
               </div>
             </div>
+            <div v-if="readingHistory.length === 0" class="px-lg py-xl text-center text-on-surface-variant">
+              Không có dữ liệu
+            </div>
           </div>
         </div>
       </div>
@@ -208,6 +204,9 @@ onMounted(fetchUser)
                   <td class="py-3 px-lg">
                     <span :class="getStatusStyle(order.status)" class="inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium">{{ getStatusLabel(order.status) }}</span>
                   </td>
+                </tr>
+                <tr v-if="recentOrders.length === 0">
+                  <td colspan="5" class="py-xl px-lg text-center text-on-surface-variant">Không có đơn hàng nào.</td>
                 </tr>
               </tbody>
             </table>

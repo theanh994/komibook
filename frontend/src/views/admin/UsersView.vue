@@ -7,8 +7,11 @@ import DataTable from 'primevue/datatable'
 import Column from 'primevue/column'
 import Tag from 'primevue/tag'
 import Select from 'primevue/select'
+import Button from 'primevue/button'
+import { useRouter } from 'vue-router'
 
 const toast = useToast()
+const router = useRouter()
 
 // ─── State ───
 const users = ref([])
@@ -197,6 +200,20 @@ onMounted(fetchUsers)
             <span class="date-text">{{ formatDate(data.created_at) }}</span>
           </template>
         </Column>
+
+        <!-- Hành động -->
+        <Column header="Hành động" style="min-width: 100px; text-align: right">
+          <template #body="{ data }">
+            <Button
+              icon="pi pi-eye"
+              text
+              rounded
+              severity="secondary"
+              @click="router.push({ name: 'admin-user-detail', params: { id: data.id } })"
+              v-tooltip.top="'Xem chi tiết'"
+            />
+          </template>
+        </Column>
       </DataTable>
     </div>
   </div>
@@ -204,8 +221,7 @@ onMounted(fetchUsers)
 
 <style scoped>
 .admin-users {
-  max-width: 1200px;
-  margin: 0 auto;
+  max-width: 100%;
 }
 
 /* ═══ PAGE HEADER ═══ */

@@ -164,8 +164,8 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="p-lg bg-background pt-6">
-    <div class="max-w-container-max mx-auto">
+  <div class="pb-xl w-full pt-6">
+    <div>
       <!-- Page Header -->
       <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-lg gap-md">
         <div>

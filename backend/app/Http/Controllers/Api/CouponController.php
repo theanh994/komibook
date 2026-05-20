@@ -82,17 +82,29 @@ class CouponController extends Controller
     public function flashSales()
     {
         $now = now();
-        $flashSales = Coupon::with('category')
-            ->where(function($query) use ($now) {
-                // ĐANG ACTIVE hoặc SẮP DIỄN RA (trong vòng 7 ngày tới chẳng hạn)
-                $query->where('end_time', '>', $now);
-            })
+        $flashSales = \App\Models\FlashSale::where('is_active', true)
+            ->where('end_time', '>', $now)
             ->orderBy('start_time', 'asc')
             ->get();
 
         return response()->json([
             'success' => true,
             'data' => $flashSales
+        ]);
+    }
+
+    public function activeFlashSale()
+    {
+        $now = now();
+        $activeSale = \App\Models\FlashSale::where('is_active', true)
+            ->where('start_time', '<=', $now)
+            ->where('end_time', '>', $now)
+            ->with(['items.book.category', 'items.book.vendor'])
+            ->first();
+
+        return response()->json([
+            'success' => true,
+            'data' => $activeSale
         ]);
     }
 }

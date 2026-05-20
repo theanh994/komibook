@@ -31,7 +31,7 @@
           <span class="material-symbols-outlined text-5xl text-primary">shopping_basket</span>
         </div>
         <h2 class="text-2xl font-bold text-on-surface mb-3">Giỏ hàng của bạn đang trống</h2>
-        <p class="text-on-surface-variant mb-xl max-w-md mx-auto leading-relaxed">Hãy khám phá hàng ngàn cuốn sách hấp dẫn và kiến thức vô tận đang chờ bạn tại KomiBook.</p>
+        <p class="text-on-surface-variant mb-xl max-w-[28rem] mx-auto leading-relaxed">Hãy khám phá hàng ngàn cuốn sách hấp dẫn và kiến thức vô tận đang chờ bạn tại KomiBook.</p>
         <button 
           @click="$router.push('/')"
           class="inline-flex items-center gap-2 bg-primary text-on-primary px-xl py-md rounded-xl text-base font-bold hover:bg-primary/90 transition-all shadow-md active:scale-95"
@@ -249,7 +249,7 @@
                   <span class="material-symbols-outlined text-primary">sell</span>
                   Mã giảm giá
                 </h3>
-                <div class="max-w-md flex gap-2">
+                <div class="max-w-[28rem] flex gap-2">
                   <div class="relative flex-1">
                     <InputText v-model="couponCode" placeholder="Nhập mã ưu đãi..." class="w-full !pl-10 !rounded-xl !border-outline-variant/40" />
                     <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-[20px]">confirmation_number</span>
@@ -341,7 +341,7 @@
 
 <script setup>
 import { useCartStore } from '@/stores/cart'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { ref, computed, onMounted } from 'vue'
 import apiClient from '@/services/axios'
 import Button from 'primevue/button'
@@ -352,6 +352,7 @@ import { useToast } from "primevue/usetoast"
 
 const cartStore = useCartStore()
 const router = useRouter()
+const route = useRoute()
 const confirm = useConfirm()
 const toast = useToast()
 

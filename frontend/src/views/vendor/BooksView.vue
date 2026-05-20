@@ -477,8 +477,7 @@ onMounted(() => {
 
 <style scoped>
 .vendor-books {
-  max-width: 1200px;
-  margin: 0 auto;
+  max-width: 100%;
 }
 
 /* Page Header */

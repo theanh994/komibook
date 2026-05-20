@@ -1,56 +1,71 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted, computed } from 'vue'
+import { useToast } from 'primevue/usetoast'
+import apiClient from '@/services/axios'
 
-const period = ref('Tháng Này (T10 2023)')
+const toast = useToast()
 
-// KPI Data (mock)
-const kpiCards = [
-  { label: 'Tổng Doanh Thu', value: '₫425,500,000', icon: 'account_balance_wallet', trend: '+12.5% so với tháng trước', trendColor: 'text-green-600', trendIcon: 'trending_up' },
-  { label: 'Hoa Hồng Hệ Thống', value: '₫85,100,000', icon: 'percent', trend: '+8.2% so với tháng trước', trendColor: 'text-green-600', trendIcon: 'trending_up' },
-  { label: 'Chờ Đối Soát', value: '₫124,000,000', icon: 'pending_actions', trend: '3 đối tác chưa thanh toán', trendColor: 'text-on-surface-variant', trendIcon: '' },
-]
+const period = ref('Tháng Này (' + new Date().toLocaleDateString('vi-VN', { month: '2-digit', year: 'numeric' }) + ')')
+const loading = ref(true)
 
-// Revenue distribution by publisher
-const publishers = [
-  { name: 'NXB Kim Đồng', percent: 45, color: 'bg-primary-container' },
-  { name: 'NXB Trẻ', percent: 30, color: 'bg-primary-fixed-dim' },
-  { name: 'Nhã Nam', percent: 15, color: 'bg-surface-tint' },
-  { name: 'Khác', percent: 10, color: 'bg-surface-container-high' },
-]
+const reportData = ref({
+  kpi: { total_revenue: 0, monthly_revenue: 0, total_orders: 0, completed_orders: 0, total_customers: 0, avg_order_value: 0 },
+  revenue_by_month: [],
+  revenue_by_payment_method: [],
+  top_vendors: [],
+  payout_stats: { pending: 0, approved: 0, rejected: 0 }
+})
 
-// Reconciliation table data
-const reconciliations = ref([
-  { period: 'Tháng 10/2023', totalRevenue: '₫425,500,000', commission: '₫85,100,000', netPayable: '₫340,400,000', status: 'pending' },
-  { period: 'Tháng 09/2023', totalRevenue: '₫380,200,000', commission: '₫76,040,000', netPayable: '₫304,160,000', status: 'completed' },
-  { period: 'Tháng 08/2023', totalRevenue: '₫410,000,000', commission: '₫82,000,000', netPayable: '₫328,000,000', status: 'completed' },
-])
-
-const getStatusStyle = (status) => {
-  if (status === 'pending') return 'bg-yellow-100 text-yellow-800'
-  return 'bg-green-100 text-green-800'
+const fetchReport = async () => {
+  loading.value = true
+  try {
+    const res = await apiClient.get('/api/admin/finance-report')
+    if (res.data.status === 'success') {
+      reportData.value = res.data.data
+    }
+  } catch (error) {
+    toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Không thể tải báo cáo tài chính.', life: 3000 })
+  } finally {
+    loading.value = false
+  }
 }
-const getStatusLabel = (status) => status === 'pending' ? 'Chờ xử lý' : 'Đã thanh toán'
+
+onMounted(() => {
+  fetchReport()
+})
+
+const formatVND = (val) => new Intl.NumberFormat('vi-VN').format(val || 0) + ' ₫'
+
+const kpiCards = computed(() => [
+  { label: 'Tổng Doanh Thu', value: formatVND(reportData.value.kpi.total_revenue), icon: 'account_balance_wallet', trend: 'Tất cả thời gian', trendColor: 'text-primary', trendIcon: '' },
+  { label: 'Doanh Thu Tháng Này', value: formatVND(reportData.value.kpi.monthly_revenue), icon: 'calendar_month', trend: 'Tháng hiện tại', trendColor: 'text-green-600', trendIcon: 'trending_up' },
+  { label: 'Yêu Cầu Rút Tiền Chờ Duyệt', value: formatVND(reportData.value.payout_stats.pending), icon: 'pending_actions', trend: 'Chờ xử lý', trendColor: 'text-yellow-600', trendIcon: '' },
+])
 </script>
 
 <template>
-  <div class="px-lg md:px-xl pb-xxl max-w-container-max mx-auto w-full pt-6">
+  <div class="pb-xxl w-full pt-6">
     <!-- Header -->
     <header class="flex flex-col md:flex-row justify-between items-start md:items-end mb-xl animate-fade-in">
       <div>
         <h1 class="font-headline-lg text-headline-lg font-semibold text-primary">Báo cáo tài chính</h1>
-        <p class="text-on-surface-variant font-body-md text-body-md mt-1">Tổng quan doanh thu và đối soát hàng tháng</p>
+        <p class="text-on-surface-variant font-body-md text-body-md mt-1">Tổng quan doanh thu và đối soát</p>
       </div>
       <div class="flex gap-md mt-md md:mt-0">
         <div class="relative bg-surface-container-lowest border border-outline-variant rounded-lg px-4 py-2 flex items-center gap-2 shadow-sm cursor-pointer hover:border-primary transition-colors">
           <span class="material-symbols-outlined text-on-surface-variant text-[20px]">calendar_month</span>
           <span class="font-label-md text-label-md text-on-surface">{{ period }}</span>
-          <span class="material-symbols-outlined text-on-surface-variant text-[20px]">arrow_drop_down</span>
         </div>
       </div>
     </header>
 
+    <!-- Loading Skeleton -->
+    <div v-if="loading" class="grid grid-cols-1 md:grid-cols-3 gap-lg mb-xl">
+      <div v-for="i in 3" :key="i" class="bg-surface-container-lowest h-32 rounded-xl shadow-card border border-outline-variant/20 animate-pulse"></div>
+    </div>
+
     <!-- KPI Cards -->
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-lg mb-xl animate-slide-up">
+    <div v-else class="grid grid-cols-1 md:grid-cols-3 gap-lg mb-xl animate-slide-up">
       <div
         v-for="(card, idx) in kpiCards" :key="idx"
         class="bg-surface-container-lowest p-lg rounded-xl shadow-card border border-outline-variant/20 flex flex-col justify-between h-32 relative overflow-hidden group hover:shadow-card-hover transition-all"
@@ -69,99 +84,60 @@ const getStatusLabel = (status) => status === 'pending' ? 'Chờ xử lý' : 'Đ
       </div>
     </div>
 
-    <!-- Charts Section -->
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-lg mb-xl animate-slide-up delay-100">
-      <!-- Line Chart -->
-      <div class="col-span-1 lg:col-span-2 bg-surface-container-lowest rounded-xl shadow-card border border-outline-variant/20 p-lg">
-        <h3 class="font-headline-md text-headline-md text-on-surface mb-6">Tăng Trưởng Doanh Thu</h3>
-        <div class="h-64 w-full relative">
-          <div class="absolute left-0 top-0 h-full flex flex-col justify-between text-xs text-on-surface-variant pb-6">
-            <span>500M</span><span>400M</span><span>300M</span><span>200M</span><span>100M</span><span>0</span>
-          </div>
-          <div class="ml-10 h-[calc(100%-1.5rem)] border-l border-b border-outline-variant relative">
-            <div class="absolute w-full border-t border-outline-variant/30" style="top: 20%"></div>
-            <div class="absolute w-full border-t border-outline-variant/30" style="top: 40%"></div>
-            <div class="absolute w-full border-t border-outline-variant/30" style="top: 60%"></div>
-            <div class="absolute w-full border-t border-outline-variant/30" style="top: 80%"></div>
-            <svg class="absolute w-full h-full overflow-visible" preserveAspectRatio="none" viewBox="0 0 100 100">
-              <path d="M 0,80 L 16,70 L 33,75 L 50,40 L 66,50 L 83,20 L 100,10 L 100,100 L 0,100 Z" fill="url(#gradientFill)" opacity="0.2"/>
-              <path d="M 0,80 L 16,70 L 33,75 L 50,40 L 66,50 L 83,20 L 100,10" fill="none" stroke="#1a3a5a" stroke-width="2"/>
-              <defs>
-                <linearGradient id="gradientFill" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stop-color="#1a3a5a"/>
-                  <stop offset="100%" stop-color="transparent"/>
-                </linearGradient>
-              </defs>
-              <circle v-for="(pt, i) in [[0,80],[16,70],[33,75],[50,40],[66,50],[83,20],[100,10]]" :key="i" :cx="pt[0]" :cy="pt[1]" fill="#1a3a5a" r="1.5"/>
-            </svg>
-          </div>
-          <div class="ml-10 mt-2 flex justify-between text-xs text-on-surface-variant">
-            <span>T4</span><span>T5</span><span>T6</span><span>T7</span><span>T8</span><span>T9</span><span>T10</span>
-          </div>
+    <!-- Charts & Vendors Section -->
+    <div v-if="!loading" class="grid grid-cols-1 lg:grid-cols-3 gap-lg mb-xl animate-slide-up delay-100">
+      <!-- Top Vendors -->
+      <div class="col-span-1 lg:col-span-2 bg-surface-container-lowest rounded-xl shadow-card border border-outline-variant/20 p-lg overflow-hidden">
+        <h3 class="font-headline-md text-headline-md text-on-surface mb-6">Top Nhà Bán Hàng (Theo Doanh Thu)</h3>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse">
+            <thead>
+              <tr class="text-on-surface-variant text-sm border-b border-outline-variant/30">
+                <th class="py-2 font-medium">Nhà Bán Hàng</th>
+                <th class="py-2 font-medium text-right">Tổng Đơn Hàng</th>
+                <th class="py-2 font-medium text-right">Doanh Thu</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-outline-variant/10 text-body-md">
+              <tr v-for="vendor in reportData.top_vendors" :key="vendor.id" class="hover:bg-surface-container-lowest">
+                <td class="py-3 font-medium text-primary">{{ vendor.shop_name }}</td>
+                <td class="py-3 text-right">{{ vendor.total_orders }}</td>
+                <td class="py-3 text-right font-bold">{{ formatVND(vendor.revenue) }}</td>
+              </tr>
+              <tr v-if="reportData.top_vendors.length === 0">
+                <td colspan="3" class="text-center py-4 text-on-surface-variant">Chưa có dữ liệu</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </div>
-      <!-- Pie Chart -->
+      
+      <!-- Payout Stats -->
       <div class="col-span-1 bg-surface-container-lowest rounded-xl shadow-card border border-outline-variant/20 p-lg flex flex-col">
-        <h3 class="font-headline-md text-headline-md text-on-surface mb-6">Nguồn Thu Theo NXB</h3>
-        <div class="flex-1 flex items-center justify-center relative">
-          <div class="w-40 h-40 rounded-full border-8 border-surface-container-low relative" style="background: conic-gradient(#1a3a5a 0% 45%, #abc9f0 45% 75%, #436082 75% 90%, #e2e7ff 90% 100%);">
-            <div class="absolute inset-0 m-auto w-24 h-24 bg-surface-container-lowest rounded-full flex items-center justify-center flex-col">
-              <span class="text-xs text-on-surface-variant">Top NXB</span>
-              <span class="font-bold text-primary">Kim Đồng</span>
+        <h3 class="font-headline-md text-headline-md text-on-surface mb-6">Yêu Cầu Rút Tiền</h3>
+        <div class="space-y-4">
+          <div class="p-4 rounded-lg bg-yellow-50 border border-yellow-100 flex justify-between items-center">
+            <div class="flex items-center gap-2 text-yellow-700">
+              <span class="material-symbols-outlined">pending</span>
+              <span class="font-medium">Đang chờ duyệt</span>
             </div>
+            <span class="font-bold text-yellow-800">{{ formatVND(reportData.payout_stats.pending) }}</span>
+          </div>
+          <div class="p-4 rounded-lg bg-green-50 border border-green-100 flex justify-between items-center">
+            <div class="flex items-center gap-2 text-green-700">
+              <span class="material-symbols-outlined">check_circle</span>
+              <span class="font-medium">Đã duyệt (Lũy kế)</span>
+            </div>
+            <span class="font-bold text-green-800">{{ formatVND(reportData.payout_stats.approved) }}</span>
+          </div>
+          <div class="p-4 rounded-lg bg-red-50 border border-red-100 flex justify-between items-center">
+            <div class="flex items-center gap-2 text-red-700">
+              <span class="material-symbols-outlined">cancel</span>
+              <span class="font-medium">Bị từ chối (Lũy kế)</span>
+            </div>
+            <span class="font-bold text-red-800">{{ formatVND(reportData.payout_stats.rejected) }}</span>
           </div>
         </div>
-        <div class="mt-6 space-y-2">
-          <div v-for="pub in publishers" :key="pub.name" class="flex justify-between items-center text-sm">
-            <div class="flex items-center gap-2">
-              <div class="w-3 h-3 rounded-sm" :class="pub.color"></div>
-              <span>{{ pub.name }}</span>
-            </div>
-            <span class="font-medium">{{ pub.percent }}%</span>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Reconciliation Table -->
-    <div class="bg-surface-container-lowest rounded-xl shadow-card border border-outline-variant/20 overflow-hidden animate-slide-up delay-200">
-      <div class="p-lg border-b border-outline-variant/30 flex justify-between items-center">
-        <h3 class="font-headline-md text-headline-md text-on-surface">Chi Tiết Đối Soát</h3>
-        <button class="text-primary hover:text-primary/80 font-label-md text-label-md flex items-center gap-1">
-          Xem tất cả <span class="material-symbols-outlined text-[18px]">arrow_forward</span>
-        </button>
-      </div>
-      <div class="overflow-x-auto">
-        <table class="w-full text-left border-collapse">
-          <thead>
-            <tr class="bg-surface-container-low text-on-surface-variant font-label-md text-label-md">
-              <th class="py-3 px-lg font-medium">Kỳ Đối Soát</th>
-              <th class="py-3 px-lg font-medium text-right">Tổng Doanh Thu</th>
-              <th class="py-3 px-lg font-medium text-right">Hoa Hồng (20%)</th>
-              <th class="py-3 px-lg font-medium text-right">Thực Nhận NXB</th>
-              <th class="py-3 px-lg font-medium">Trạng Thái</th>
-              <th class="py-3 px-lg font-medium text-center">Hành Động</th>
-            </tr>
-          </thead>
-          <tbody class="text-body-md text-on-surface divide-y divide-outline-variant/20">
-            <tr v-for="row in reconciliations" :key="row.period" class="hover:bg-surface-container-lowest transition-colors">
-              <td class="py-4 px-lg font-medium">{{ row.period }}</td>
-              <td class="py-4 px-lg text-right">{{ row.totalRevenue }}</td>
-              <td class="py-4 px-lg text-right text-primary">{{ row.commission }}</td>
-              <td class="py-4 px-lg text-right font-medium">{{ row.netPayable }}</td>
-              <td class="py-4 px-lg">
-                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium" :class="getStatusStyle(row.status)">
-                  {{ getStatusLabel(row.status) }}
-                </span>
-              </td>
-              <td class="py-4 px-lg text-center">
-                <button class="text-primary hover:bg-primary-container/20 p-1.5 rounded-md transition-colors">
-                  <span class="material-symbols-outlined text-[20px]">visibility</span>
-                </button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
       </div>
     </div>
   </div>

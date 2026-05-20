@@ -83,6 +83,22 @@
           </span>
         </button>
 
+        <!-- Notification Bell -->
+        <button
+          v-if="authStore.isAuthenticated"
+          class="relative text-primary hover:text-secondary transition-colors duration-200 cursor-pointer"
+          @click="$router.push('/notifications')"
+          aria-label="Thông báo"
+        >
+          <span class="material-symbols-outlined">notifications</span>
+          <span
+            v-if="unreadNotificationsCount > 0"
+            class="absolute -top-1.5 -right-1.5 bg-error text-on-error text-[10px] font-bold w-[18px] h-[18px] flex items-center justify-center rounded-full"
+          >
+            {{ unreadNotificationsCount > 9 ? '9+' : unreadNotificationsCount }}
+          </span>
+        </button>
+
         <!-- User Section -->
         <template v-if="authStore.isAuthenticated">
           <!-- Admin/Vendor Dashboard Link -->
@@ -165,6 +181,14 @@
             <router-link to="/orders" class="flex items-center gap-md px-md py-sm rounded-lg text-on-surface-variant hover:bg-surface-container-low transition-colors text-sm font-medium" @click="mobileMenuOpen = false">
               <span class="material-symbols-outlined text-[20px]">shopping_bag</span> Đơn hàng
             </router-link>
+            <router-link to="/notifications" class="flex items-center justify-between px-md py-sm rounded-lg text-on-surface-variant hover:bg-surface-container-low transition-colors text-sm font-medium" @click="mobileMenuOpen = false">
+              <span class="flex items-center gap-md">
+                <span class="material-symbols-outlined text-[20px]">notifications</span> Thông báo
+              </span>
+              <span v-if="unreadNotificationsCount > 0" class="bg-error text-on-error text-[10px] font-bold px-2 py-0.5 rounded-full">
+                {{ unreadNotificationsCount }}
+              </span>
+            </router-link>
             <router-link to="/profile" class="flex items-center gap-md px-md py-sm rounded-lg text-on-surface-variant hover:bg-surface-container-low transition-colors text-sm font-medium" @click="mobileMenuOpen = false">
               <span class="material-symbols-outlined text-[20px]">person</span> Tài khoản
             </router-link>
@@ -193,6 +217,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useCartStore } from '@/stores/cart'
 import Button from 'primevue/button'
 import Menu from 'primevue/menu'
+import apiClient from '@/services/axios'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -201,6 +226,17 @@ const logoExists = ref(false)
 const mobileMenuOpen = ref(false)
 const userMenu = ref()
 const searchQuery = ref('')
+const unreadNotificationsCount = ref(0)
+
+const fetchUnreadCount = async () => {
+  if (!authStore.isAuthenticated) return
+  try {
+    const res = await apiClient.get('/api/notifications')
+    unreadNotificationsCount.value = res.data.unread_count || 0
+  } catch (err) {
+    console.error('Failed to fetch unread notification count:', err)
+  }
+}
 
 const userMenuItems = ref([
   {
@@ -261,6 +297,11 @@ onMounted(() => {
   img.onload = () => logoExists.value = true
   img.onerror = () => logoExists.value = false
   img.src = new URL('@/assets/logo.png', import.meta.url).href
+  
+  if (authStore.isAuthenticated) {
+    fetchUnreadCount()
+    setInterval(fetchUnreadCount, 60000)
+  }
 })
 
 const goToDashboard = () => {

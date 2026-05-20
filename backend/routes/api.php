@@ -64,6 +64,11 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/wishlist', [\App\Http\Controllers\Api\WishlistController::class, 'index']);
     Route::post('/wishlist/{bookId}/toggle', [\App\Http\Controllers\Api\WishlistController::class, 'toggle']);
     Route::get('/wishlist/{bookId}/check', [\App\Http\Controllers\Api\WishlistController::class, 'check']);
+
+    // User Notifications
+    Route::get('/notifications', [\App\Http\Controllers\Api\UserNotificationController::class, 'index']);
+    Route::patch('/notifications/{id}/read', [\App\Http\Controllers\Api\UserNotificationController::class, 'markAsRead']);
+    Route::post('/notifications/read-all', [\App\Http\Controllers\Api\UserNotificationController::class, 'markAllAsRead']);
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -109,8 +114,16 @@ Route::middleware(['auth:sanctum', 'role:admin'])->prefix('admin')->name('admin.
     Route::get('users/{id}',         [\App\Http\Controllers\Api\Admin\UserController::class, 'show'])->name('users.show');
     Route::patch('users/{id}/role',  [\App\Http\Controllers\Api\Admin\UserController::class, 'updateRole'])->name('users.updateRole');
 
-    // Quản lý Coupons
+    // Quản lý Coupons và Flash Sales
     Route::apiResource('coupons', \App\Http\Controllers\Api\Admin\CouponController::class);
+    Route::apiResource('flash-sales', \App\Http\Controllers\Api\Admin\FlashSaleController::class);
+    Route::post('flash-sales/{flash_sale}/items', [\App\Http\Controllers\Api\Admin\FlashSaleController::class, 'addItem']);
+    Route::delete('flash-sales/{flash_sale}/items/{item}', [\App\Http\Controllers\Api\Admin\FlashSaleController::class, 'removeItem']);
+    Route::post('flash-sales/{flash_sale}/items/bulk-delete', [\App\Http\Controllers\Api\Admin\FlashSaleController::class, 'bulkRemoveItems']);
+
+    // Admin Notification Campaigns
+    Route::apiResource('notifications/campaigns', \App\Http\Controllers\Api\Admin\NotificationCampaignController::class);
+    Route::post('notifications/campaigns/{id}/send', [\App\Http\Controllers\Api\Admin\NotificationCampaignController::class, 'send']);
 
     // Báo cáo tài chính
     Route::get('finance-report', [\App\Http\Controllers\Api\Admin\FinanceReportController::class, 'index'])->name('finance-report.index');
@@ -126,6 +139,7 @@ Route::middleware(['auth:sanctum', 'role:admin'])->prefix('admin')->name('admin.
 });
 
 Route::get('/flash-sales', [\App\Http\Controllers\Api\CouponController::class, 'flashSales']);
+Route::get('/flash-sales/active', [\App\Http\Controllers\Api\CouponController::class, 'activeFlashSale']);
 
 // Route để stream e-book (Dùng signed URL, xử lý bảo mật bên trong controller bằng relative signature)
 Route::get('/ebooks/{filename}/stream', [\App\Http\Controllers\Api\OrderController::class, 'streamEbook'])

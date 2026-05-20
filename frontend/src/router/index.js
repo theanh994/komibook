@@ -23,6 +23,12 @@ const router = createRouter({
       meta: { guestOnly: false, requiresAuth: false }
     },
     {
+      path: '/flash-sale',
+      name: 'flash-sale',
+      component: () => import('@/views/FlashSaleView.vue'),
+      meta: { guestOnly: false, requiresAuth: false }
+    },
+    {
       path: '/blog',
       name: 'blog',
       component: () => import('@/views/BlogView.vue'),
@@ -152,6 +158,12 @@ const router = createRouter({
           meta: { requiresAuth: true, role: 'admin', hideHeader: true, title: 'Quản lý Khuyến mãi' }
         },
         {
+          path: 'flash-sales/:id',
+          name: 'admin-flash-sale-detail',
+          component: () => import('@/views/admin/FlashSaleDetailView.vue'),
+          meta: { requiresAuth: true, role: 'admin', hideHeader: true, title: 'Chi tiết Flash Sale' }
+        },
+        {
           path: 'system-config',
           name: 'admin-system-config',
           component: () => import('@/views/admin/SystemConfigView.vue'),
@@ -164,22 +176,34 @@ const router = createRouter({
           meta: { requiresAuth: true, role: 'admin', hideHeader: true, title: 'Báo cáo tài chính' }
         },
         {
-          path: 'customers',
-          name: 'admin-customers',
-          component: () => import('@/views/admin/CustomersView.vue'),
-          meta: { requiresAuth: true, role: 'admin', hideHeader: true, title: 'Danh sách Khách hàng' }
-        },
-        {
-          path: 'customers/:id',
-          name: 'admin-customer-detail',
-          component: () => import('@/views/admin/CustomerDetailView.vue'),
-          meta: { requiresAuth: true, role: 'admin', hideHeader: true, title: 'Chi tiết Khách hàng' }
+          path: 'users/:id',
+          name: 'admin-user-detail',
+          component: () => import('@/views/admin/UserDetailView.vue'),
+          meta: { requiresAuth: true, role: 'admin', hideHeader: true, title: 'Chi tiết Users' }
         },
         {
           path: 'reconciliation',
           name: 'admin-reconciliation',
           component: () => import('@/views/admin/ReconciliationView.vue'),
           meta: { requiresAuth: true, role: 'admin', hideHeader: true, title: 'Đối soát & Báo cáo' }
+        },
+        {
+          path: 'notifications',
+          name: 'admin-notifications',
+          component: () => import('@/views/admin/NotificationCampaignsView.vue'),
+          meta: { requiresAuth: true, role: 'admin', hideHeader: true, title: 'Quản lý thông báo' }
+        },
+        {
+          path: 'notifications/create',
+          name: 'admin-notifications-create',
+          component: () => import('@/views/admin/NotificationCreateView.vue'),
+          meta: { requiresAuth: true, role: 'admin', hideHeader: true, title: 'Tạo thông báo mới' }
+        },
+        {
+          path: 'notifications/:id/analytics',
+          name: 'admin-notifications-analytics',
+          component: () => import('@/views/admin/NotificationAnalyticsView.vue'),
+          meta: { requiresAuth: true, role: 'admin', hideHeader: true, title: 'Hiệu quả thông báo' }
         },
       ]
     },

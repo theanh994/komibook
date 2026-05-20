@@ -27,7 +27,7 @@
         <h1 class="text-4xl md:text-6xl font-black text-on-surface tracking-tighter leading-none mb-6">
            Đặt hàng <span class="text-primary italic">thành công!</span>
         </h1>
-        <p class="text-on-surface-variant max-w-lg mx-auto text-lg md:text-xl leading-relaxed font-medium opacity-70 mb-12">
+        <p class="text-on-surface-variant max-w-[32rem] mx-auto text-lg md:text-xl leading-relaxed font-medium opacity-70 mb-12">
           Cảm ơn bạn đã tin tưởng KomiBook. Đơn hàng của bạn đã được ghi nhận và đang được xử lý thần tốc.
         </p>
 

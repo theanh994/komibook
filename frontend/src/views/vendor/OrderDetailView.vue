@@ -93,8 +93,8 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="p-lg lg:p-xl bg-background pt-6">
-    <div class="max-w-container-max mx-auto">
+  <div class="pb-xl w-full pt-6">
+    <div>
       
       <!-- Back button & Page Header -->
       <button @click="goBack" class="flex items-center gap-xs text-on-surface-variant hover:text-primary mb-md font-label-md transition-colors">
