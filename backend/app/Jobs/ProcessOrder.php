@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Models\Book;
 use App\Models\Order;
+use App\Models\WarehouseStock;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -42,17 +43,48 @@ class ProcessOrder implements ShouldQueue
             // Trừ tồn kho thực tế trong MySQL
             foreach ($order->orderItems as $item) {
                 // Sử dụng decrement đảm bảo an toàn truy cập đồng thời (concurrency)
-                Book::withoutGlobalScopes()
-                    ->where('id', $item->book_id)
-                    ->decrement('stock', $item->quantity);
+                $book = Book::withoutGlobalScopes()->where('id', $item->book_id)->first();
+                if ($book) {
+                    $book->decrement('stock', $item->quantity);
+
+                    // Trừ tồn kho chi tiết trong warehouse_stocks cho sách vật lý
+                    if ($book->type === 'physical') {
+                        $warehouseStock = WarehouseStock::where('book_id', $book->id)
+                            ->where('quantity', '>=', $item->quantity)
+                            ->first();
+
+                        if ($warehouseStock) {
+                            $warehouseStock->decrement('quantity', $item->quantity);
+                        } else {
+                            // Trừ lũy tiến từ các kho chứa sách
+                            $remainingToDeduct = $item->quantity;
+                            $stocks = WarehouseStock::where('book_id', $book->id)
+                                ->where('quantity', '>', 0)
+                                ->orderBy('quantity', 'desc')
+                                ->get();
+
+                            foreach ($stocks as $stock) {
+                                if ($remainingToDeduct <= 0) break;
+                                $deduct = min($stock->quantity, $remainingToDeduct);
+                                $stock->decrement('quantity', $deduct);
+                                $remainingToDeduct -= $deduct;
+                            }
+                        }
+                    }
+                }
             }
 
             // Tạo thông báo cơ sở dữ liệu cho User
             try {
+                $isCod = $order->payment_method === 'cod';
+                $messageContent = $isCod
+                    ? "Đơn hàng {$order->order_code} đã được đặt thành công và đang được xử lý."
+                    : "Đơn hàng {$order->order_code} đã thanh toán thành công và đang được xử lý.";
+
                 \App\Models\UserNotification::create([
                     'user_id' => $order->user_id,
                     'title' => 'Đặt hàng thành công',
-                    'content' => "Đơn hàng {$order->order_code} đã thanh toán thành công và đang được xử lý.",
+                    'content' => $messageContent,
                     'type' => 'order',
                     'data' => [
                         'order_id' => $order->id,

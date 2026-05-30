@@ -204,6 +204,13 @@ class WarehouseController extends Controller
             $totalStock = WarehouseStock::where('book_id', $book->id)->sum('quantity');
             $book->update(['stock' => $totalStock]);
 
+            // Xoá key cache tồn kho trên Redis để đồng bộ tồn kho mới nhất
+            try {
+                \Illuminate\Support\Facades\Redis::del("book_stock:{$book->id}");
+            } catch (\Exception $ex) {
+                \Illuminate\Support\Facades\Log::warning("Failed to clear Redis stock cache: " . $ex->getMessage());
+            }
+
             DB::commit();
             return response()->json(['message' => 'Cập nhật tồn kho thành công', 'total_stock' => $totalStock]);
         } catch (\Exception $e) {

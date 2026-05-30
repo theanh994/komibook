@@ -1,5 +1,5 @@
 <template>
-  <div class="min-h-screen bg-background font-outfit antialiased">
+  <div class="min-h-screen bg-background font-inter antialiased">
     <!-- Dynamic Background Decor -->
     <div class="fixed inset-0 pointer-events-none overflow-hidden opacity-30">
        <div class="absolute top-[-10%] right-[-10%] w-[500px] h-[500px] bg-tertiary/10 blur-[100px] rounded-full"></div>
@@ -21,7 +21,7 @@
               <div class="space-y-4">
                 <div class="flex items-center gap-4">
                    <div class="w-2 h-10 bg-tertiary rounded-full"></div>
-                   <h1 class="text-4xl md:text-5xl font-black text-on-surface tracking-tighter leading-none">Dấu ấn tri thức</h1>
+                   <h1 class="text-4xl md:text-5xl font-bold text-on-surface tracking-tighter leading-none">Dấu ấn tri thức</h1>
                 </div>
                 <p class="text-on-surface-variant font-medium opacity-60 max-w-md">Lưu giữ những tâm đắc, suy tư và khoảnh khắc bừng sáng trong hành trình đọc sách của bạn.</p>
               </div>
@@ -44,7 +44,7 @@
                   <div class="absolute inset-0 border-8 border-tertiary/10 rounded-full"></div>
                   <div class="absolute inset-0 border-8 border-t-tertiary rounded-full animate-spin"></div>
                 </div>
-                <p class="text-[11px] font-black text-outline uppercase tracking-[0.3em] animate-pulse">Đang thu thập các dấu ấn...</p>
+                <p class="text-[11px] font-bold text-outline uppercase tracking-[0.3em] animate-pulse">Đang thu thập các dấu ấn...</p>
               </div>
 
               <!-- Empty State -->
@@ -52,7 +52,7 @@
                 <div class="w-32 h-32 bg-surface-container-high rounded-[48px] flex items-center justify-center mx-auto mb-10 text-outline/20 transform -rotate-3 border border-outline-variant/10">
                   <span class="material-symbols-outlined text-7xl text-tertiary/40">edit_note</span>
                 </div>
-                <h3 class="text-3xl font-black text-on-surface mb-4 tracking-tight">Trang giấy chưa có mực</h3>
+                <h3 class="text-3xl font-bold text-on-surface mb-4 tracking-tight">Trang giấy chưa có mực</h3>
                 <p class="text-on-surface-variant mb-12 max-w-sm mx-auto text-lg leading-relaxed font-medium opacity-60">
                   Bạn chưa có ghi chú nào. Hãy bắt đầu ghi lại những suy nghĩ khi đọc E-book nhé!
                 </p>
@@ -63,9 +63,9 @@
                  <div v-for="(group, bookTitle) in groupedAnnotations" :key="bookTitle" class="space-y-6">
                     <div class="flex items-center gap-4">
                        <span class="material-symbols-outlined text-primary">auto_stories</span>
-                       <h2 class="text-xl font-black text-on-surface tracking-tight">{{ bookTitle }}</h2>
+                       <h2 class="text-xl font-bold text-on-surface tracking-tight">{{ bookTitle }}</h2>
                        <div class="flex-grow h-px bg-outline-variant/10"></div>
-                       <span class="text-[10px] font-black text-outline uppercase tracking-widest">{{ group.length }} ghi chú</span>
+                       <span class="text-[10px] font-bold text-outline uppercase tracking-widest">{{ group.length }} ghi chú</span>
                     </div>
 
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -75,7 +75,7 @@
                           
                           <div class="flex justify-between items-start mb-6">
                              <div class="flex items-center gap-3">
-                                <span class="px-3 py-1 bg-surface-container-high text-on-surface-variant text-[9px] font-black uppercase tracking-widest rounded-lg border border-outline-variant/10">
+                                <span class="px-3 py-1 bg-surface-container-high text-on-surface-variant text-[9px] font-bold uppercase tracking-widest rounded-lg border border-outline-variant/10">
                                    {{ note.chapter || 'Chương 1' }}
                                 </span>
                                 <span class="text-[10px] font-bold text-outline opacity-60">{{ formatDate(note.created_at) }}</span>
@@ -97,7 +97,7 @@
                                    "{{ note.highlighted_text }}"
                                 </p>
                              </div>
-                             <p class="text-lg font-black text-on-surface leading-snug tracking-tight">
+                             <p class="text-lg font-bold text-on-surface leading-snug tracking-tight">
                                 {{ note.note_content }}
                              </p>
                           </div>
@@ -199,11 +199,8 @@ onMounted(() => {
 </script>
 
 <style scoped>
-@import url('https://fonts.googleapis.com/css2?family=Literata:ital,wght@0,400;0,700;1,400;1,700&family=Outfit:wght@100;400;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Literata:ital,wght@0,400;0,700;1,400;1,700&display=swap');
 
-.font-outfit {
-  font-family: 'Outfit', sans-serif;
-}
 
 .font-literata {
   font-family: 'Literata', serif;

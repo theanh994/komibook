@@ -25,10 +25,11 @@ class CheckoutController extends Controller
         try {
             $user = $request->user();
             $items = $request->input('items');
-            $shippingData = $request->only(['shipping_address', 'phone']);
+            $shippingData = $request->only(['shipping_address', 'phone', 'payment_method']);
+            $couponCode = $request->input('coupon_code');
 
             // Gọi service xử lý logic lõi
-            $orders = $this->checkoutService->processCheckout($items, $shippingData, $user->id);
+            $orders = $this->checkoutService->processCheckout($items, $shippingData, $user->id, $couponCode);
 
             return response()->json([
                 'success' => true,

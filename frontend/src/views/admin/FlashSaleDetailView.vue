@@ -162,6 +162,46 @@ const deleteSelectedItems = async () => {
   }
 }
 
+const getStatusLabel = (status) => {
+  const map = { pending: 'Chờ duyệt', approved: 'Đã duyệt', rejected: 'Từ chối' }
+  return map[status] || status || 'Đã duyệt'
+}
+
+const getStatusTagClass = (status) => {
+  const map = {
+    pending: 'bg-amber-100 text-amber-700 border border-amber-200',
+    approved: 'bg-emerald-100 text-emerald-700 border border-emerald-200',
+    rejected: 'bg-red-100 text-red-700 border border-red-200'
+  }
+  return map[status] || 'bg-emerald-100 text-emerald-700 border border-emerald-200'
+}
+
+const approveItem = async (item) => {
+  loading.value = true
+  try {
+    await apiClient.put(`/api/admin/flash-sales/items/${item.id}/approve`)
+    toast.add({ severity: 'success', summary: 'Thành công', detail: 'Đã duyệt sản phẩm vào Flash Sale', life: 3000 })
+    fetchFlashSale()
+  } catch (e) {
+    toast.add({ severity: 'error', summary: 'Lỗi', detail: e.response?.data?.message || 'Không thể duyệt sản phẩm', life: 3000 })
+  } finally {
+    loading.value = false
+  }
+}
+
+const rejectItem = async (item) => {
+  loading.value = true
+  try {
+    await apiClient.put(`/api/admin/flash-sales/items/${item.id}/reject`)
+    toast.add({ severity: 'success', summary: 'Thành công', detail: 'Đã từ chối đề xuất tham gia Flash Sale', life: 3000 })
+    fetchFlashSale()
+  } catch (e) {
+    toast.add({ severity: 'error', summary: 'Lỗi', detail: e.response?.data?.message || 'Không thể từ chối sản phẩm', life: 3000 })
+  } finally {
+    loading.value = false
+  }
+}
+
 onMounted(() => {
   fetchFlashSale()
   fetchBooks()
@@ -241,13 +281,56 @@ onMounted(() => {
 
         <Column header="Đã bán/Giới hạn" style="min-width: 150px">
           <template #body="{ data }">
-            <span class="text-sm font-medium">{{ data.sold_quantity }} / {{ data.max_quantity === 0 ? '∞' : data.max_quantity }}</span>
+            <span class="text-sm font-medium whitespace-nowrap">{{ data.sold_quantity }} / {{ data.max_quantity === 0 ? '∞' : data.max_quantity }}</span>
           </template>
         </Column>
 
-        <Column header="Hành động" :exportable="false" style="min-width: 100px">
+        <Column header="Gian hàng" style="min-width: 150px">
+          <template #body="{ data }">
+            <span class="text-sm font-bold text-on-surface-variant whitespace-nowrap">
+              {{ data.book?.vendor?.shop_name || 'Admin hệ thống' }}
+            </span>
+          </template>
+        </Column>
+
+        <Column header="Trạng thái" style="min-width: 120px">
+          <template #body="{ data }">
+            <span :class="['px-2.5 py-1 rounded-full text-xs font-black uppercase tracking-wider shadow-sm whitespace-nowrap', getStatusTagClass(data.status)]">
+              {{ getStatusLabel(data.status) }}
+            </span>
+          </template>
+        </Column>
+
+        <Column header="Hành động" :exportable="false" style="min-width: 180px">
           <template #body="slotProps">
-            <Button icon="pi pi-trash" outlined rounded severity="danger" @click="confirmDeleteItem(slotProps.data)" />
+            <div class="flex items-center gap-2">
+              <Button 
+                v-if="slotProps.data.status === 'pending'" 
+                icon="pi pi-check" 
+                severity="success" 
+                rounded 
+                outlined
+                @click="approveItem(slotProps.data)" 
+                v-tooltip="'Duyệt sản phẩm'"
+              />
+              <Button 
+                v-if="slotProps.data.status === 'pending'" 
+                icon="pi pi-times" 
+                severity="warn" 
+                rounded 
+                outlined
+                @click="rejectItem(slotProps.data)" 
+                v-tooltip="'Từ chối sản phẩm'"
+              />
+              <Button 
+                icon="pi pi-trash" 
+                outlined 
+                rounded 
+                severity="danger" 
+                @click="confirmDeleteItem(slotProps.data)" 
+                v-tooltip="'Xóa khỏi Flash Sale'"
+              />
+            </div>
           </template>
         </Column>
       </DataTable>

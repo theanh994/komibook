@@ -52,6 +52,31 @@ class Order extends Model
                 $order->order_code = self::generateOrderCode();
             }
         });
+
+        // Tự động cập nhật số dư cho Vendor khi đơn hàng hoàn thành
+        static::updating(function (Order $order) {
+            if ($order->isDirty('status') && $order->status === 'completed' && $order->getOriginal('status') !== 'completed') {
+                if ($order->payment_status !== 'paid') {
+                    $order->payment_status = 'paid';
+                }
+
+                $vendor = Vendor::withoutGlobalScopes()->find($order->vendor_id);
+                if ($vendor) {
+                    $configPath = storage_path('app/private/system_config.json');
+                    $commissionRate = 10;
+                    if (file_exists($configPath)) {
+                        $config = json_decode(file_get_contents($configPath), true);
+                        if (isset($config['commission_rate'])) {
+                            $commissionRate = (float) $config['commission_rate'];
+                        }
+                    }
+
+                    $vendorEarnings = $order->total_amount * (100 - $commissionRate) / 100;
+                    $vendor->balance += (int)$vendorEarnings;
+                    $vendor->save();
+                }
+            }
+        });
     }
 
     /**

@@ -99,7 +99,9 @@ class CouponController extends Controller
         $activeSale = \App\Models\FlashSale::where('is_active', true)
             ->where('start_time', '<=', $now)
             ->where('end_time', '>', $now)
-            ->with(['items.book.category', 'items.book.vendor'])
+            ->with(['items' => function($q) {
+                $q->where('status', 'approved')->with(['book.category', 'book.vendor']);
+            }])
             ->first();
 
         return response()->json([

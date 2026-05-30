@@ -123,7 +123,7 @@ class Book extends Model
                 ->first();
 
             if ($activeSale) {
-                self::$activeFlashSaleBooks = $activeSale->items()->get()->keyBy('book_id');
+                self::$activeFlashSaleBooks = $activeSale->items()->where('status', 'approved')->get()->keyBy('book_id');
             } else {
                 self::$activeFlashSaleBooks = collect();
             }

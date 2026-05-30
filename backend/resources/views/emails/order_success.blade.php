@@ -133,7 +133,11 @@
         </div>
         <div class="content">
             <p>Chào <strong>{{ $order->user->name }}</strong>,</p>
-            <p>Chúng tôi đã nhận được thanh toán cho đơn hàng của bạn. Đơn hàng hiện đang được chuyển đến nhà cung cấp (vendor) để đóng gói và vận chuyển trong thời gian sớm nhất.</p>
+            @if ($order->payment_method === 'cod')
+                <p>Đơn hàng của bạn đã được đặt thành công. Chúng tôi sẽ chuẩn bị và giao hàng cho bạn, thanh toán sẽ được thực hiện khi nhận hàng (COD).</p>
+            @else
+                <p>Chúng tôi đã nhận được thanh toán cho đơn hàng của bạn. Đơn hàng hiện đang được chuẩn bị để đóng gói và giao hàng trong thời gian sớm nhất.</p>
+            @endif
             
             <div class="order-summary">
                 <table>
@@ -143,7 +147,13 @@
                     </tr>
                     <tr>
                         <td class="label">Trạng thái thanh toán:</td>
-                        <td class="value" style="color: #10b981;">Đã thanh toán (VNPAY)</td>
+                        <td class="value" style="color: {{ $order->payment_status === 'paid' ? '#10b981' : '#f59e0b' }};">
+                            @if ($order->payment_status === 'paid')
+                                Đã thanh toán ({{ strtoupper($order->payment_method) }})
+                            @else
+                                Chưa thanh toán ({{ strtoupper($order->payment_method) }})
+                            @endif
+                        </td>
                     </tr>
                     <tr>
                         <td class="label">Ngày đặt:</td>
@@ -151,11 +161,11 @@
                     </tr>
                     <tr>
                         <td class="label">Người nhận:</td>
-                        <td class="value">{{ $order->shipping_fullname }}</td>
+                        <td class="value">{{ $order->user->name }}</td>
                     </tr>
                     <tr>
                         <td class="label">Số điện thoại:</td>
-                        <td class="value">{{ $order->shipping_phone }}</td>
+                        <td class="value">{{ $order->phone }}</td>
                     </tr>
                     <tr>
                         <td class="label">Địa chỉ giao hàng:</td>

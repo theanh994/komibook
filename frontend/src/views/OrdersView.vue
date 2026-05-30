@@ -66,8 +66,11 @@
                     <span :class="['px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider shadow-sm', getStatusStyle(order.status)]">
                       {{ getStatusText(order.status) }}
                     </span>
+                    <span :class="['px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider shadow-sm', getPaymentStatusStyle(order.payment_status)]">
+                      {{ getPaymentStatusText(order.payment_status) }}
+                    </span>
                     <span class="px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider bg-surface-container-highest text-on-surface-variant border border-outline-variant/30">
-                      {{ order.payment_method }}
+                      {{ getPaymentMethodText(order.payment_method) }}
                     </span>
                   </div>
                 </div>
@@ -118,10 +121,22 @@
                     <span class="text-[10px] font-bold text-outline uppercase tracking-wider mb-1">Tổng thanh toán</span>
                     <span class="text-lg font-black text-primary">{{ formatCurrency(order.total_amount) }}</span>
                   </div>
-                  <button @click="showOrderDetail(order)" class="text-xs font-black uppercase text-secondary hover:underline bg-transparent border-none cursor-pointer flex items-center gap-1">
-                    Xem chi tiết
-                    <span class="material-symbols-outlined text-[16px]">chevron_right</span>
-                  </button>
+                  <div class="flex items-center gap-3">
+                    <button 
+                      v-if="order.status === 'pending' && order.payment_status === 'unpaid' && (order.payment_method === 'online' || order.payment_method === 'VNPAY')"
+                      @click="payNow(order)"
+                      :disabled="payingOrderId === order.id"
+                      class="px-4 py-2 rounded-xl bg-primary text-on-primary hover:bg-primary/90 transition-all border-none cursor-pointer flex items-center gap-1 text-xs font-bold shadow-sm disabled:opacity-50 animate-pulse"
+                    >
+                      <span v-if="payingOrderId === order.id" class="w-4 h-4 border-2 border-on-primary/20 border-t-on-primary rounded-full animate-spin"></span>
+                      <span v-else class="material-symbols-outlined text-[18px]">credit_card</span>
+                      Thanh toán ngay
+                    </button>
+                    <button @click="showOrderDetail(order)" class="text-xs font-black uppercase text-secondary hover:underline bg-transparent border-none cursor-pointer flex items-center gap-1">
+                      Xem chi tiết
+                      <span class="material-symbols-outlined text-[16px]">chevron_right</span>
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -140,7 +155,11 @@
             </div>
             <div class="flex justify-between">
               <span class="text-sm text-on-surface-variant font-medium">Phương thức</span>
-              <span class="text-sm font-bold text-on-surface">{{ selectedOrder.payment_method }}</span>
+              <span class="text-sm font-bold text-on-surface">{{ getPaymentMethodText(selectedOrder.payment_method) }}</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-sm text-on-surface-variant font-medium">Trạng thái thanh toán</span>
+              <span class="text-sm font-bold text-on-surface">{{ getPaymentStatusText(selectedOrder.payment_status) }}</span>
             </div>
             <div class="flex justify-between pt-md border-t border-outline-variant/10">
               <span class="text-base font-bold text-on-surface">Tổng cộng</span>
@@ -155,6 +174,7 @@
 
 <script setup>
 import { ref, onMounted, computed } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from 'primevue/usetoast'
 import apiClient from '@/services/axios'
@@ -164,12 +184,15 @@ import Dialog from 'primevue/dialog'
 
 const authStore = useAuthStore()
 const toast = useToast()
+const route = useRoute()
+const router = useRouter()
 
 const orders = ref([])
 const loading = ref(true)
 const currentFilter = ref('all')
 const orderDetailVisible = ref(false)
 const selectedOrder = ref(null)
+const payingOrderId = ref(null)
 
 const statusFilters = [
   { label: 'Tất cả', value: 'all' },
@@ -239,8 +262,58 @@ const getStatusStyle = (status) => {
   return map[status] || 'bg-surface-container-high text-on-surface-variant'
 }
 
+const getPaymentStatusText = (status) => {
+  const map = { unpaid: 'Chưa thanh toán', paid: 'Đã thanh toán', refunded: 'Đã hoàn tiền' }
+  return map[status] || status
+}
+
+const getPaymentStatusStyle = (status) => {
+  const map = {
+    unpaid: 'bg-error-container text-error border border-error/20',
+    paid: 'bg-emerald-100 text-emerald-700 border border-emerald-200',
+    refunded: 'bg-blue-100 text-blue-700 border border-blue-200'
+  }
+  return map[status] || 'bg-surface-container-high text-on-surface-variant'
+}
+
+const getPaymentMethodText = (method) => {
+  const map = { cod: 'COD', online: 'Online (VNPAY)', vnpay: 'Online (VNPAY)', VNPAY: 'Online (VNPAY)' }
+  return map[method] || method
+}
+
+const payNow = async (order) => {
+  payingOrderId.value = order.id
+  try {
+    const res = await apiClient.post('/api/vnpay/create', { order_id: order.id })
+    if (res.data && res.data.url) {
+      window.location.href = res.data.url
+    } else {
+      toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Không thể tạo liên kết thanh toán', life: 3000 })
+    }
+  } catch (error) {
+    const errorMsg = error.response?.data?.message || 'Lỗi kết nối đến máy chủ thanh toán'
+    toast.add({ severity: 'error', summary: 'Lỗi thanh toán', detail: errorMsg, life: 3000 })
+  } finally {
+    payingOrderId.value = null
+  }
+}
+
 onMounted(() => {
   fetchOrders()
+
+  // Xử lý thông báo kết quả thanh toán từ VNPAY redirect
+  const paymentStatus = route.query.payment
+  if (paymentStatus) {
+    if (paymentStatus === 'success') {
+      toast.add({ severity: 'success', summary: 'Thành công', detail: 'Thanh toán đơn hàng thành công!', life: 5000 })
+    } else if (paymentStatus === 'failed') {
+      toast.add({ severity: 'error', summary: 'Thất bại', detail: 'Thanh toán đơn hàng không thành công hoặc đã bị hủy.', life: 5000 })
+    } else if (paymentStatus === 'invalid_signature') {
+      toast.add({ severity: 'warn', summary: 'Cảnh báo', detail: 'Chữ ký thanh toán không hợp lệ.', life: 5000 })
+    }
+    // Xóa query parameter trên URL để tránh hiển thị lại khi reload trang
+    router.replace({ query: {} })
+  }
 })
 </script>
 

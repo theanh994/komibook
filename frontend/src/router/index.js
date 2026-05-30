@@ -254,6 +254,12 @@ const router = createRouter({
           component: () => import('@/views/vendor/FinanceView.vue'),
           meta: { requiresAuth: true, role: 'vendor', hideHeader: true, title: 'Doanh thu & Rút tiền' }
         },
+        {
+          path: 'flash-sales',
+          name: 'vendor-flash-sales',
+          component: () => import('@/views/vendor/FlashSalesView.vue'),
+          meta: { requiresAuth: true, role: 'vendor', hideHeader: true, title: 'Đăng ký Flash Sale' }
+        },
       ]
     }
   ],

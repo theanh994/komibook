@@ -85,7 +85,9 @@ export const useCartStore = defineStore('cart', () => {
     const payload = {
       items: payloadItems,
       shipping_address: shippingData.shipping_address,
-      phone: shippingData.phone
+      phone: shippingData.phone,
+      payment_method: shippingData.payment_method,
+      coupon_code: shippingData.coupon_code
     }
 
     const response = await apiClient.post('/api/checkout', payload)

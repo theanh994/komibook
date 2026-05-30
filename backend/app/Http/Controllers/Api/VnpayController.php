@@ -172,6 +172,7 @@ class VnpayController extends Controller
                             if ($inputData['vnp_ResponseCode'] == '00' && $inputData['vnp_TransactionStatus'] == '00') {
                                 // Giao dịch thành công
                                 $order->status = 'processing';
+                                $order->payment_status = 'paid';
                                 $order->payment_method = 'VNPAY';
                                 $order->save();
 

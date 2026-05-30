@@ -1,6 +1,6 @@
 <template>
   <div 
-    class="h-screen w-full flex flex-col md:flex-row transition-all duration-700 overflow-hidden font-outfit select-none" 
+    class="h-screen w-full flex flex-col md:flex-row transition-all duration-700 overflow-hidden font-inter select-none" 
     :class="[themeClasses[currentTheme].bg, themeClasses[currentTheme].text]"
     @contextmenu.prevent
   >
@@ -16,8 +16,8 @@
           <span class="material-symbols-outlined text-[28px] fill-1">menu_book</span>
         </div>
         <div>
-          <h1 class="text-2xl font-black text-on-surface tracking-tighter leading-none">KomiBook</h1>
-          <p class="text-[9px] uppercase tracking-[0.2em] text-primary font-black mt-1.5 opacity-80">Premium Reader v2.0</p>
+          <h1 class="text-2xl font-bold text-on-surface tracking-tighter leading-none">KomiBook</h1>
+          <p class="text-[9px] uppercase tracking-[0.2em] text-primary font-bold mt-1.5 opacity-80">Premium Reader v2.0</p>
         </div>
       </div>
 
@@ -31,7 +31,7 @@
           :class="[activeTab === tab.id ? 'bg-primary text-on-primary shadow-xl shadow-primary/20 scale-[1.02]' : 'text-on-surface-variant hover:bg-primary/5 hover:text-primary']"
         >
           <span class="material-symbols-outlined text-[24px] z-10" :style="{ 'font-variation-settings': activeTab === tab.id ? `'FILL' 1` : `'FILL' 0` }">{{ tab.icon }}</span>
-          <span class="font-black text-sm uppercase tracking-wider z-10">{{ tab.label }}</span>
+          <span class="font-bold text-sm uppercase tracking-wider z-10">{{ tab.label }}</span>
           <div v-if="activeTab === tab.id" class="absolute inset-0 bg-gradient-to-r from-primary to-primary-fixed opacity-10"></div>
         </button>
       </div>
@@ -40,8 +40,8 @@
       <div class="px-6 mt-auto">
         <div class="bg-surface-container-high/40 backdrop-blur-md p-lg rounded-[28px] border border-outline-variant/10 mb-6 group hover:border-primary/20 transition-all duration-500">
           <div class="flex justify-between items-center mb-3">
-            <span class="text-[10px] font-black uppercase text-primary tracking-widest">Tiến độ đọc</span>
-            <span class="text-sm font-black text-primary">{{ readingProgress }}%</span>
+            <span class="text-[10px] font-bold uppercase text-primary tracking-widest">Tiến độ đọc</span>
+            <span class="text-sm font-bold text-primary">{{ readingProgress }}%</span>
           </div>
           <div class="w-full h-2 bg-surface-container-highest/50 rounded-full overflow-hidden p-[2px]">
             <div class="h-full bg-primary rounded-full transition-all duration-1000 ease-out shadow-[0_0_12px_rgba(var(--primary-rgb),0.4)]" :style="{ width: readingProgress + '%' }"></div>
@@ -49,7 +49,7 @@
           <p class="text-[9px] text-on-surface-variant mt-3 text-center font-bold uppercase tracking-tighter opacity-50">Bạn đang đọc trang {{ currentPage }} của {{ totalPages }}</p>
         </div>
 
-        <button @click="$router.push('/my-library')" class="w-full flex items-center justify-center gap-3 py-4.5 rounded-[22px] bg-on-surface text-surface font-black text-xs uppercase tracking-widest hover:opacity-90 active:scale-95 transition-all shadow-xl">
+        <button @click="$router.push('/my-library')" class="w-full flex items-center justify-center gap-3 py-4.5 rounded-[22px] bg-on-surface text-surface font-bold text-xs uppercase tracking-widest hover:opacity-90 active:scale-95 transition-all shadow-xl">
           <span class="material-symbols-outlined text-[22px]">library_books</span>
           Thư viện của tôi
         </button>
@@ -62,7 +62,7 @@
         <button @click="$router.push('/my-library')" class="w-10 h-10 rounded-full bg-surface-container-high flex items-center justify-center text-on-surface-variant active:scale-90 transition-all">
           <span class="material-symbols-outlined text-[22px]">arrow_back</span>
         </button>
-        <span class="font-black text-xl tracking-tighter text-on-surface">Komibook</span>
+        <span class="font-bold text-xl tracking-tighter text-on-surface">Komibook</span>
       </div>
       <div class="flex gap-3">
         <button @click="showSettings = true" class="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary active:scale-90 transition-all">
@@ -125,7 +125,7 @@
                 <div class="absolute inset-0 border-4 border-primary/20 rounded-full"></div>
                 <div class="absolute inset-0 border-4 border-t-primary rounded-full animate-spin"></div>
               </div>
-              <p class="font-black text-primary uppercase tracking-[0.2em] text-sm animate-pulse">Đang trải thảm tri thức...</p>
+              <p class="font-bold text-primary uppercase tracking-[0.2em] text-sm animate-pulse">Đang trải thảm tri thức...</p>
             </div>
 
             <!-- Error State -->
@@ -133,9 +133,9 @@
               <div class="w-24 h-24 bg-error/10 rounded-full flex items-center justify-center mx-auto mb-xl">
                 <span class="material-symbols-outlined text-[56px] text-error">error_medley</span>
               </div>
-              <h2 class="text-3xl font-black text-on-surface mb-md tracking-tight">Opps! Sách bị kẹt rồi</h2>
+              <h2 class="text-3xl font-bold text-on-surface mb-md tracking-tight">Opps! Sách bị kẹt rồi</h2>
               <p class="text-on-surface-variant mb-xl max-w-md mx-auto leading-relaxed">{{ error }}</p>
-              <button @click="fetchEbookData" class="bg-error text-on-error px-12 py-4 rounded-2xl font-black shadow-xl shadow-error/20 hover:scale-105 active:scale-95 transition-all">Thử mở lại</button>
+              <button @click="fetchEbookData" class="bg-error text-on-error px-12 py-4 rounded-2xl font-bold shadow-xl shadow-error/20 hover:scale-105 active:scale-95 transition-all">Thử mở lại</button>
             </div>
 
             <!-- The PDF Content -->
@@ -173,7 +173,7 @@
                  <div class="h-1.5 w-32 bg-primary/20 rounded-full overflow-hidden">
                     <div class="h-full bg-primary animate-progress-loading"></div>
                  </div>
-                 <p class="text-[10px] font-black uppercase tracking-[0.3em] text-outline opacity-40">Mẹo: Vuốt hoặc nhấn đúp chuột để chuyển trang</p>
+                 <p class="text-[10px] font-bold uppercase tracking-[0.3em] text-outline opacity-40">Mẹo: Vuốt hoặc nhấn đúp chuột để chuyển trang</p>
               </div>
             </div>
           </div>
@@ -198,7 +198,7 @@
                 type="number" 
                 v-model.number="inputPage"
                 @keyup.enter="jumpToPage"
-                class="w-14 h-14 bg-outline-variant/20 border-none text-center rounded-2xl font-black text-2xl text-on-surface focus:bg-primary focus:text-on-primary transition-all outline-none"
+                class="w-14 h-14 bg-outline-variant/20 border-none text-center rounded-2xl font-bold text-2xl text-on-surface focus:bg-primary focus:text-on-primary transition-all outline-none"
                 min="1"
                 :max="totalPages"
               />
@@ -229,7 +229,7 @@
           <div class="w-10 h-10 rounded-2xl bg-primary/10 flex items-center justify-center text-primary">
              <span class="material-symbols-outlined">{{ activeTabInfo?.icon }}</span>
           </div>
-          <h2 class="text-xl font-black text-on-surface tracking-tight">{{ activeTabInfo?.label }}</h2>
+          <h2 class="text-xl font-bold text-on-surface tracking-tight">{{ activeTabInfo?.label }}</h2>
         </div>
       </template>
 
@@ -240,13 +240,13 @@
             <div class="animate-slide-up">
               <div class="flex items-center gap-3 mb-2">
                  <div class="w-1.5 h-6 bg-primary rounded-full"></div>
-                 <span class="text-xs font-black text-primary uppercase tracking-[0.3em]">Hành trình khám phá</span>
+                 <span class="text-xs font-bold text-primary uppercase tracking-[0.3em]">Hành trình khám phá</span>
               </div>
-              <h2 class="text-3xl font-black text-on-surface tracking-tight">Mục lục tác phẩm</h2>
+              <h2 class="text-3xl font-bold text-on-surface tracking-tight">Mục lục tác phẩm</h2>
             </div>
             <div class="inline-flex w-max items-center gap-3 bg-surface-container-high/50 px-4 py-2 rounded-xl border border-outline-variant/10 animate-fade-in">
                <span class="material-symbols-outlined text-primary text-sm">list_alt</span>
-               <span class="text-sm font-black text-on-surface tracking-tighter">{{ outline.length }} Chương & Mục</span>
+               <span class="text-sm font-bold text-on-surface tracking-tighter">{{ outline.length }} Chương & Mục</span>
             </div>
           </header>
 
@@ -254,7 +254,7 @@
             <div class="w-20 h-20 bg-surface-container-high rounded-full flex items-center justify-center mb-6">
               <span class="material-symbols-outlined text-[40px] text-outline/30">content_paste_off</span>
             </div>
-            <h3 class="text-lg font-black text-on-surface mb-1">Chưa có mục lục</h3>
+            <h3 class="text-lg font-bold text-on-surface mb-1">Chưa có mục lục</h3>
             <p class="text-sm text-on-surface-variant font-medium opacity-60 text-center px-4">Tác phẩm này đang được cập nhật chỉ mục kỹ thuật số.</p>
           </div>
 
@@ -268,11 +268,11 @@
             >
               <div class="flex items-center gap-4">
                 <div class="w-10 h-10 flex-shrink-0 flex items-center justify-center rounded-xl bg-surface-container-high group-hover:bg-primary group-hover:text-on-primary transition-all duration-300">
-                  <span class="text-sm font-black tracking-tighter">{{ (index + 1).toString().padStart(2, '0') }}</span>
+                  <span class="text-sm font-bold tracking-tighter">{{ (index + 1).toString().padStart(2, '0') }}</span>
                 </div>
                 <div>
                   <span class="text-base font-bold text-on-surface group-hover:text-primary transition-colors block leading-tight">{{ item.title }}</span>
-                  <span class="text-[9px] font-black uppercase text-outline opacity-40 group-hover:opacity-100 transition-all tracking-[0.2em] mt-1 block">Chương tác phẩm</span>
+                  <span class="text-[9px] font-bold uppercase text-outline opacity-40 group-hover:opacity-100 transition-all tracking-[0.2em] mt-1 block">Chương tác phẩm</span>
                 </div>
               </div>
               <div class="w-8 h-8 flex-shrink-0 rounded-full border border-outline-variant/30 flex items-center justify-center group-hover:bg-primary group-hover:border-primary group-hover:translate-x-1 transition-all duration-300">
@@ -290,15 +290,15 @@
             <div class="animate-slide-up">
               <div class="flex items-center gap-3 mb-3">
                  <div class="w-1.5 h-6 bg-secondary rounded-full"></div>
-                 <span class="text-xs font-black text-secondary uppercase tracking-[0.3em]">Kho tàng cảm xúc</span>
+                 <span class="text-xs font-bold text-secondary uppercase tracking-[0.3em]">Kho tàng cảm xúc</span>
               </div>
-              <h2 class="text-3xl font-black text-on-surface tracking-tight">Ghi chú & Đánh dấu</h2>
+              <h2 class="text-3xl font-bold text-on-surface tracking-tight">Ghi chú & Đánh dấu</h2>
               <p class="text-on-surface-variant font-medium mt-2 text-sm">Lưu giữ từng khoảnh khắc bừng sáng của trí tuệ.</p>
             </div>
             <div class="flex flex-wrap gap-2 animate-fade-in">
-              <button @click="annotationFilter = 'all'" :class="annotationFilter === 'all' ? 'bg-primary text-on-primary shadow-md shadow-primary/20' : 'bg-surface-container-high text-on-surface-variant'" class="px-5 py-2.5 rounded-xl text-xs font-black transition-all">Tất cả ({{ annotations.length }})</button>
-              <button @click="annotationFilter = 'highlight'" :class="annotationFilter === 'highlight' ? 'bg-secondary text-on-secondary shadow-md shadow-secondary/20' : 'bg-surface-container-high text-on-surface-variant'" class="px-5 py-2.5 rounded-xl text-xs font-black transition-all">Highlights</button>
-              <button @click="annotationFilter = 'note'" :class="annotationFilter === 'note' ? 'bg-tertiary text-on-tertiary shadow-md shadow-tertiary/20' : 'bg-surface-container-high text-on-surface-variant'" class="px-5 py-2.5 rounded-xl text-xs font-black transition-all">Ghi chú</button>
+              <button @click="annotationFilter = 'all'" :class="annotationFilter === 'all' ? 'bg-primary text-on-primary shadow-md shadow-primary/20' : 'bg-surface-container-high text-on-surface-variant'" class="px-5 py-2.5 rounded-xl text-xs font-bold transition-all">Tất cả ({{ annotations.length }})</button>
+              <button @click="annotationFilter = 'highlight'" :class="annotationFilter === 'highlight' ? 'bg-secondary text-on-secondary shadow-md shadow-secondary/20' : 'bg-surface-container-high text-on-surface-variant'" class="px-5 py-2.5 rounded-xl text-xs font-bold transition-all">Highlights</button>
+              <button @click="annotationFilter = 'note'" :class="annotationFilter === 'note' ? 'bg-tertiary text-on-tertiary shadow-md shadow-tertiary/20' : 'bg-surface-container-high text-on-surface-variant'" class="px-5 py-2.5 rounded-xl text-xs font-bold transition-all">Ghi chú</button>
             </div>
           </header>
 
@@ -306,7 +306,7 @@
             <div class="w-24 h-24 bg-surface-container-high rounded-full flex items-center justify-center mb-6">
               <span class="material-symbols-outlined text-[48px] text-outline/30">draw_abstract</span>
             </div>
-            <h3 class="text-xl font-black text-on-surface mb-2">Trang giấy còn trống</h3>
+            <h3 class="text-xl font-bold text-on-surface mb-2">Trang giấy còn trống</h3>
             <p class="text-sm text-on-surface-variant font-medium opacity-60">Hãy bắt đầu tô điểm hành trình đọc sách của bạn.</p>
           </div>
 
@@ -325,7 +325,7 @@
                    <div class="w-8 h-8 rounded-full bg-surface-container-high flex items-center justify-center">
                       <span class="material-symbols-outlined text-sm text-primary">auto_stories</span>
                    </div>
-                   <span class="text-[10px] font-black uppercase tracking-widest text-on-surface">Trang {{ note.page }}</span>
+                   <span class="text-[10px] font-bold uppercase tracking-widest text-on-surface">Trang {{ note.page }}</span>
                 </div>
                 <span class="text-[9px] font-bold text-outline uppercase tracking-tighter">{{ formatDate(note.created_at) }}</span>
               </div>
@@ -337,7 +337,7 @@
               <div class="bg-surface-container-low p-5 rounded-2xl border border-outline-variant/10 relative">
                 <div class="flex items-center gap-2 mb-2 text-primary opacity-60">
                   <span class="material-symbols-outlined text-xs">edit_square</span>
-                  <span class="text-[8px] font-black uppercase tracking-[0.2em]">Suy tư của bạn</span>
+                  <span class="text-[8px] font-bold uppercase tracking-[0.2em]">Suy tư của bạn</span>
                 </div>
                 <p class="text-sm font-bold text-on-surface leading-relaxed">{{ note.note_content }}</p>
                 <span class="absolute bottom-3 right-3 material-symbols-outlined text-2xl text-primary/5 group-hover:text-primary/20 transition-all">format_quote</span>
@@ -359,8 +359,8 @@
             </div>
 
             <div class="text-center space-y-4">
-              <span class="inline-block px-3 py-1 bg-primary/10 text-primary text-[9px] font-black uppercase tracking-widest rounded-full border border-primary/20">Digital Edition</span>
-              <h1 class="text-3xl font-black text-on-surface leading-tight tracking-tight">{{ book?.title }}</h1>
+              <span class="inline-block px-3 py-1 bg-primary/10 text-primary text-[9px] font-bold uppercase tracking-widest rounded-full border border-primary/20">Digital Edition</span>
+              <h1 class="text-3xl font-bold text-on-surface leading-tight tracking-tight">{{ book?.title }}</h1>
               <p class="text-base text-on-surface-variant font-bold tracking-tight">Bởi {{ book?.author }}</p>
             </div>
           </div>
@@ -369,8 +369,8 @@
           <div class="grid grid-cols-2 gap-3 mb-8">
             <div v-for="stat in bookStats" :key="stat.label" class="bg-surface-container-lowest p-4 rounded-2xl border border-outline-variant/10 shadow-sm hover:border-primary/30 transition-all text-center">
               <span class="material-symbols-outlined text-primary mb-2 text-xl">{{ stat.icon }}</span>
-              <p class="text-[8px] uppercase font-black text-outline tracking-widest mb-1">{{ stat.label }}</p>
-              <p class="text-base font-black text-on-surface">{{ stat.value }}</p>
+              <p class="text-[8px] uppercase font-bold text-outline tracking-widest mb-1">{{ stat.label }}</p>
+              <p class="text-base font-bold text-on-surface">{{ stat.value }}</p>
             </div>
           </div>
 
@@ -378,12 +378,12 @@
           <div class="prose max-w-none mb-10">
             <div class="flex items-center gap-2 mb-4">
                <div class="w-1.5 h-5 bg-primary rounded-full"></div>
-               <h3 class="text-xl font-black text-on-surface tracking-tight">Tóm tắt nội dung</h3>
+               <h3 class="text-xl font-bold text-on-surface tracking-tight">Tóm tắt nội dung</h3>
             </div>
             <p class="font-literata text-sm text-on-surface-variant leading-relaxed text-justify opacity-80">{{ book?.description }}</p>
           </div>
 
-          <button class="w-full bg-primary text-on-primary py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-primary/20 flex items-center justify-center gap-2 hover:opacity-90 active:scale-95 transition-all">
+          <button class="w-full bg-primary text-on-primary py-4 rounded-2xl font-bold text-xs uppercase tracking-widest shadow-xl shadow-primary/20 flex items-center justify-center gap-2 hover:opacity-90 active:scale-95 transition-all">
              <span class="material-symbols-outlined text-lg">share</span>
              Chia sẻ tác phẩm
           </button>
@@ -406,7 +406,7 @@
         >
           <span class="material-symbols-outlined text-[28px]" :style="{ 'font-variation-settings': activeTab === tab.id ? `'FILL' 1` : `'FILL' 0` }">{{ tab.icon }}</span>
         </div>
-        <span class="text-[9px] font-black uppercase tracking-widest mt-2">{{ tab.label }}</span>
+        <span class="text-[9px] font-bold uppercase tracking-widest mt-2">{{ tab.label }}</span>
         <div v-if="activeTab === tab.id" class="absolute -top-2 w-1.5 h-1.5 bg-primary rounded-full animate-bounce"></div>
       </button>
     </nav>
@@ -418,14 +418,14 @@
             <div class="w-10 h-10 rounded-2xl bg-primary/10 flex items-center justify-center text-primary">
                <span class="material-symbols-outlined">settings_suggest</span>
             </div>
-            <h2 class="text-2xl font-black text-on-surface tracking-tight">Cá nhân hóa</h2>
+            <h2 class="text-2xl font-bold text-on-surface tracking-tight">Cá nhân hóa</h2>
          </div>
       </template>
       
       <div class="flex flex-col gap-12 py-8">
         <!-- Themes -->
         <div>
-          <h3 class="text-[10px] font-black uppercase tracking-[0.3em] text-primary mb-8 flex items-center gap-2">
+          <h3 class="text-[10px] font-bold uppercase tracking-[0.3em] text-primary mb-8 flex items-center gap-2">
              <span>Không gian đọc</span>
              <div class="h-px flex-1 bg-primary/20"></div>
           </h3>
@@ -438,7 +438,7 @@
               :class="[currentTheme === key ? 'border-primary bg-primary/5 shadow-xl' : 'border-outline-variant/10 hover:border-primary/20 bg-surface-container-low']"
             >
               <div class="w-12 h-12 rounded-2xl shadow-inner border border-black/5" :class="theme.bg"></div>
-              <span class="text-[10px] font-black uppercase tracking-widest text-on-surface">{{ theme.name }}</span>
+              <span class="text-[10px] font-bold uppercase tracking-widest text-on-surface">{{ theme.name }}</span>
               <div v-if="currentTheme === key" class="absolute top-2 right-2">
                  <span class="material-symbols-outlined text-primary text-sm">check_circle</span>
               </div>
@@ -448,7 +448,7 @@
 
         <!-- Typography -->
         <div>
-          <h3 class="text-[10px] font-black uppercase tracking-[0.3em] text-primary mb-8 flex items-center gap-2">
+          <h3 class="text-[10px] font-bold uppercase tracking-[0.3em] text-primary mb-8 flex items-center gap-2">
              <span>Phông chữ & Cỡ chữ</span>
              <div class="h-px flex-1 bg-primary/20"></div>
           </h3>
@@ -460,8 +460,8 @@
                       <span class="material-symbols-outlined">text_decrease</span>
                    </button>
                    <div class="text-center">
-                      <p class="text-4xl font-black text-primary tracking-tighter">{{ Math.round(scale * 100) }}%</p>
-                      <p class="text-[9px] font-black uppercase tracking-widest opacity-40 mt-1">Độ phóng đại</p>
+                      <p class="text-4xl font-bold text-primary tracking-tighter">{{ Math.round(scale * 100) }}%</p>
+                      <p class="text-[9px] font-bold uppercase tracking-widest opacity-40 mt-1">Độ phóng đại</p>
                    </div>
                    <button @click="zoomIn" class="w-14 h-14 rounded-2xl bg-white dark:bg-white/10 flex items-center justify-center text-on-surface shadow-sm hover:bg-primary hover:text-on-primary transition-all">
                       <span class="material-symbols-outlined">text_increase</span>
@@ -476,7 +476,7 @@
         <div class="bg-primary/5 p-8 rounded-[32px] border border-primary/10">
            <div class="flex items-center justify-between gap-6">
               <div>
-                 <h4 class="text-lg font-black text-on-surface leading-tight">Chế độ tập trung</h4>
+                 <h4 class="text-lg font-bold text-on-surface leading-tight">Chế độ tập trung</h4>
                  <p class="text-sm text-on-surface-variant font-medium mt-1">Ẩn bớt các thanh công cụ để đắm chìm vào từng trang sách.</p>
               </div>
               <button @click="toggleFocusMode" class="w-16 h-10 rounded-full relative transition-all duration-500 overflow-hidden border border-outline-variant/30" :class="focusMode ? 'bg-primary' : 'bg-surface-container-highest'">
@@ -485,7 +485,7 @@
            </div>
         </div>
 
-        <button @click="showSettings = false" class="mt-auto w-full py-5 bg-on-surface text-surface rounded-[24px] font-black text-xs uppercase tracking-[0.3em] shadow-2xl hover:opacity-90 active:scale-95 transition-all">Tiếp tục hành trình</button>
+        <button @click="showSettings = false" class="mt-auto w-full py-5 bg-on-surface text-surface rounded-[24px] font-bold text-xs uppercase tracking-[0.3em] shadow-2xl hover:opacity-90 active:scale-95 transition-all">Tiếp tục hành trình</button>
       </div>
     </Drawer>
   </div>
@@ -831,9 +831,6 @@ onUnmounted(() => {
   -webkit-user-select: none;
 }
 
-.font-outfit {
-  font-family: 'Outfit', sans-serif;
-}
 
 .font-literata {
   font-family: 'Literata', serif;

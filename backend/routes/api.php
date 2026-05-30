@@ -99,6 +99,11 @@ Route::middleware(['auth:sanctum', 'role:vendor'])->prefix('vendor')->name('vend
     
     // Phân tích độc giả / báo cáo (Analytics)
     Route::get('analytics', [\App\Http\Controllers\Api\Vendor\AnalyticsController::class, 'index'])->name('analytics.index');
+
+    // Đăng ký Flash Sale
+    Route::get('flash-sales', [\App\Http\Controllers\Api\Vendor\FlashSaleController::class, 'index'])->name('flash-sales.index');
+    Route::get('flash-sales/{flash_sale}/registered-books', [\App\Http\Controllers\Api\Vendor\FlashSaleController::class, 'registeredBooks'])->name('flash-sales.registered-books');
+    Route::post('flash-sales/{flash_sale}/register', [\App\Http\Controllers\Api\Vendor\FlashSaleController::class, 'register'])->name('flash-sales.register');
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -120,6 +125,8 @@ Route::middleware(['auth:sanctum', 'role:admin'])->prefix('admin')->name('admin.
     Route::post('flash-sales/{flash_sale}/items', [\App\Http\Controllers\Api\Admin\FlashSaleController::class, 'addItem']);
     Route::delete('flash-sales/{flash_sale}/items/{item}', [\App\Http\Controllers\Api\Admin\FlashSaleController::class, 'removeItem']);
     Route::post('flash-sales/{flash_sale}/items/bulk-delete', [\App\Http\Controllers\Api\Admin\FlashSaleController::class, 'bulkRemoveItems']);
+    Route::put('flash-sales/items/{item_id}/approve', [\App\Http\Controllers\Api\Admin\FlashSaleController::class, 'approveItem']);
+    Route::put('flash-sales/items/{item_id}/reject', [\App\Http\Controllers\Api\Admin\FlashSaleController::class, 'rejectItem']);
 
     // Admin Notification Campaigns
     Route::apiResource('notifications/campaigns', \App\Http\Controllers\Api\Admin\NotificationCampaignController::class);

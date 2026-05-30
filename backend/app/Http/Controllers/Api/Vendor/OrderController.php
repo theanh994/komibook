@@ -109,8 +109,10 @@ class OrderController extends Controller
             ], 422);
         }
 
-        // Thực hiện cập nhật
-        Order::whereIn('id', $orders->pluck('id'))->update(['status' => $newStatus]);
+        // Thực hiện cập nhật từng đơn lẻ để kích hoạt model events
+        foreach ($orders as $order) {
+            $order->update(['status' => $newStatus]);
+        }
 
         return response()->json([
             'status'  => 'success',

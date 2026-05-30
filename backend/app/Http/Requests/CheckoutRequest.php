@@ -27,6 +27,8 @@ class CheckoutRequest extends FormRequest
             'items.*.quantity' => ['required', 'integer', 'min:1'],
             'shipping_address' => ['required', 'string', 'max:255'],
             'phone' => ['required', 'string', 'max:20'],
+            'payment_method' => ['nullable', 'string', 'in:COD,VNPAY,cod,online'],
+            'coupon_code' => ['nullable', 'string', 'exists:coupons,code'],
         ];
     }
 }

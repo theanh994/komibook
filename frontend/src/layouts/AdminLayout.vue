@@ -44,6 +44,11 @@ const vendorMenuItems = [
     icon: 'pi pi-wallet',
     route: '/vendor/finance',
   },
+  {
+    label: 'Đăng ký Flash Sale',
+    icon: 'pi pi-bolt',
+    route: '/vendor/flash-sales',
+  },
 ]
 
 const adminMenuItems = [

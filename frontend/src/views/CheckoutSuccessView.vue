@@ -1,5 +1,5 @@
 <template>
-  <div class="min-h-screen bg-background flex items-center justify-center py-20 px-gutter font-outfit antialiased">
+  <div class="min-h-screen bg-background flex items-center justify-center py-20 px-gutter font-inter antialiased">
     <!-- Dynamic Background Decor -->
     <div class="fixed inset-0 pointer-events-none overflow-hidden opacity-40">
        <div class="absolute top-[-10%] right-[-10%] w-[800px] h-[800px] bg-primary/10 blur-[150px] rounded-full animate-pulse"></div>
@@ -8,7 +8,7 @@
 
     <div v-if="loading" class="text-center animate-fade-in">
        <div class="w-16 h-16 border-8 border-primary/20 border-t-primary rounded-full animate-spin mx-auto mb-6"></div>
-       <p class="text-[11px] font-black text-outline uppercase tracking-[0.3em]">Đang xác nhận đơn hàng...</p>
+       <p class="text-[11px] font-bold text-outline uppercase tracking-[0.3em]">Đang xác nhận đơn hàng...</p>
     </div>
 
     <div v-else-if="order" class="max-w-[800px] w-full relative z-10">
@@ -24,7 +24,7 @@
            <div class="absolute -bottom-2 -left-2 w-4 h-4 bg-primary-fixed rounded-full animate-bounce"></div>
         </div>
 
-        <h1 class="text-4xl md:text-6xl font-black text-on-surface tracking-tighter leading-none mb-6">
+        <h1 class="text-4xl md:text-6xl font-bold text-on-surface tracking-tighter leading-none mb-6">
            Đặt hàng <span class="text-primary italic">thành công!</span>
         </h1>
         <p class="text-on-surface-variant max-w-[32rem] mx-auto text-lg md:text-xl leading-relaxed font-medium opacity-70 mb-12">
@@ -34,13 +34,13 @@
         <!-- Order Detail Summary Card -->
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-16 text-left">
            <div class="p-8 bg-surface-container-low rounded-[32px] border border-outline-variant/5">
-              <p class="text-[10px] font-black text-outline uppercase tracking-widest mb-2">Mã đơn hàng</p>
-              <h3 class="text-2xl font-black text-on-surface select-all">#{{ order.order_code || order.id }}</h3>
+              <p class="text-[10px] font-bold text-outline uppercase tracking-widest mb-2">Mã đơn hàng</p>
+              <h3 class="text-2xl font-bold text-on-surface select-all">#{{ order.order_code || order.id }}</h3>
               <p class="text-xs text-on-surface-variant font-medium mt-2">{{ order.items?.length }} sản phẩm đã chọn</p>
            </div>
            <div class="p-8 bg-surface-container-low rounded-[32px] border border-outline-variant/5">
-              <p class="text-[10px] font-black text-outline uppercase tracking-widest mb-2">Tổng thanh toán</p>
-              <h3 class="text-2xl font-black text-primary">{{ formatCurrency(order.total_amount) }}</h3>
+              <p class="text-[10px] font-bold text-outline uppercase tracking-widest mb-2">Tổng thanh toán</p>
+              <h3 class="text-2xl font-bold text-primary">{{ formatCurrency(order.total_amount) }}</h3>
               <p class="text-xs text-on-surface-variant font-medium mt-2">{{ order.payment_method === 'vnpay' ? 'Đã thanh toán qua VNPAY' : 'Thanh toán khi nhận hàng' }}</p>
            </div>
         </div>
@@ -51,7 +51,7 @@
            <button 
              v-if="hasEbook"
              @click="goToReader"
-             class="w-full md:w-auto px-10 py-5 rounded-[24px] bg-primary text-on-primary font-black text-xs uppercase tracking-[0.2em] hover:scale-105 transition-all shadow-2xl shadow-primary/40 border-none cursor-pointer flex items-center justify-center gap-3"
+             class="w-full md:w-auto px-10 py-5 rounded-[24px] bg-primary text-on-primary font-bold text-xs uppercase tracking-[0.2em] hover:scale-105 transition-all shadow-2xl shadow-primary/40 border-none cursor-pointer flex items-center justify-center gap-3"
            >
               <span class="material-symbols-outlined text-[20px]">auto_stories</span>
               Đọc sách ngay
@@ -61,7 +61,7 @@
            <button 
              v-if="hasPhysicalBook"
              @click="goToTracking"
-             class="w-full md:w-auto px-10 py-5 rounded-[24px] bg-secondary text-on-secondary font-black text-xs uppercase tracking-[0.2em] hover:scale-105 transition-all shadow-2xl shadow-secondary/40 border-none cursor-pointer flex items-center justify-center gap-3"
+             class="w-full md:w-auto px-10 py-5 rounded-[24px] bg-secondary text-on-secondary font-bold text-xs uppercase tracking-[0.2em] hover:scale-105 transition-all shadow-2xl shadow-secondary/40 border-none cursor-pointer flex items-center justify-center gap-3"
            >
               <span class="material-symbols-outlined text-[20px]">local_shipping</span>
               Theo dõi vận chuyển
@@ -69,7 +69,7 @@
 
            <button 
              @click="router.push('/')"
-             class="w-full md:w-auto px-10 py-5 rounded-[24px] border border-outline-variant/30 bg-surface-container-low text-on-surface font-black text-xs uppercase tracking-[0.2em] hover:bg-surface-container-high transition-all flex items-center justify-center gap-3 cursor-pointer"
+             class="w-full md:w-auto px-10 py-5 rounded-[24px] border border-outline-variant/30 bg-surface-container-low text-on-surface font-bold text-xs uppercase tracking-[0.2em] hover:bg-surface-container-high transition-all flex items-center justify-center gap-3 cursor-pointer"
            >
               <span class="material-symbols-outlined text-[20px]">home</span>
               Về trang chủ
@@ -77,7 +77,7 @@
         </div>
 
         <!-- Footer Note -->
-        <p class="mt-16 text-[10px] font-black text-outline uppercase tracking-[0.3em] opacity-40">Hệ thống đã gửi hóa đơn chi tiết vào email của bạn.</p>
+        <p class="mt-16 text-[10px] font-bold text-outline uppercase tracking-[0.3em] opacity-40">Hệ thống đã gửi hóa đơn chi tiết vào email của bạn.</p>
       </div>
     </div>
   </div>
@@ -155,11 +155,8 @@ onMounted(() => {
 </script>
 
 <style scoped>
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@100;400;900&display=swap');
 
-.font-outfit {
-  font-family: 'Outfit', sans-serif;
-}
+
 
 @keyframes fade-in {
   from { opacity: 0; transform: translateY(20px); }

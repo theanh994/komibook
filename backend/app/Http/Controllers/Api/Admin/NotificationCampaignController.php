@@ -230,11 +230,11 @@ class NotificationCampaignController extends Controller
             }
         });
 
-        // 2. Send email to users (in background or try-catch loop)
+        // 2. Send email to users via Queue to prevent HTTP request blocking
         foreach ($users as $user) {
             try {
                 if ($user->email) {
-                    Mail::to($user->email)->send(new CampaignNotificationMail(
+                    Mail::to($user->email)->queue(new CampaignNotificationMail(
                         $user, 
                         $campaign->title, 
                         $campaign->message, 

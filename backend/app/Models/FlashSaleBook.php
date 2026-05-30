@@ -12,6 +12,7 @@ class FlashSaleBook extends Model
         'discount_percent',
         'max_quantity',
         'sold_quantity',
+        'status',
     ];
 
     protected function casts(): array

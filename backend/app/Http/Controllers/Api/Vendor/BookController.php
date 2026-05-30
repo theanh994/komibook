@@ -142,6 +142,13 @@ class BookController extends Controller
 
         $book->update($data);
 
+        // Xoá key cache tồn kho trên Redis để cập nhật thông tin mới nhất
+        try {
+            \Illuminate\Support\Facades\Redis::del("book_stock:{$book->id}");
+        } catch (\Exception $ex) {
+            \Illuminate\Support\Facades\Log::warning("Failed to clear Redis stock cache: " . $ex->getMessage());
+        }
+
         return response()->json([
             'status'  => 'success',
             'message' => 'Cập nhật sách thành công!',
@@ -165,6 +172,13 @@ class BookController extends Controller
         }
 
         $book->delete();
+
+        // Xoá key cache tồn kho trên Redis
+        try {
+            \Illuminate\Support\Facades\Redis::del("book_stock:{$book->id}");
+        } catch (\Exception $ex) {
+            // ignore
+        }
 
         return response()->json([
             'status'  => 'success',

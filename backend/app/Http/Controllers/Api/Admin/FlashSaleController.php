@@ -54,7 +54,7 @@ class FlashSaleController extends Controller
 
     public function show(FlashSale $flashSale)
     {
-        $flashSale->load('items.book');
+        $flashSale->load(['items.book.vendor']);
         return response()->json(['data' => $flashSale]);
     }
 
@@ -98,11 +98,32 @@ class FlashSaleController extends Controller
                 'discount_percent' => $validated['discount_percent'],
                 'max_quantity' => $validated['max_quantity'] ?? 0,
                 'sold_quantity' => 0,
+                'status' => 'approved', // Mặc định đã duyệt cho Admin
             ]);
             $added[] = $item->load('book');
         }
 
         return response()->json(['message' => 'Items added', 'data' => $added], 201);
+    }
+
+    public function approveItem($item_id)
+    {
+        $item = \App\Models\FlashSaleBook::findOrFail($item_id);
+        $item->update(['status' => 'approved']);
+        return response()->json([
+            'message' => 'Đã duyệt sản phẩm tham gia Flash Sale.',
+            'data' => $item->load('book')
+        ]);
+    }
+
+    public function rejectItem($item_id)
+    {
+        $item = \App\Models\FlashSaleBook::findOrFail($item_id);
+        $item->update(['status' => 'rejected']);
+        return response()->json([
+            'message' => 'Đã từ chối đề xuất tham gia Flash Sale.',
+            'data' => $item->load('book')
+        ]);
     }
 
     public function removeItem(FlashSale $flash_sale, $item_id)

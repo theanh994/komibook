@@ -126,8 +126,8 @@ onMounted(fetchOrders)
         <div class="col-span-3">Sản phẩm</div>
         <div class="col-span-2">Khách hàng</div>
         <div class="col-span-2">Ngày đặt</div>
-        <div class="col-span-1 text-right">Tổng tiền</div>
-        <div class="col-span-2 text-center">Trạng thái</div>
+        <div class="col-span-2 text-right">Tổng tiền</div>
+        <div class="col-span-1 text-center">Trạng thái</div>
       </div>
       
       <!-- Loading State -->
@@ -146,7 +146,7 @@ onMounted(fetchOrders)
       <div v-else class="divide-y divide-surface-container-highest">
         <div v-for="order in orders" :key="order.id" @click="openDetail(order)" class="p-md hover:bg-surface-bright transition-colors group cursor-pointer" :class="{ 'opacity-75': order.status === 'cancelled' }">
           <div class="grid grid-cols-1 md:grid-cols-12 gap-md items-center">
-            <div class="col-span-1 md:col-span-2 font-label-md text-label-md text-on-surface" :class="{ 'text-on-surface-variant line-through': order.status === 'cancelled' }">
+            <div class="col-span-1 md:col-span-2 font-label-md text-label-md text-on-surface whitespace-nowrap" :class="{ 'text-on-surface-variant line-through': order.status === 'cancelled' }">
               <span class="md:hidden text-on-surface-variant">Đơn hàng: </span>{{ order.order_code }}
             </div>
             
@@ -166,21 +166,21 @@ onMounted(fetchOrders)
               </span>
             </div>
             
-            <div class="col-span-1 md:col-span-2 font-body-md text-body-md text-on-surface-variant">
+            <div class="col-span-1 md:col-span-2 font-body-md text-body-md text-on-surface-variant truncate whitespace-nowrap">
               <span class="md:hidden text-sm">Khách hàng: </span>{{ order.user?.name || '—' }}
             </div>
             
-            <div class="col-span-1 md:col-span-2 font-body-md text-body-md text-on-surface-variant">
+            <div class="col-span-1 md:col-span-2 font-body-md text-body-md text-on-surface-variant whitespace-nowrap">
               <span class="md:hidden text-sm">Ngày đặt: </span>{{ formatDate(order.created_at) }}
             </div>
             
-            <div class="col-span-1 md:col-span-1 font-body-md text-body-md font-medium text-on-surface md:text-right" :class="{ 'text-on-surface-variant': order.status === 'cancelled' }">
+            <div class="col-span-1 md:col-span-2 font-body-md text-body-md font-medium text-on-surface md:text-right whitespace-nowrap" :class="{ 'text-on-surface-variant': order.status === 'cancelled' }">
               <span class="md:hidden text-sm">Giá trị: </span>{{ formatPrice(order.total_amount) }}
             </div>
             
-            <div class="col-span-1 md:col-span-2 flex justify-between md:justify-center items-center">
+            <div class="col-span-1 md:col-span-1 flex justify-between md:justify-center items-center">
               <span class="md:hidden text-on-surface-variant text-sm">Trạng thái: </span>
-              <span :class="['inline-flex items-center px-2 py-1 rounded-full font-label-md text-[12px]', getStatus(order.status).bg, getStatus(order.status).text]">
+              <span :class="['inline-flex items-center px-2 py-1 rounded-full font-label-md text-[12px] whitespace-nowrap', getStatus(order.status).bg, getStatus(order.status).text]">
                 <span :class="['w-2 h-2 rounded-full mr-1', getStatus(order.status).dot]"></span>
                 {{ getStatus(order.status).label }}
               </span>
