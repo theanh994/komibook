@@ -23,7 +23,7 @@ const user = ref({
 
 const membershipStats = computed(() => {
   return {
-    tier: 'Thành viên',
+    tier: user.value.membership_tier?.name || 'Thành viên Bạc',
     totalOrders: user.value.total_orders || 0,
     totalSpent: user.value.total_spent || 0,
     totalBooks: 0,
@@ -101,9 +101,14 @@ onMounted(fetchUser)
             </div>
             <h2 class="mt-md font-headline-md text-headline-md text-on-surface font-bold">{{ user.name }}</h2>
             <p class="font-body-md text-body-md text-on-surface-variant">{{ user.email }}</p>
-            <span class="mt-md inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-[#f1f5f9] text-[#475569] border border-[#e2e8f0]">
-              {{ membershipStats.tier }}
-            </span>
+            <div class="mt-md flex justify-center gap-xs flex-wrap">
+              <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-primary-container text-on-primary-container border border-primary/20">
+                Hạng: {{ membershipStats.tier }}
+              </span>
+              <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-tertiary-container text-on-tertiary-container border border-tertiary/20">
+                Tích lũy: {{ user.points || 0 }} Điểm
+              </span>
+            </div>
           </div>
           <div class="border-t border-outline-variant/30 px-lg py-md space-y-md">
             <div class="flex items-center gap-sm">

@@ -107,7 +107,7 @@ class BookController extends Controller
     {
         $query = Book::withoutGlobalScopes()
             ->where('status', 'published')
-            ->with(['vendor', 'category', 'series', 'reviews.user']);
+            ->with(['vendor', 'category', 'series', 'reviews.user', 'chapters']);
 
         if (is_numeric($identifier)) {
             $book = $query->where('id', $identifier)->firstOrFail();

@@ -131,7 +131,25 @@ class WarehouseController extends Controller
             'status' => 'nullable|string',
         ]);
 
+        $user = Auth::user();
+        $vendor = $user->vendor;
+        if (!$vendor) {
+            return response()->json(['message' => 'Vendor profile not found'], 404);
+        }
+
+        // Ràng buộc tác giả đối tác chỉ được sở hữu duy nhất 1 kho hàng
+        if ($user->author) {
+            $existingCount = Warehouse::where('vendor_id', $vendor->id)->count();
+            if ($existingCount >= 1) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Tác giả đối tác chỉ được sở hữu và đăng ký tối đa 1 nhà kho duy nhất.'
+                ], 422);
+            }
+        }
+
         $warehouse = Warehouse::create([
+            'vendor_id' => $vendor->id,
             'name' => $request->name,
             'address' => $request->address,
             'capacity' => $request->capacity ?: '0%',

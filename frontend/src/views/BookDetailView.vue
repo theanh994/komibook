@@ -184,6 +184,48 @@
                   {{ book.description }}
                 </p>
               </div>
+
+              <!-- Ebook Chapters Preview Section -->
+              <div v-if="book.type === 'ebook'" class="mt-12 bg-surface-container-lowest/80 backdrop-blur-xl rounded-[40px] p-8 border border-outline-variant/10">
+                <div class="flex items-center gap-4 mb-8">
+                   <div class="w-1.5 h-8 bg-primary rounded-full"></div>
+                   <h3 class="text-3xl font-bold text-on-surface tracking-tighter">Mục lục & Đọc thử</h3>
+                </div>
+
+                <div v-if="book.chapters && book.chapters.length > 0" class="space-y-3">
+                  <div 
+                    v-for="chapter in book.chapters.sort((a,b) => a.order - b.order)" 
+                    :key="chapter.id"
+                    class="flex items-center justify-between p-4 rounded-2xl border border-outline-variant/20 hover:border-primary/20 transition-all bg-surface-container-low/20"
+                  >
+                    <div class="flex items-center gap-3">
+                      <span class="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center font-bold text-xs">
+                        {{ chapter.order }}
+                      </span>
+                      <span class="text-sm font-bold text-on-surface">{{ chapter.title }}</span>
+                    </div>
+
+                    <div>
+                      <button 
+                        v-if="chapter.is_free" 
+                        @click="openPreviewChapter(chapter)"
+                        class="px-4 py-2 bg-emerald-50 text-emerald-700 border border-emerald-100 hover:bg-emerald-600 hover:text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer"
+                      >
+                        Đọc thử
+                      </button>
+                      <div v-else class="flex items-center gap-1.5 text-xs text-outline opacity-60 font-medium">
+                        <span class="material-symbols-outlined text-[16px]">lock</span>
+                        Khóa
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div v-else class="text-center py-10 bg-surface-container-low/40 rounded-2xl border-2 border-dashed border-outline-variant/20">
+                  <span class="material-symbols-outlined text-4xl text-outline/20 mb-3">lock_open</span>
+                  <p class="text-sm text-on-surface-variant font-medium opacity-60">Cuốn e-book này chưa cấu hình chương đọc thử.</p>
+                </div>
+              </div>
             </div>
 
             <!-- Enhanced Reviews Section -->
@@ -298,6 +340,27 @@
         </div>
       </div>
     </Dialog>
+
+    <!-- Preview Chapter Modal -->
+    <Dialog 
+      v-model:visible="previewDialogVisible" 
+      :header="activePreviewChapter?.title || 'Đọc thử'" 
+      :modal="true" 
+      class="!max-w-3xl !w-[90vw] !rounded-[40px] !bg-surface-container-lowest"
+    >
+      <div class="p-6 md:p-10 font-literata text-lg text-on-surface-variant leading-relaxed select-none overflow-y-auto max-h-[60vh] text-justify whitespace-pre-wrap select-none no-copy">
+        {{ activePreviewChapter?.content || 'Không có nội dung hiển thị.' }}
+      </div>
+      <template #footer>
+        <div class="p-4 bg-indigo-50/50 rounded-2xl border border-indigo-100/60 flex items-center justify-between text-xs text-slate-600 w-full mt-4">
+          <div class="flex items-center gap-2">
+            <span class="material-symbols-outlined text-indigo-700 text-sm">lock</span>
+            <span>Bản đọc thử miễn phí được bảo vệ bản quyền số bởi KomiBook DRM.</span>
+          </div>
+          <button @click="previewDialogVisible = false" class="px-6 py-2.5 bg-primary text-on-primary rounded-xl font-bold uppercase tracking-widest border-none cursor-pointer hover:bg-primary/95 transition-all text-[10px]">Đóng</button>
+        </div>
+      </template>
+    </Dialog>
   </div>
 </template>
 
@@ -326,6 +389,13 @@ const ownershipData = ref({ owned: false, order_id: null, book_id: null })
 const recentAnnotations = ref([])
 const readingProgress = ref(45) 
 const showReviewModal = ref(false)
+const previewDialogVisible = ref(false)
+const activePreviewChapter = ref(null)
+
+const openPreviewChapter = (chapter) => {
+  activePreviewChapter.value = chapter
+  previewDialogVisible.value = true
+}
 
 const quickStats = computed(() => [
   { label: 'Đánh giá', value: book.value?.reviews?.length || 0, icon: 'star_rate' },

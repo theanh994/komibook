@@ -18,7 +18,8 @@ return new class extends Migration
             $table->string('slug')->unique();
             $table->text('description')->nullable();
             $table->string('logo')->nullable();
-            $table->enum('status', ['active', 'inactive'])->default('inactive');
+            $table->enum('status', ['active', 'inactive', 'rejected'])->default('inactive');
+            $table->string('rejection_reason')->nullable();
             $table->timestamps();
         });
     }

@@ -89,12 +89,59 @@ const adminMenuItems = [
   },
 ]
 
+const authorMenuItems = [
+  {
+    label: 'Dashboard Tác giả',
+    icon: 'pi pi-pencil',
+    route: '/vendor/author-dashboard',
+  },
+  {
+    label: 'Viết Chương Mới',
+    icon: 'pi pi-file-edit',
+    route: '/vendor/editor',
+  },
+  {
+    label: 'Bản quyền & DRM',
+    icon: 'pi pi-shield',
+    route: '/vendor/drm-settings',
+  },
+  {
+    label: 'Giá & Đọc Thử',
+    icon: 'pi pi-dollar',
+    route: '/vendor/book-chapters',
+  },
+  {
+    label: 'Quản lý Sách',
+    icon: 'pi pi-book',
+    route: '/vendor/books',
+  },
+  {
+    label: 'Kho Tác Giả',
+    icon: 'pi pi-box',
+    route: '/vendor/warehouses',
+  },
+  {
+    label: 'Đơn Hàng Sách Cũ',
+    icon: 'pi pi-shopping-bag',
+    route: '/vendor/orders',
+  },
+  {
+    label: 'Doanh thu & Rút tiền',
+    icon: 'pi pi-wallet',
+    route: '/vendor/finance',
+  },
+]
+
 const menuItems = computed(() => {
-  return authStore.isAdmin ? adminMenuItems : vendorMenuItems
+  if (authStore.isAdmin) return adminMenuItems
+  if (authStore.user?.author_profile) return authorMenuItems
+  return vendorMenuItems
 })
 
 const panelLabel = computed(() => {
-  return authStore.isAdmin ? 'Admin Panel' : 'Vendor Panel'
+  if (authStore.isAdmin) return 'Admin Panel'
+  if (authStore.user?.author_profile) return 'Author Panel'
+  return 'Vendor Panel'
 })
 
 const bottomItems = [

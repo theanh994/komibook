@@ -105,7 +105,7 @@ class UserController extends Controller
     {
         $user = User::with(['addresses' => function($q) {
             $q->orderBy('is_default', 'desc');
-        }])->findOrFail($id);
+        }, 'membershipTier'])->findOrFail($id);
 
         $data = $user->toArray();
         

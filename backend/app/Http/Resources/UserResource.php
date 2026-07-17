@@ -26,12 +26,27 @@ class UserResource extends JsonResource
             'avatar'     => $this->avatar,
             'avatar_url' => $this->avatar_url,
             'role'       => $this->role,
+            'points'     => $this->points ?? 0,
             'created_at' => $this->created_at?->toISOString(),
+
+            'membership_tier' => $this->membershipTier ? [
+                'id' => $this->membershipTier->id,
+                'name' => $this->membershipTier->name,
+                'discount_percent' => $this->membershipTier->discount_percent,
+                'benefits' => $this->membershipTier->benefits,
+            ] : null,
+
+            'author_profile' => $this->author ? [
+                'id' => $this->author->id,
+                'pen_name' => $this->author->pen_name,
+                'bio' => $this->author->bio,
+                'status' => $this->author->status,
+            ] : null,
 
             // Chỉ include vendor_profile khi user là vendor
             // whenLoaded() đảm bảo không gây thêm query N+1 nếu chưa eager-load
             'vendor_profile' => $this->when(
-                $this->role === 'vendor',
+                $this->role === 'vendor' || $this->role === 'author',
                 fn () => $this->whenLoaded('vendor', fn () => [
                     'shop_name'   => $this->vendor->shop_name,
                     'slug'        => $this->vendor->slug,

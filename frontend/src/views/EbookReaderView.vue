@@ -167,6 +167,12 @@
                 @error="onPdfError"
                 class="w-full" 
               />
+              <!-- Social DRM Watermark Overlay -->
+              <div v-if="watermarkEmail" class="absolute inset-0 pointer-events-none z-10 flex flex-wrap justify-around items-center overflow-hidden opacity-[0.06] select-none">
+                <div v-for="n in 12" :key="n" class="text-xs font-black rotate-[-30deg] tracking-widest py-12 px-6 whitespace-nowrap text-slate-900">
+                  {{ watermarkName }} &lt;{{ watermarkEmail }}&gt;
+                </div>
+              </div>
             </div>
 
              <div v-if="!loading && !error" class="mt-12 mb-32 flex flex-col items-center gap-4 animate-fade-in delay-700 pointer-events-none">
@@ -488,6 +494,34 @@
         <button @click="showSettings = false" class="mt-auto w-full py-5 bg-on-surface text-surface rounded-[24px] font-bold text-xs uppercase tracking-[0.3em] shadow-2xl hover:opacity-90 active:scale-95 transition-all">Tiếp tục hành trình</button>
       </div>
     </Drawer>
+
+    <!-- Intellectual Property Print Consent Dialog -->
+    <Dialog v-model:visible="showPrintConsent" modal header="Cam kết Bảo vệ Quyền Sở hữu Trí tuệ" :style="{ width: '90vw', maxWidth: '550px' }">
+      <div class="space-y-4 text-xs text-slate-600 leading-relaxed">
+        <div class="bg-indigo-50 p-4 rounded-xl border border-indigo-100 flex items-start gap-3 text-slate-700">
+          <i class="pi pi-shield text-indigo-700 text-lg mt-0.5 shrink-0"></i>
+          <div>
+            <h4 class="font-bold text-indigo-900 uppercase tracking-wider text-[11px]">Cam kết Quyền Tác Giả</h4>
+            <p class="mt-1">
+              Tác phẩm này được đăng ký bản quyền số và thuộc sở hữu trí tuệ hợp pháp của Tác giả/NXB.
+            </p>
+          </div>
+        </div>
+
+        <p class="text-slate-700">
+          Bằng việc nhấn <strong>"Đồng ý & Tiến hành"</strong>, bạn cam kết thực hiện các điều khoản sau:
+        </p>
+        <ul class="list-disc pl-5 space-y-1.5">
+          <li>Chỉ thực hiện in ấn phục vụ nhu cầu đọc cá nhân hoặc nghiên cứu phi thương mại.</li>
+          <li>Tuyệt đối không sao chép, chia sẻ, số hóa lại hoặc phân phối bất hợp pháp bản in này lên không gian mạng.</li>
+          <li>Mọi bản in/tải đều có dấu bản quyền số nhúng chìm chứa thông tin tài khoản của bạn để xác thực nguồn gốc sở hữu.</li>
+        </ul>
+      </div>
+      <template #footer>
+        <Button label="Hủy bỏ" class="p-button-text p-button-sm text-xs" @click="showPrintConsent = false" />
+        <Button label="Đồng ý & Tiến hành" class="p-button-primary bg-indigo-600 text-white p-button-sm text-xs font-bold" @click="confirmPrint" />
+      </template>
+    </Dialog>
   </div>
 </template>
 
@@ -497,6 +531,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useToast } from 'primevue/usetoast'
 import Toast from 'primevue/toast'
 import Drawer from 'primevue/drawer'
+import Dialog from 'primevue/dialog'
 import apiClient from '@/services/axios'
 import VuePdfEmbed from 'vue-pdf-embed'
 
@@ -513,6 +548,10 @@ const scrollContainer = ref(null)
 const book = ref(null)
 const focusMode = ref(false)
 const annotationFilter = ref('all')
+
+const watermarkEmail = ref('')
+const watermarkName = ref('')
+const showPrintConsent = ref(false)
 
 const currentPage = ref(1)
 const totalPages = ref(0)
@@ -735,18 +774,33 @@ const fetchEbookData = async () => {
     book.value = bookRes.data.data || bookRes.data
     annotations.value = annotRes.data.data || []
     
-    // Nếu pdfUrl trỏ về localhost mà frontend đang chạy trên domain khác, 
-    // chúng ta sẽ thử fix nó dựa trên VITE_API_URL
-    if (pdfUrl.value && pdfUrl.value.includes('127.0.0.1:8000')) {
-      const apiUrl = import.meta.env.VITE_API_URL || 'https://api.komibook.id.vn'
-      pdfUrl.value = pdfUrl.value.replace('http://127.0.0.1:8000', apiUrl)
-      console.warn('[Reader] Fixed localhost PDF URL to:', pdfUrl.value)
+    // Điều hướng toàn bộ cuộc gọi API lấy PDF qua domain/origin hiện tại của frontend 
+    // để được xử lý thông qua proxy của Vite (local) hoặc nginx/Vercel (production).
+    // Điều này khắc phục triệt để CORS và Mixed Content.
+    if (pdfUrl.value) {
+      if (pdfUrl.value.includes('127.0.0.1:8000')) {
+        pdfUrl.value = pdfUrl.value.replace('http://127.0.0.1:8000', window.location.origin)
+      } else if (pdfUrl.value.includes('localhost:8000')) {
+        pdfUrl.value = pdfUrl.value.replace('http://localhost:8000', window.location.origin)
+      } else if (pdfUrl.value.includes('api.komibook.id.vn')) {
+        pdfUrl.value = pdfUrl.value.replace('https://api.komibook.id.vn', window.location.origin)
+      } else {
+        try {
+          const urlObj = new URL(pdfUrl.value)
+          pdfUrl.value = urlObj.pathname + urlObj.search
+        } catch (e) {
+          // Bỏ qua
+        }
+      }
+      console.log('[Reader] PDF URL adjusted to:', pdfUrl.value)
     }
 
-    // Force HTTPS if the frontend is running on HTTPS
-    if (pdfUrl.value && window.location.protocol === 'https:') {
-      pdfUrl.value = pdfUrl.value.replace('http://', 'https://')
-      console.log('[Reader] Force HTTPS PDF URL:', pdfUrl.value)
+    try {
+      const urlObj = new URL(pdfUrl.value)
+      watermarkEmail.value = urlObj.searchParams.get('email') || ''
+      watermarkName.value = urlObj.searchParams.get('name') || ''
+    } catch (e) {
+      console.warn('Could not parse query parameters for watermark', e)
     }
   } catch (err) {
     console.error('[Reader] fetchEbookData Error:', err)
@@ -806,9 +860,21 @@ const formatDate = (dateString) => {
 
 // Keyboard navigation
 const handleKeydown = (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'p') {
+    e.preventDefault()
+    showPrintConsent.value = true
+    return
+  }
   if (activeTab.value !== 'reader') return
   if (e.key === 'ArrowRight' || e.key === 'ArrowDown') nextPage()
   if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') prevPage()
+}
+
+const confirmPrint = () => {
+  showPrintConsent.value = false
+  setTimeout(() => {
+    window.print()
+  }, 200)
 }
 
 onMounted(() => {

@@ -16,6 +16,8 @@ class DatabaseSeeder extends Seeder
             CategorySeeder::class,
             BookSeeder::class,
             WarehouseAndFinanceSeeder::class,
+            NewFeaturesSeeder::class,
+            EbookSeeder::class,
         ]);
     }
 }

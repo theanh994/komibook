@@ -132,6 +132,66 @@
               </div>
             </div>
 
+            <!-- Tab: VIP & Quyền lợi -->
+            <div v-if="activeTab === 'membership'" class="animate-fade-in space-y-lg">
+              <div class="p-6 rounded-3xl text-white relative overflow-hidden shadow-xl"
+                :class="authStore.user?.membership_tier ? 'bg-gradient-to-br from-amber-500 via-yellow-600 to-amber-700' : 'bg-gradient-to-br from-slate-600 to-slate-800'"
+              >
+                <!-- Decorative Circle -->
+                <div class="absolute -right-10 -bottom-10 w-40 h-40 bg-white/10 rounded-full blur-2xl"></div>
+                <div class="absolute right-10 top-10 w-24 h-24 bg-white/10 rounded-full blur-xl"></div>
+
+                <div class="flex justify-between items-start relative z-10">
+                  <div>
+                    <span class="text-xs uppercase tracking-widest font-black opacity-80">Thẻ Thành Viên</span>
+                    <h2 class="text-2xl font-black mt-1">{{ authStore.user?.membership_tier?.name || 'Khách hàng Thân thiết' }}</h2>
+                  </div>
+                  <span class="material-symbols-outlined text-4xl opacity-90">
+                    {{ authStore.user?.membership_tier ? 'workspace_premium' : 'person' }}
+                  </span>
+                </div>
+
+                <div class="mt-8 flex justify-between items-end relative z-10">
+                  <div>
+                    <span class="text-[11px] uppercase tracking-wider opacity-70">Điểm tích lũy</span>
+                    <div class="text-xl font-bold mt-0.5">{{ authStore.user?.points || 0 }} <span class="text-xs opacity-80">KomiPoints</span></div>
+                  </div>
+                  <div class="text-right">
+                    <span class="text-[11px] uppercase tracking-wider opacity-70">Ưu đãi giảm giá</span>
+                    <div class="text-xl font-black mt-0.5">{{ authStore.user?.membership_tier?.discount_percent || 0 }}%</div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- VIP Benefits List -->
+              <div class="bg-surface-container-low p-6 rounded-2xl border border-outline-variant/20 space-y-4">
+                <h3 class="font-bold text-on-surface flex items-center gap-2">
+                  <span class="material-symbols-outlined text-primary">verified</span>
+                  Quyền lợi đặc quyền của bạn
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div class="flex items-start gap-3">
+                    <span class="material-symbols-outlined text-green-600 mt-0.5">check_circle</span>
+                    <div>
+                      <h4 class="text-sm font-bold text-on-surface">Chiết khấu trực tiếp</h4>
+                      <p class="text-xs text-on-surface-variant">Giảm giá {{ authStore.user?.membership_tier?.discount_percent || 0 }}% trực tiếp trên mỗi hóa đơn khi thanh toán.</p>
+                    </div>
+                  </div>
+                  <div class="flex items-start gap-3">
+                    <span class="material-symbols-outlined text-green-600 mt-0.5">check_circle</span>
+                    <div>
+                      <h4 class="text-sm font-bold text-on-surface">Tích lũy điểm tự động</h4>
+                      <p class="text-xs text-on-surface-variant">Nhận 1 điểm tích lũy cho mỗi 10.000 VNĐ chi tiêu khi đơn hàng giao thành công.</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div v-if="authStore.user?.membership_tier?.benefits" class="p-4 bg-primary/5 rounded-xl border border-primary/10 mt-2">
+                  <p class="text-xs text-primary font-bold">Lợi ích bổ sung: {{ authStore.user?.membership_tier?.benefits }}</p>
+                </div>
+              </div>
+            </div>
+
             <!-- Tab: Bảo mật -->
             <div v-if="activeTab === 'security'" class="w-full block">
               <div class="animate-fade-in py-lg flex flex-col items-center">
@@ -240,6 +300,7 @@ const confirm = useConfirm()
 const activeTab = ref('general')
 const tabs = [
   { id: 'general', label: 'Thông tin chung' },
+  { id: 'membership', label: 'Hạng VIP & Quyền lợi' },
   { id: 'addresses', label: 'Sổ địa chỉ' },
   { id: 'security', label: 'Bảo mật' }
 ]

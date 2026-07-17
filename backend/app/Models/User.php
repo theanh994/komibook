@@ -4,6 +4,7 @@ namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
@@ -26,6 +27,8 @@ class User extends Authenticatable
         'password',
         'role',
         'avatar',
+        'points',
+        'membership_tier_id',
     ];
 
     /**
@@ -59,6 +62,30 @@ class User extends Authenticatable
     public function vendor(): HasOne
     {
         return $this->hasOne(Vendor::class);
+    }
+
+    /**
+     * Thông tin tác giả liên kết với tài khoản này.
+     */
+    public function author(): HasOne
+    {
+        return $this->hasOne(Author::class);
+    }
+
+    /**
+     * Tất cả yêu cầu hỗ trợ của tài khoản này.
+     */
+    public function tickets(): HasMany
+    {
+        return $this->hasMany(SupportTicket::class);
+    }
+
+    /**
+     * Hạng thành viên.
+     */
+    public function membershipTier(): BelongsTo
+    {
+        return $this->belongsTo(MembershipTier::class);
     }
 
     /**

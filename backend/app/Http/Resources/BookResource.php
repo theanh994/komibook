@@ -64,6 +64,15 @@ class BookResource extends JsonResource
                     ];
                 });
             }),
+            'chapters' => $this->chapters ? $this->chapters->map(function ($chapter) {
+                return [
+                    'id' => $chapter->id,
+                    'title' => $chapter->title,
+                    'order' => $chapter->order,
+                    'is_free' => (bool) $chapter->is_free,
+                    'content' => $chapter->is_free ? $chapter->content : null,
+                ];
+            }) : [],
         ];
     }
 }

@@ -205,6 +205,7 @@ class CheckoutService
 
         // BƯỚC 2c: Create Orders
         $createdOrders = [];
+        $user = \App\Models\User::with('membershipTier')->find($userId);
 
         try {
             DB::beginTransaction();
@@ -218,6 +219,12 @@ class CheckoutService
                 // Áp dụng giảm giá coupon cho vendor này nếu có
                 $discountForThisVendor = $vendorDiscounts[$vendorId] ?? 0;
                 $totalAmount = max(0, $subtotalAmount - $discountForThisVendor);
+
+                // Áp dụng thêm giảm giá hạng VIP thành viên nếu có
+                if ($user && $user->membershipTier && $user->membershipTier->discount_percent > 0) {
+                    $vipDiscount = ($totalAmount * $user->membershipTier->discount_percent) / 100;
+                    $totalAmount = max(0, $totalAmount - $vipDiscount);
+                }
 
                 // Tạo Order
                 $order = new Order([

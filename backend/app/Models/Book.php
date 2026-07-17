@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Book extends Model
 {
@@ -89,6 +90,22 @@ class Book extends Model
     public function reviews(): HasMany
     {
         return $this->hasMany(Review::class);
+    }
+
+    /**
+     * Danh sách các chương sách (E-book soạn thảo trực tuyến).
+     */
+    public function chapters(): HasMany
+    {
+        return $this->hasMany(BookChapter::class)->orderBy('order', 'asc');
+    }
+
+    /**
+     * Cài đặt DRM & bảo mật bản quyền.
+     */
+    public function drmSetting(): HasOne
+    {
+        return $this->hasOne(BookDrmSetting::class);
     }
 
     // ─── Helper Methods ───────────────────────────────────────────────────────

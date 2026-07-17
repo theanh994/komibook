@@ -22,6 +22,11 @@ Route::get('/books/top-selling', [\App\Http\Controllers\Api\BookController::clas
 Route::get('/books/{slug}', [\App\Http\Controllers\Api\BookController::class, 'show']);
 Route::get('/books/{id}/series', [\App\Http\Controllers\Api\BookController::class, 'seriesBooks']);
 
+// Help Center công khai
+Route::get('/help-center/articles', [\App\Http\Controllers\Api\HelpCenterController::class, 'index']);
+Route::get('/help-center/articles/{id}', [\App\Http\Controllers\Api\HelpCenterController::class, 'show']);
+Route::post('/help-center/articles/{id}/helpful', [\App\Http\Controllers\Api\HelpCenterController::class, 'helpful']);
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Protected routes — Yêu cầu Sanctum token hợp lệ
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -69,6 +74,17 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/notifications', [\App\Http\Controllers\Api\UserNotificationController::class, 'index']);
     Route::patch('/notifications/{id}/read', [\App\Http\Controllers\Api\UserNotificationController::class, 'markAsRead']);
     Route::post('/notifications/read-all', [\App\Http\Controllers\Api\UserNotificationController::class, 'markAllAsRead']);
+
+    // Đăng ký và Trạng thái Tác giả
+    Route::post('/auth/register-author', [\App\Http\Controllers\Api\AuthorController::class, 'register']);
+    Route::get('/author/status',          [\App\Http\Controllers\Api\AuthorController::class, 'status']);
+    Route::get('/author/dashboard-stats', [\App\Http\Controllers\Api\AuthorController::class, 'dashboardStats']);
+
+    // Tickets yêu cầu hỗ trợ (Khách hàng)
+    Route::get('/support/tickets', [\App\Http\Controllers\Api\SupportTicketController::class, 'index']);
+    Route::post('/support/tickets', [\App\Http\Controllers\Api\SupportTicketController::class, 'store']);
+    Route::get('/support/tickets/{id}', [\App\Http\Controllers\Api\SupportTicketController::class, 'show']);
+    Route::post('/support/tickets/{id}/message', [\App\Http\Controllers\Api\SupportTicketController::class, 'reply']);
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -104,6 +120,32 @@ Route::middleware(['auth:sanctum', 'role:vendor'])->prefix('vendor')->name('vend
     Route::get('flash-sales', [\App\Http\Controllers\Api\Vendor\FlashSaleController::class, 'index'])->name('flash-sales.index');
     Route::get('flash-sales/{flash_sale}/registered-books', [\App\Http\Controllers\Api\Vendor\FlashSaleController::class, 'registeredBooks'])->name('flash-sales.registered-books');
     Route::post('flash-sales/{flash_sale}/register', [\App\Http\Controllers\Api\Vendor\FlashSaleController::class, 'register'])->name('flash-sales.register');
+
+    // Quản lý chương sách tự viết (Chapters)
+    Route::get('books/{book}/chapters', [\App\Http\Controllers\Api\ChapterController::class, 'index'])->name('books.chapters.index');
+    Route::post('books/{book}/chapters', [\App\Http\Controllers\Api\ChapterController::class, 'store'])->name('books.chapters.store');
+    Route::put('books/{book}/chapters/{chapter}', [\App\Http\Controllers\Api\ChapterController::class, 'update'])->name('books.chapters.update');
+    Route::delete('books/{book}/chapters/{chapter}', [\App\Http\Controllers\Api\ChapterController::class, 'destroy'])->name('books.chapters.destroy');
+
+    // Cấu hình bản quyền & DRM
+    Route::get('books/{book}/drm-settings', [\App\Http\Controllers\Api\DrmController::class, 'show'])->name('books.drm.show');
+    Route::put('books/{book}/drm-settings', [\App\Http\Controllers\Api\DrmController::class, 'update'])->name('books.drm.update');
+
+    // Kiểm kê kho hàng định kỳ (Inventory Audit)
+    Route::get('inventory/audits', [\App\Http\Controllers\Api\InventoryAuditController::class, 'index'])->name('inventory.audits.index');
+    Route::get('inventory/audits/{id}', [\App\Http\Controllers\Api\InventoryAuditController::class, 'show'])->name('inventory.audits.show');
+    Route::post('inventory/audits', [\App\Http\Controllers\Api\InventoryAuditController::class, 'store'])->name('inventory.audits.store');
+    Route::post('inventory/audits/{id}/complete', [\App\Http\Controllers\Api\InventoryAuditController::class, 'complete'])->name('inventory.audits.complete');
+
+    // Điều chuyển kho (Stock Transfer)
+    Route::get('inventory/transfers', [\App\Http\Controllers\Api\StockTransferController::class, 'index'])->name('inventory.transfers.index');
+    Route::get('inventory/transfers/{id}', [\App\Http\Controllers\Api\StockTransferController::class, 'show'])->name('inventory.transfers.show');
+    Route::post('inventory/transfers', [\App\Http\Controllers\Api\StockTransferController::class, 'store'])->name('inventory.transfers.store');
+    Route::post('inventory/transfers/{id}/ship', [\App\Http\Controllers\Api\StockTransferController::class, 'ship'])->name('inventory.transfers.ship');
+    Route::post('inventory/transfers/{id}/receive', [\App\Http\Controllers\Api\StockTransferController::class, 'receive'])->name('inventory.transfers.receive');
+
+    // Trạng thái vận chuyển mô phỏng (Shipping)
+    Route::patch('orders/{order}/shipping', [\App\Http\Controllers\Api\OrderController::class, 'updateShippingStatus'])->name('orders.shipping.update');
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -143,6 +185,25 @@ Route::middleware(['auth:sanctum', 'role:admin'])->prefix('admin')->name('admin.
     // Cấu hình hệ thống
     Route::get('config', [\App\Http\Controllers\Api\Admin\SystemConfigController::class, 'show'])->name('config.show');
     Route::put('config', [\App\Http\Controllers\Api\Admin\SystemConfigController::class, 'update'])->name('config.update');
+
+    // Phê duyệt nhà bán & tác giả
+    Route::get('approvals/vendors', [\App\Http\Controllers\Api\Admin\VendorApprovalController::class, 'index'])->name('approvals.vendors.index');
+    Route::patch('approvals/vendors/{id}/approve', [\App\Http\Controllers\Api\Admin\VendorApprovalController::class, 'approveVendor'])->name('approvals.vendors.approve');
+    Route::patch('approvals/authors/{id}/approve', [\App\Http\Controllers\Api\Admin\VendorApprovalController::class, 'approveAuthor'])->name('approvals.authors.approve');
+    Route::patch('approvals/partners/{type}/{id}/reject', [\App\Http\Controllers\Api\Admin\VendorApprovalController::class, 'reject'])->name('approvals.partners.reject');
+
+    // Quản lý Tickets hội thoại (Admin)
+    Route::get('support/tickets', [\App\Http\Controllers\Api\SupportTicketController::class, 'adminIndex'])->name('support.tickets.adminIndex');
+    Route::patch('support/tickets/{id}/assign', [\App\Http\Controllers\Api\SupportTicketController::class, 'adminAssign'])->name('support.tickets.assign');
+    Route::patch('support/tickets/{id}/status', [\App\Http\Controllers\Api\SupportTicketController::class, 'adminStatus'])->name('support.tickets.status');
+    Route::post('support/tickets/{id}/reply', [\App\Http\Controllers\Api\SupportTicketController::class, 'reply'])->name('support.tickets.reply');
+
+    // Quản trị câu hỏi trợ giúp Knowledge Base
+    Route::apiResource('help-center/articles', \App\Http\Controllers\Api\HelpCenterController::class);
+
+    // CRM hạng thành viên và điểm tích lũy
+    Route::apiResource('membership-tiers', \App\Http\Controllers\Api\Admin\MembershipTierController::class);
+    Route::patch('users/{user}/tier', [\App\Http\Controllers\Api\Admin\MembershipTierController::class, 'updateUserTier'])->name('users.tier.update');
 });
 
 Route::get('/flash-sales', [\App\Http\Controllers\Api\CouponController::class, 'flashSales']);

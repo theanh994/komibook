@@ -99,6 +99,40 @@
                 />
               </div>
 
+              <!-- Vai trò mong muốn -->
+              <div class="flex flex-col gap-1.5">
+                <label class="text-[13px] font-semibold text-on-surface-variant ml-0.5 flex items-center gap-2 uppercase tracking-wide">
+                  <span class="material-symbols-outlined text-[18px] text-primary/80">group</span>
+                  Vai trò đăng ký
+                </label>
+                <div class="grid grid-cols-3 gap-3">
+                  <label 
+                    class="flex flex-col items-center justify-center p-3 border rounded-xl cursor-pointer transition-all duration-200 text-center gap-1.5 border-outline-variant/60 hover:scale-[1.02] active:scale-[0.98]"
+                    :class="form.desired_role === 'customer' ? 'border-primary bg-primary/5 text-primary font-bold shadow-sm' : 'border-outline-variant/60 bg-surface text-on-surface-variant'"
+                  >
+                    <input type="radio" v-model="form.desired_role" value="customer" class="sr-only" />
+                    <span class="material-symbols-outlined text-xl">person</span>
+                    <span class="text-xs">Độc giả</span>
+                  </label>
+                  <label 
+                    class="flex flex-col items-center justify-center p-3 border rounded-xl cursor-pointer transition-all duration-200 text-center gap-1.5 border-outline-variant/60 hover:scale-[1.02] active:scale-[0.98]"
+                    :class="form.desired_role === 'author' ? 'border-primary bg-primary/5 text-primary font-bold shadow-sm' : 'border-outline-variant/60 bg-surface text-on-surface-variant'"
+                  >
+                    <input type="radio" v-model="form.desired_role" value="author" class="sr-only" />
+                    <span class="material-symbols-outlined text-xl">edit</span>
+                    <span class="text-xs">Tác giả</span>
+                  </label>
+                  <label 
+                    class="flex flex-col items-center justify-center p-3 border rounded-xl cursor-pointer transition-all duration-200 text-center gap-1.5 border-outline-variant/60 hover:scale-[1.02] active:scale-[0.98]"
+                    :class="form.desired_role === 'vendor' ? 'border-primary bg-primary/5 text-primary font-bold shadow-sm' : 'border-outline-variant/60 bg-surface text-on-surface-variant'"
+                  >
+                    <input type="radio" v-model="form.desired_role" value="vendor" class="sr-only" />
+                    <span class="material-symbols-outlined text-xl">storefront</span>
+                    <span class="text-xs">Nhà bán</span>
+                  </label>
+                </div>
+              </div>
+
               <!-- Password Grid -->
               <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <!-- Password Input -->
@@ -195,7 +229,8 @@ const form = reactive({
   name: '',
   email: '',
   password: '',
-  password_confirmation: ''
+  password_confirmation: '',
+  desired_role: 'customer'
 })
 
 const loading = ref(false)
@@ -210,11 +245,15 @@ const handleRegister = async () => {
   loading.value = true
   try {
     await authStore.register({ ...form })
-    toast.add({ severity: 'success', summary: 'Thành công', detail: 'Đăng ký tài khoản thành công! Đang chuyển hướng...', life: 3000 })
+    let message = 'Đăng ký tài khoản thành công! Đang chuyển hướng...'
+    if (form.desired_role === 'author' || form.desired_role === 'vendor') {
+      message = 'Đăng ký thành công! Hồ sơ đối tác của bạn đang chờ Admin phê duyệt.'
+    }
+    toast.add({ severity: 'success', summary: 'Thành công', detail: message, life: 4000 })
     
     setTimeout(() => {
       router.push({ name: 'dashboard' })
-    }, 1000)
+    }, 1200)
   } catch (error) {
     console.error('Registration error:', error)
     let errorMessage = 'Có lỗi xảy ra trong quá trình đăng ký.'

@@ -211,7 +211,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useCartStore } from '@/stores/cart'
@@ -238,42 +238,90 @@ const fetchUnreadCount = async () => {
   }
 }
 
-const userMenuItems = ref([
-  {
-    label: 'Thông tin cá nhân',
-    icon: 'pi pi-user-edit',
-    command: () => router.push('/profile')
-  },
-  {
-    label: 'Tủ sách',
-    icon: 'pi pi-book',
-    command: () => router.push('/my-library')
-  },
-  {
-    label: 'Lịch sử mua hàng',
-    icon: 'pi pi-shopping-bag',
-    command: () => router.push('/orders')
-  },
-  {
-    label: 'Danh sách yêu thích',
-    icon: 'pi pi-heart',
-    command: () => router.push('/wishlist')
-  },
-  {
-    label: 'Thông báo',
-    icon: 'pi pi-bell',
-    command: () => router.push('/notifications')
-  },
-  { separator: true },
-  {
+const userMenuItems = computed(() => {
+  const items = [
+    {
+      label: 'Thông tin cá nhân',
+      icon: 'pi pi-user-edit',
+      command: () => router.push('/profile')
+    },
+    {
+      label: 'Tủ sách',
+      icon: 'pi pi-book',
+      command: () => router.push('/my-library')
+    },
+    {
+      label: 'Lịch sử mua hàng',
+      icon: 'pi pi-shopping-bag',
+      command: () => router.push('/orders')
+    },
+    {
+      label: 'Danh sách yêu thích',
+      icon: 'pi pi-heart',
+      command: () => router.push('/wishlist')
+    },
+    {
+      label: 'Thông báo',
+      icon: 'pi pi-bell',
+      command: () => router.push('/notifications')
+    },
+    { separator: true }
+  ]
+
+  if (authStore.isAuthenticated) {
+    const authorProfile = authStore.user?.author_profile
+    if (authorProfile) {
+      if (authorProfile.status === 'active') {
+        items.push({
+          label: 'Kênh sáng tác Tác giả',
+          icon: 'pi pi-pencil',
+          command: () => router.push('/vendor/dashboard')
+        })
+      } else if (authorProfile.status === 'pending') {
+        items.push({
+          label: 'Đang duyệt Tác giả',
+          icon: 'pi pi-clock',
+          disabled: true
+        })
+      } else if (authorProfile.status === 'rejected') {
+        items.push({
+          label: 'Hồ sơ Tác giả bị từ chối',
+          icon: 'pi pi-times-circle',
+          command: () => router.push('/author/register')
+        })
+      }
+    } else {
+      items.push({
+        label: 'Đăng ký làm Tác giả',
+        icon: 'pi pi-user-plus',
+        command: () => router.push('/author/register')
+      })
+    }
+  }
+
+  items.push({
+    label: 'Liên hệ hỗ trợ',
+    icon: 'pi pi-question-circle',
+    command: () => router.push('/support')
+  })
+  items.push({
+    label: 'Trung tâm trợ giúp',
+    icon: 'pi pi-info-circle',
+    command: () => router.push('/help-center')
+  })
+
+  items.push({ separator: true })
+  items.push({
     label: 'Đăng xuất',
     icon: 'pi pi-sign-out',
     command: async () => {
       await authStore.logout()
       router.push({ name: 'home' })
     }
-  }
-])
+  })
+
+  return items
+})
 
 const toggleUserMenu = (event) => {
   userMenu.value.toggle(event)

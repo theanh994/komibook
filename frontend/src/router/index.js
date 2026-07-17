@@ -101,6 +101,42 @@ const router = createRouter({
       meta: { requiresAuth: true }
     },
     {
+      path: '/author/register',
+      name: 'author-register',
+      component: () => import('@/views/auth/AuthorRegisterView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/author/verify',
+      name: 'author-verify',
+      component: () => import('@/views/auth/AccountVerificationView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/help-center',
+      name: 'help-center',
+      component: () => import('@/views/HelpCenterView.vue'),
+      meta: { requiresAuth: false }
+    },
+    {
+      path: '/support',
+      name: 'customer-support',
+      component: () => import('@/views/CustomerSupportView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/support/tickets/:id',
+      name: 'customer-support-ticket-detail',
+      component: () => import('@/views/admin/TicketDetailView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/orders/invoice/:id',
+      name: 'order-invoice',
+      component: () => import('@/views/orders/InvoicePrintView.vue'),
+      meta: { requiresAuth: true, hideHeader: true }
+    },
+    {
       path: '/login',
       name: 'login',
       component: () => import('@/views/auth/LoginView.vue'),
@@ -205,6 +241,30 @@ const router = createRouter({
           component: () => import('@/views/admin/NotificationAnalyticsView.vue'),
           meta: { requiresAuth: true, role: 'admin', hideHeader: true, title: 'Hiệu quả thông báo' }
         },
+        {
+          path: 'approvals',
+          name: 'admin-approvals',
+          component: () => import('@/views/admin/VendorApprovalsView.vue'),
+          meta: { requiresAuth: true, role: 'admin', hideHeader: true, title: 'Kiểm duyệt đối tác' }
+        },
+        {
+          path: 'support/tickets',
+          name: 'admin-support-tickets',
+          component: () => import('@/views/admin/HelpDeskView.vue'),
+          meta: { requiresAuth: true, role: 'admin', hideHeader: true, title: 'Hỗ trợ khách hàng' }
+        },
+        {
+          path: 'support/tickets/:id',
+          name: 'admin-support-ticket-detail',
+          component: () => import('@/views/admin/TicketDetailView.vue'),
+          meta: { requiresAuth: true, role: 'admin', hideHeader: true, title: 'Chi tiết Yêu cầu Hỗ trợ' }
+        },
+        {
+          path: 'membership-tiers',
+          name: 'admin-membership-tiers',
+          component: () => import('@/views/admin/MembershipTiersView.vue'),
+          meta: { requiresAuth: true, role: 'admin', hideHeader: true, title: 'Quản lý Hạng thành viên' }
+        },
       ]
     },
     {
@@ -259,6 +319,54 @@ const router = createRouter({
           name: 'vendor-flash-sales',
           component: () => import('@/views/vendor/FlashSalesView.vue'),
           meta: { requiresAuth: true, role: 'vendor', hideHeader: true, title: 'Đăng ký Flash Sale' }
+        },
+        {
+          path: 'live-editor/:bookId',
+          name: 'author-live-editor',
+          component: () => import('@/views/vendor/LiveEditorView.vue'),
+          meta: { requiresAuth: true, role: 'vendor', hideHeader: true, title: 'Trình soạn thảo' }
+        },
+        {
+          path: 'preview/:bookId',
+          name: 'author-device-preview',
+          component: () => import('@/views/vendor/MultiDevicePreviewView.vue'),
+          meta: { requiresAuth: true, role: 'vendor', hideHeader: true, title: 'Xem trước đa thiết bị' }
+        },
+        {
+          path: 'books/:bookId/drm',
+          name: 'vendor-book-drm',
+          component: () => import('@/views/vendor/DrmSettingsView.vue'),
+          meta: { requiresAuth: true, role: 'vendor', hideHeader: true, title: 'Quản lý DRM & Bản quyền' }
+        },
+        {
+          path: 'books/:bookId/chapters',
+          name: 'vendor-book-chapters',
+          component: () => import('@/views/vendor/BookChaptersView.vue'),
+          meta: { requiresAuth: true, role: 'vendor', hideHeader: true, title: 'Thiết lập Giá và Đọc thử' }
+        },
+        {
+          path: 'inventory/audits',
+          name: 'vendor-inventory-audits',
+          component: () => import('@/views/vendor/InventoryAuditView.vue'),
+          meta: { requiresAuth: true, role: 'vendor', hideHeader: true, title: 'Kiểm kê kho' }
+        },
+        {
+          path: 'inventory/transfers',
+          name: 'vendor-inventory-transfers',
+          component: () => import('@/views/vendor/StockTransferView.vue'),
+          meta: { requiresAuth: true, role: 'vendor', hideHeader: true, title: 'Điều chuyển kho' }
+        },
+        {
+          path: 'inventory/transfers/print/:id',
+          name: 'vendor-inventory-transfers-print',
+          component: () => import('@/views/vendor/StockTransferPrintView.vue'),
+          meta: { requiresAuth: true, role: 'vendor', hideHeader: true, title: 'In phiếu chuyển kho' }
+        },
+        {
+          path: 'author-dashboard',
+          name: 'author-dashboard',
+          component: () => import('@/views/vendor/AuthorDashboardView.vue'),
+          meta: { requiresAuth: true, role: 'vendor', hideHeader: true, title: 'Bảng điều khiển Tác giả' }
         },
       ]
     }

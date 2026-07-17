@@ -27,6 +27,9 @@ class Order extends Model
         'payment_method',
         'shipping_address',
         'phone',
+        'shipping_carrier',
+        'shipping_tracking_code',
+        'shipping_status',
     ];
 
     /**

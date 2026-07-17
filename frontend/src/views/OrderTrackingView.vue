@@ -200,8 +200,8 @@
                    <span class="material-symbols-outlined text-6xl">verified</span>
                 </div>
                 <p class="text-[10px] font-bold text-outline uppercase tracking-[0.2em] mb-3">Đơn vị vận chuyển</p>
-                <p class="text-base font-bold text-primary italic">Komi Logistics Express</p>
-                <p class="text-[10px] text-on-surface-variant font-bold mt-2 uppercase tracking-widest">MVĐ: VN-{{ order.id }}-EXP</p>
+                <p class="text-base font-bold text-primary italic">{{ order.shipping_carrier || 'Komi Express' }}</p>
+                <p class="text-[10px] text-on-surface-variant font-bold mt-2 uppercase tracking-widest">MVĐ: {{ order.shipping_tracking_code || ('VN-' + order.id + '-EXP') }}</p>
               </div>
             </div>
 
@@ -279,12 +279,14 @@ const trackingSteps = [
 
 const currentStepIndex = computed(() => {
   if (!order.value) return 0
+  const sStatus = order.value.shipping_status
   const status = order.value.status
-  if (status === 'pending') return 0
+  if (status === 'completed' || sStatus === 'delivered') return 4
+  if (sStatus === 'delivering') return 3
+  if (sStatus === 'pending_pickup') return 2
   if (status === 'processing') return 1
-  if (status === 'shipping' || status === 'delivering') return 3 // Simplified for visual
-  if (status === 'completed') return 4
-  return 1 
+  if (status === 'pending') return 0
+  return 0
 })
 
 const progressWidth = computed(() => {

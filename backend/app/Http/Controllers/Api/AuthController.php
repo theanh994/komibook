@@ -34,6 +34,26 @@ class AuthController extends Controller
             'role'     => 'customer',
         ]);
 
+        if ($request->desired_role === 'author') {
+            \App\Models\Author::create([
+                'user_id' => $user->id,
+                'pen_name' => $user->name,
+                'bank_account_number' => 'Pending',
+                'bank_name' => 'Pending',
+                'bank_holder_name' => strtoupper($user->name),
+                'identity_document' => 'Pending',
+                'status' => 'pending',
+            ]);
+        } elseif ($request->desired_role === 'vendor') {
+            \App\Models\Vendor::withoutGlobalScopes()->create([
+                'user_id'     => $user->id,
+                'shop_name'   => 'Shop ' . $user->name,
+                'slug'        => \Illuminate\Support\Str::slug('Shop ' . $user->name . '-' . rand(1000, 9999)),
+                'description' => '',
+                'status'      => 'pending',
+            ]);
+        }
+
         $token = $user->createToken('auth_token')->plainTextToken;
 
         return response()->json([
@@ -72,10 +92,8 @@ class AuthController extends Controller
         // Single-device policy: xóa tất cả token cũ trước khi cấp mới
         $user->tokens()->delete();
 
-        // Eager load vendor nếu cần để UserResource không tạo thêm query
-        if ($user->isVendor()) {
-            $user->load('vendor');
-        }
+        // Eager load relationships
+        $user->load(['vendor', 'membershipTier', 'author']);
 
         $token = $user->createToken('auth_token')->plainTextToken;
 
@@ -127,9 +145,7 @@ class AuthController extends Controller
         /** @var User $user */
         $user = $request->user();
 
-        if ($user->isVendor()) {
-            $user->load('vendor');
-        }
+        $user->load(['vendor', 'membershipTier', 'author']);
 
         return response()->json([
             'status'  => 'success',

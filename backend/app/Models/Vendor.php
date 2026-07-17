@@ -24,6 +24,7 @@ class Vendor extends Model
         'description',
         'logo',
         'status',
+        'rejection_reason',
     ];
 
     // ─── Relationships ────────────────────────────────────────────────────────
@@ -83,6 +84,22 @@ class Vendor extends Model
     public function payoutRequests(): HasMany
     {
         return $this->hasMany(PayoutRequest::class);
+    }
+
+    /**
+     * Các phiếu kiểm kê kho của vendor.
+     */
+    public function inventoryAudits(): HasMany
+    {
+        return $this->hasMany(InventoryAudit::class);
+    }
+
+    /**
+     * Các phiếu điều chuyển kho của vendor.
+     */
+    public function stockTransfers(): HasMany
+    {
+        return $this->hasMany(StockTransfer::class);
     }
 
     // ─── Helper Methods ───────────────────────────────────────────────────────

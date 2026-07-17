@@ -49,35 +49,36 @@ class EbookSeeder extends Seeder
         }
         $this->command->info('Đã tạo 10 cuốn Ebook thành công.');
 
-        // 3. Lấy User đầu tiên (Admin hoặc Customer) để nhét vào giỏ hàng
-        $user = User::first();
-        if (!$user) {
-            $this->command->error('Không tìm thấy User nào trong hệ thống.');
-            return;
+        // 3. Lấy các User để tạo đơn hàng mua Ebook ảo
+        $users = User::whereIn('email', ['admin@komibook.id.vn', 'customer1@gmail.com'])->get();
+        if ($users->isEmpty()) {
+            $users = User::take(1)->get();
         }
 
-        // 4. Tạo Order ảo
-        $order = Order::create([
-            'order_code' => Order::generateOrderCode(),
-            'user_id' => $user->id,
-            'vendor_id' => $vendor->id,
-            'total_amount' => 50000 * 10,
-            'status' => 'completed',
-            'payment_status' => 'paid',
-            'payment_method' => 'cod',
-            'shipping_address' => 'Nhà riêng',
-            'phone' => '0123456789',
-        ]);
-
-        // 5. Thêm 10 OrderItems
-        foreach ($ebooks as $ebook) {
-            OrderItem::create([
-                'order_id' => $order->id,
-                'book_id' => $ebook->id,
-                'quantity' => 1,
-                'price' => $ebook->price,
+        foreach ($users as $u) {
+            // 4. Tạo Order ảo
+            $order = Order::create([
+                'order_code' => Order::generateOrderCode(),
+                'user_id' => $u->id,
+                'vendor_id' => $vendor->id,
+                'total_amount' => 50000 * 10,
+                'status' => 'completed',
+                'payment_status' => 'paid',
+                'payment_method' => 'cod',
+                'shipping_address' => 'Nhà riêng',
+                'phone' => '0123456789',
             ]);
+
+            // 5. Thêm 10 OrderItems
+            foreach ($ebooks as $ebook) {
+                OrderItem::create([
+                    'order_id' => $order->id,
+                    'book_id' => $ebook->id,
+                    'quantity' => 1,
+                    'price' => $ebook->price,
+                ]);
+            }
+            $this->command->info('Đã thêm 10 Ebook vào Tủ sách của User: ' . $u->email);
         }
-        $this->command->info('Đã thêm 10 Ebook vào Tủ sách của User: ' . $user->email);
     }
 }
