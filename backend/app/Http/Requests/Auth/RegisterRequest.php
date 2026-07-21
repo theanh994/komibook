@@ -22,10 +22,14 @@ class RegisterRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'name'     => ['required', 'string', 'max:255'],
-            'email'    => ['required', 'string', 'email', 'max:255', 'unique:users,email'],
-            'password' => ['required', 'string', 'min:8', 'confirmed'],
+            'name'         => ['required', 'string', 'max:255'],
+            'email'        => ['required_without:phone', 'nullable', 'string', 'email', 'max:255', 'unique:users,email'],
+            'password'     => ['required', 'string', 'min:8', 'confirmed'],
+            'phone'        => ['required_without:email', 'nullable', 'string', 'max:20', 'unique:users,phone'],
+            'gender'       => ['nullable', 'string', 'in:male,female,other'],
+            'birthday'     => ['nullable', 'date'],
             'desired_role' => ['nullable', 'string', 'in:customer,author,vendor'],
+            'google_id'    => ['nullable', 'string'],
         ];
     }
 
@@ -37,13 +41,15 @@ class RegisterRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'name.required'      => 'Vui lòng nhập họ và tên.',
-            'email.required'     => 'Vui lòng nhập địa chỉ email.',
-            'email.email'        => 'Địa chỉ email không hợp lệ.',
-            'email.unique'       => 'Email này đã được sử dụng.',
-            'password.required'  => 'Vui lòng nhập mật khẩu.',
-            'password.min'       => 'Mật khẩu phải có ít nhất :min ký tự.',
-            'password.confirmed' => 'Xác nhận mật khẩu không khớp.',
+            'name.required'             => 'Vui lòng nhập họ và tên.',
+            'email.required_without'    => 'Vui lòng nhập email hoặc số điện thoại.',
+            'email.email'               => 'Địa chỉ email không hợp lệ.',
+            'email.unique'              => 'Email này đã được sử dụng.',
+            'password.required'         => 'Vui lòng nhập mật khẩu.',
+            'password.min'              => 'Mật khẩu phải có ít nhất :min ký tự.',
+            'password.confirmed'        => 'Xác nhận mật khẩu không khớp.',
+            'phone.required_without'    => 'Vui lòng nhập số điện thoại hoặc email.',
+            'phone.unique'              => 'Số điện thoại này đã được sử dụng.',
         ];
     }
 }

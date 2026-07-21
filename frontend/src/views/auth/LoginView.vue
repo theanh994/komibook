@@ -42,7 +42,7 @@
           
           <!-- Social Logins -->
           <div class="flex flex-col gap-3">
-            <button type="button" class="w-full h-12 flex items-center justify-center gap-3 px-6 border border-outline-variant/60 rounded-xl bg-surface hover:bg-surface-container-low transition-all duration-200 cursor-pointer group shadow-sm active:scale-[0.98]">
+            <button type="button" @click="openGoogleLogin" class="w-full h-12 flex items-center justify-center gap-3 px-6 border border-outline-variant/60 rounded-xl bg-surface hover:bg-surface-container-low transition-all duration-200 cursor-pointer group shadow-sm active:scale-[0.98]">
               <svg class="w-5 h-5 transition-transform group-hover:scale-110" viewBox="0 0 24 24">
                 <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"></path>
                 <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"></path>
@@ -51,18 +51,16 @@
               </svg>
               <span class="text-sm font-semibold text-on-surface">Tiếp tục với Google</span>
             </button>
-            <button type="button" class="w-full h-12 flex items-center justify-center gap-3 px-6 border border-outline-variant/60 rounded-xl bg-surface hover:bg-surface-container-low transition-all duration-200 cursor-pointer group shadow-sm active:scale-[0.98]">
-              <svg class="w-5 h-5 transition-transform group-hover:scale-110" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M17.05 20.28c-.98.95-2.05 1.8-3.08 1.8-1.09 0-1.44-.65-2.68-.65-1.25 0-1.63.63-2.65.65-1.07.03-2.26-.95-3.13-1.92-2.58-2.9-4.34-8.08-1.63-11.23C5.2 7.37 6.8 6.4 8.25 6.4c1.07 0 2.08.68 2.7.68.65 0 1.95-.83 3.25-.7 1.35.1 2.38.55 3.08 1.25-2.5 1.48-2.13 4.98.38 5.95-.53 1.45-1.35 3.1-2.6 4.7zM12.03 6.15c-.15-2.03 1.55-3.9 3.45-4.15.28 2.15-1.88 4.05-3.45 4.15z"></path>
-              </svg>
-              <span class="text-sm font-semibold text-on-surface">Tiếp tục với Apple</span>
+            <button type="button" @click="openPhoneLogin" class="w-full h-12 flex items-center justify-center gap-3 px-6 border border-outline-variant/60 rounded-xl bg-surface hover:bg-surface-container-low transition-all duration-200 cursor-pointer group shadow-sm active:scale-[0.98]">
+              <span class="material-symbols-outlined text-xl text-primary transition-transform group-hover:scale-110">phone_iphone</span>
+              <span class="text-sm font-semibold text-on-surface">Tiếp tục bằng Số điện thoại</span>
             </button>
           </div>
 
           <!-- Divider -->
           <div class="flex items-center gap-4 py-2">
             <div class="flex-1 h-[1px] bg-outline-variant/40"></div>
-            <span class="text-[11px] font-bold text-outline uppercase tracking-widest select-none">hoặc đăng nhập bằng email</span>
+            <span class="text-[11px] font-bold text-outline uppercase tracking-widest select-none">hoặc đăng nhập bằng email / SĐT</span>
             <div class="flex-1 h-[1px] bg-outline-variant/40"></div>
           </div>
 
@@ -72,15 +70,15 @@
               <!-- Email Input -->
               <div class="flex flex-col gap-1.5">
                 <label class="text-[13px] font-semibold text-on-surface-variant ml-0.5 flex items-center gap-2 uppercase tracking-wide" for="email">
-                  <span class="material-symbols-outlined text-[18px] text-primary/80">mail</span>
-                  Email
+                  <span class="material-symbols-outlined text-[18px] text-primary/80">person</span>
+                  Email hoặc Số điện thoại
                 </label>
                 <input 
                   v-model="email"
                   class="w-full h-11 bg-surface-container-lowest border border-outline-variant/60 rounded-xl px-4 text-sm text-on-surface placeholder:text-outline/40 focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/5 transition-all duration-200" 
                   id="login-email" 
-                  placeholder="name@example.com" 
-                  type="email"
+                  placeholder="name@example.com hoặc 09xxxxxxxx" 
+                  type="text"
                   autocomplete="username"
                   required
                 />
@@ -156,14 +154,441 @@
         </div>
       </div>
     </main>
+
+    <!-- Google Login Mock Dialog -->
+    <Dialog 
+      v-model:visible="googleDialogVisible" 
+      header="Đăng nhập bằng tài khoản Google" 
+      :modal="true" 
+      class="!max-w-md !w-[90vw] !rounded-[24px] !bg-surface-container-lowest"
+    >
+      <div class="flex flex-col gap-6 py-4">
+        <p class="text-xs text-on-surface-variant leading-relaxed">Chọn một tài khoản để đăng nhập nhanh qua KomiBook Single Sign-On (SSO):</p>
+        
+        <div class="flex flex-col gap-3">
+          <button 
+            v-for="account in mockGoogleAccounts" 
+            :key="account.email"
+            @click="handleGoogleMockLogin(account)"
+            class="flex items-center gap-4 p-4 rounded-xl border border-outline-variant/60 hover:bg-surface-container-low transition-all text-left cursor-pointer bg-surface w-full"
+          >
+            <div class="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold">
+              {{ account.name[0] }}
+            </div>
+            <div>
+              <div class="text-sm font-bold text-on-surface">{{ account.name }}</div>
+              <div class="text-xs text-on-surface-variant">{{ account.email }}</div>
+            </div>
+          </button>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <div class="flex-grow h-[1px] bg-outline-variant/40"></div>
+          <span class="text-[9px] uppercase tracking-wider text-outline font-bold">hoặc tài khoản tùy chỉnh</span>
+          <div class="flex-grow h-[1px] bg-outline-variant/40"></div>
+        </div>
+
+        <div class="flex flex-col gap-3">
+          <input 
+            v-model="customGoogleEmail" 
+            placeholder="Tên tài khoản Google (tùy chọn)" 
+            class="w-full h-11 bg-surface-container-lowest border border-outline-variant/60 rounded-xl px-4 text-sm text-on-surface placeholder:text-outline/40 focus:outline-none focus:border-primary transition-all"
+          />
+          <button 
+            @click="handleCustomGoogleMockLogin"
+            class="w-full h-11 bg-primary text-on-primary rounded-xl font-bold text-xs uppercase tracking-widest cursor-pointer hover:bg-primary-container"
+          >
+            Đăng nhập tài khoản mới
+          </button>
+        </div>
+      </div>
+    </Dialog>
+
+    <!-- Google Complete Registration Dialog -->
+    <Dialog 
+      v-model:visible="googleRegDialogVisible" 
+      header="Hoàn tất đăng ký với Google" 
+      :modal="true" 
+      class="!max-w-xl !w-[90vw] !rounded-[24px] !bg-surface-container-lowest"
+    >
+      <form @submit.prevent="handleGoogleRegister" class="flex flex-col gap-5 py-4">
+        <div class="bg-primary/5 p-4 rounded-xl border border-primary/10 flex items-center gap-3">
+          <span class="material-symbols-outlined text-primary text-2xl">verified_user</span>
+          <div>
+            <div class="text-xs font-bold text-primary uppercase tracking-wide">Tài khoản Google đã xác minh</div>
+            <div class="text-xs text-on-surface-variant mt-0.5">Email của bạn đã được xác minh qua Google. Vui lòng bổ sung thêm thông tin.</div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <!-- Email (Read-only) -->
+          <div class="flex flex-col gap-1.5">
+            <label class="text-[13px] font-semibold text-on-surface-variant flex items-center gap-2 uppercase tracking-wide">
+              <span class="material-symbols-outlined text-[18px] text-primary/80">mail</span>
+              Email
+            </label>
+            <input 
+              v-model="googleRegForm.email"
+              disabled
+              class="w-full h-11 bg-surface-container-lowest border border-outline-variant/60 rounded-xl px-4 text-sm text-on-surface-variant opacity-60 cursor-not-allowed" 
+            />
+          </div>
+
+          <!-- Name -->
+          <div class="flex flex-col gap-1.5">
+            <label class="text-[13px] font-semibold text-on-surface-variant flex items-center gap-2 uppercase tracking-wide">
+              <span class="material-symbols-outlined text-[18px] text-primary/80">person</span>
+              Họ và tên
+            </label>
+            <input 
+              v-model="googleRegForm.name"
+              required
+              placeholder="Họ và tên"
+              class="w-full h-11 bg-surface-container-lowest border border-outline-variant/60 rounded-xl px-4 text-sm text-on-surface placeholder:text-outline/40 focus:outline-none focus:border-primary transition-all duration-200" 
+            />
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <!-- Phone -->
+          <div class="flex flex-col gap-1.5">
+            <label class="text-[13px] font-semibold text-on-surface-variant flex items-center gap-2 uppercase tracking-wide">
+              <span class="material-symbols-outlined text-[18px] text-primary/80">phone</span>
+              Số điện thoại
+            </label>
+            <input 
+              v-model="googleRegForm.phone"
+              required
+              placeholder="09xxxxxxxx"
+              type="tel"
+              class="w-full h-11 bg-surface-container-lowest border border-outline-variant/60 rounded-xl px-4 text-sm text-on-surface placeholder:text-outline/40 focus:outline-none focus:border-primary transition-all duration-200" 
+            />
+          </div>
+
+          <!-- Gender -->
+          <div class="flex flex-col gap-1.5">
+            <label class="text-[13px] font-semibold text-on-surface-variant flex items-center gap-2 uppercase tracking-wide">
+              <span class="material-symbols-outlined text-[18px] text-primary/80">wc</span>
+              Giới tính
+            </label>
+            <select 
+              v-model="googleRegForm.gender"
+              class="w-full h-11 bg-surface-container-lowest border border-outline-variant/60 rounded-xl px-4 text-sm text-on-surface focus:outline-none focus:border-primary transition-all duration-200" 
+            >
+              <option value="male">Nam</option>
+              <option value="female">Nữ</option>
+              <option value="other">Khác</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <!-- Birthday -->
+          <div class="flex flex-col gap-1.5 col-span-1">
+            <label class="text-[13px] font-semibold text-on-surface-variant flex items-center gap-2 uppercase tracking-wide">
+              <span class="material-symbols-outlined text-[18px] text-primary/80">cake</span>
+              Ngày sinh
+            </label>
+            <input 
+              v-model="googleRegForm.birthday"
+              type="date"
+              class="w-full h-11 bg-surface-container-lowest border border-outline-variant/60 rounded-xl px-4 text-sm text-on-surface focus:outline-none focus:border-primary transition-all duration-200" 
+            />
+          </div>
+
+          <!-- Desired Role -->
+          <div class="flex flex-col gap-1.5 col-span-1">
+            <label class="text-[13px] font-semibold text-on-surface-variant flex items-center gap-2 uppercase tracking-wide">
+              <span class="material-symbols-outlined text-[18px] text-primary/80">group</span>
+              Vai trò đăng ký
+            </label>
+            <select 
+              v-model="googleRegForm.desired_role"
+              class="w-full h-11 bg-surface-container-lowest border border-outline-variant/60 rounded-xl px-4 text-sm text-on-surface focus:outline-none focus:border-primary transition-all duration-200" 
+            >
+              <option value="customer">Độc giả</option>
+              <option value="author">Tác giả</option>
+              <option value="vendor">Nhà bán</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <!-- Password -->
+          <div class="flex flex-col gap-1.5">
+            <label class="text-[13px] font-semibold text-on-surface-variant flex items-center gap-2 uppercase tracking-wide">
+              <span class="material-symbols-outlined text-[18px] text-primary/80">lock</span>
+              Mật khẩu tự chọn
+            </label>
+            <input 
+              v-model="googleRegForm.password"
+              required
+              type="password"
+              placeholder="Tối thiểu 8 ký tự"
+              autocomplete="new-password"
+              class="w-full h-11 bg-surface-container-lowest border border-outline-variant/60 rounded-xl px-4 text-sm text-on-surface placeholder:text-outline/40 focus:outline-none focus:border-primary transition-all duration-200" 
+            />
+          </div>
+
+          <!-- Password Confirmation -->
+          <div class="flex flex-col gap-1.5">
+            <label class="text-[13px] font-semibold text-on-surface-variant flex items-center gap-2 uppercase tracking-wide">
+              <span class="material-symbols-outlined text-[18px] text-primary/80">verified_user</span>
+              Xác nhận mật khẩu
+            </label>
+            <input 
+              v-model="googleRegForm.password_confirmation"
+              required
+              type="password"
+              placeholder="••••••••"
+              autocomplete="new-password"
+              class="w-full h-11 bg-surface-container-lowest border border-outline-variant/60 rounded-xl px-4 text-sm text-on-surface placeholder:text-outline/40 focus:outline-none focus:border-primary transition-all duration-200" 
+            />
+          </div>
+        </div>
+
+        <button 
+          type="submit"
+          :disabled="loading"
+          class="w-full h-12 bg-primary text-on-primary font-semibold rounded-xl hover:bg-primary-container hover:shadow-lg active:scale-[0.98] transition-all duration-200 flex justify-center items-center gap-2 cursor-pointer mt-4"
+        >
+          <template v-if="loading">
+            <span class="pi pi-spin pi-spinner text-sm"></span>
+            <span>Đang thiết lập tài khoản...</span>
+          </template>
+          <template v-else>
+            <span>Hoàn tất đăng ký</span>
+            <span class="material-symbols-outlined text-[20px]">arrow_forward</span>
+          </template>
+        </button>
+      </form>
+    </Dialog>
+
+    <!-- Phone OTP Verification Dialog -->
+    <Dialog 
+      v-model:visible="phoneDialogVisible" 
+      header="Đăng nhập / Đăng ký bằng Số điện thoại" 
+      :modal="true" 
+      class="!max-w-md !w-[90vw] !rounded-[24px] !bg-surface-container-lowest"
+    >
+      <div class="flex flex-col gap-6 py-4">
+        <p class="text-xs text-on-surface-variant leading-relaxed">Nhập số điện thoại của bạn để nhận mã xác thực OTP gửi qua tin nhắn SMS giả lập:</p>
+        
+        <div class="flex flex-col gap-4">
+          <!-- Phone Input Section -->
+          <div class="flex flex-col gap-1.5">
+            <label class="text-[12px] font-bold text-on-surface-variant uppercase tracking-wider">Số điện thoại</label>
+            <div class="flex gap-2">
+              <input 
+                v-model="phoneInput" 
+                placeholder="Ví dụ: 0989999999" 
+                :disabled="otpSent"
+                class="flex-grow h-11 bg-surface-container-lowest border border-outline-variant/60 rounded-xl px-4 text-sm text-on-surface placeholder:text-outline/40 focus:outline-none focus:border-primary transition-all w-[60%]"
+              />
+              <button 
+                type="button"
+                @click="handleSendOtp"
+                :disabled="otpSent || loading"
+                class="flex-grow h-11 bg-primary text-on-primary rounded-xl font-bold text-xs uppercase tracking-widest cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:bg-primary-container"
+              >
+                Gửi OTP
+              </button>
+            </div>
+          </div>
+
+          <!-- OTP Verify Section -->
+          <div v-if="otpSent" class="flex flex-col gap-2 animate-in fade-in slide-in-from-top-4 duration-300">
+            <div class="flex justify-between items-center">
+              <label class="text-[12px] font-bold text-on-surface-variant uppercase tracking-wider">Mã xác thực OTP (6 chữ số)</label>
+              <span class="text-[11px] text-primary font-semibold">Gợi ý test: {{ mockOtpCode }} hoặc 123456</span>
+            </div>
+            <input 
+              v-model="otpInput" 
+              placeholder="Nhập 6 chữ số" 
+              maxlength="6"
+              class="w-full h-11 bg-surface-container-lowest border border-outline-variant/60 rounded-xl px-4 text-center tracking-[12px] text-lg font-bold text-on-surface focus:outline-none focus:border-primary transition-all"
+            />
+            <button 
+              type="button"
+              @click="handleVerifyOtp"
+              :disabled="loading"
+              class="w-full h-11 bg-primary text-on-primary rounded-xl font-bold text-xs uppercase tracking-widest cursor-pointer hover:bg-primary-container mt-2"
+            >
+              Xác nhận OTP
+            </button>
+          </div>
+        </div>
+      </div>
+    </Dialog>
+
+    <!-- Phone Complete Registration Dialog -->
+    <Dialog 
+      v-model:visible="phoneRegDialogVisible" 
+      header="Hoàn tất đăng ký bằng Số điện thoại" 
+      :modal="true" 
+      class="!max-w-xl !w-[90vw] !rounded-[24px] !bg-surface-container-lowest"
+    >
+      <form @submit.prevent="handlePhoneRegister" class="flex flex-col gap-5 py-4">
+        <div class="bg-primary/5 p-4 rounded-xl border border-primary/10 flex items-center gap-3">
+          <span class="material-symbols-outlined text-primary text-2xl">verified_user</span>
+          <div>
+            <div class="text-xs font-bold text-primary uppercase tracking-wide">Số điện thoại đã xác minh</div>
+            <div class="text-xs text-on-surface-variant mt-0.5">Số điện thoại <strong>{{ phoneInput }}</strong> đã xác thực thành công. Vui lòng thiết lập thông tin.</div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <!-- Phone (Read-only) -->
+          <div class="flex flex-col gap-1.5">
+            <label class="text-[13px] font-semibold text-on-surface-variant flex items-center gap-2 uppercase tracking-wide">
+              <span class="material-symbols-outlined text-[18px] text-primary/80">phone</span>
+              Số điện thoại
+            </label>
+            <input 
+              v-model="phoneRegForm.phone"
+              disabled
+              class="w-full h-11 bg-surface-container-lowest border border-outline-variant/60 rounded-xl px-4 text-sm text-on-surface-variant opacity-60 cursor-not-allowed" 
+            />
+          </div>
+
+          <!-- Name -->
+          <div class="flex flex-col gap-1.5">
+            <label class="text-[13px] font-semibold text-on-surface-variant flex items-center gap-2 uppercase tracking-wide">
+              <span class="material-symbols-outlined text-[18px] text-primary/80">person</span>
+              Họ và tên
+            </label>
+            <input 
+              v-model="phoneRegForm.name"
+              required
+              placeholder="Họ và tên"
+              class="w-full h-11 bg-surface-container-lowest border border-outline-variant/60 rounded-xl px-4 text-sm text-on-surface placeholder:text-outline/40 focus:outline-none focus:border-primary transition-all duration-200" 
+            />
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <!-- Email (Optional) -->
+          <div class="flex flex-col gap-1.5">
+            <label class="text-[13px] font-semibold text-on-surface-variant flex items-center gap-2 uppercase tracking-wide">
+              <span class="material-symbols-outlined text-[18px] text-primary/80">mail</span>
+              Email (Không bắt buộc)
+            </label>
+            <input 
+              v-model="phoneRegForm.email"
+              type="email"
+              placeholder="name@example.com"
+              class="w-full h-11 bg-surface-container-lowest border border-outline-variant/60 rounded-xl px-4 text-sm text-on-surface placeholder:text-outline/40 focus:outline-none focus:border-primary transition-all duration-200" 
+            />
+          </div>
+
+          <!-- Gender -->
+          <div class="flex flex-col gap-1.5">
+            <label class="text-[13px] font-semibold text-on-surface-variant flex items-center gap-2 uppercase tracking-wide">
+              <span class="material-symbols-outlined text-[18px] text-primary/80">wc</span>
+              Giới tính
+            </label>
+            <select 
+              v-model="phoneRegForm.gender"
+              class="w-full h-11 bg-surface-container-lowest border border-outline-variant/60 rounded-xl px-4 text-sm text-on-surface focus:outline-none focus:border-primary transition-all duration-200" 
+            >
+              <option value="male">Nam</option>
+              <option value="female">Nữ</option>
+              <option value="other">Khác</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <!-- Birthday -->
+          <div class="flex flex-col gap-1.5 col-span-1">
+            <label class="text-[13px] font-semibold text-on-surface-variant flex items-center gap-2 uppercase tracking-wide">
+              <span class="material-symbols-outlined text-[18px] text-primary/80">cake</span>
+              Ngày sinh
+            </label>
+            <input 
+              v-model="phoneRegForm.birthday"
+              type="date"
+              class="w-full h-11 bg-surface-container-lowest border border-outline-variant/60 rounded-xl px-4 text-sm text-on-surface focus:outline-none focus:border-primary transition-all duration-200" 
+            />
+          </div>
+
+          <!-- Desired Role -->
+          <div class="flex flex-col gap-1.5 col-span-1">
+            <label class="text-[13px] font-semibold text-on-surface-variant flex items-center gap-2 uppercase tracking-wide">
+              <span class="material-symbols-outlined text-[18px] text-primary/80">group</span>
+              Vai trò đăng ký
+            </label>
+            <select 
+              v-model="phoneRegForm.desired_role"
+              class="w-full h-11 bg-surface-container-lowest border border-outline-variant/60 rounded-xl px-4 text-sm text-on-surface focus:outline-none focus:border-primary transition-all duration-200" 
+            >
+              <option value="customer">Độc giả</option>
+              <option value="author">Tác giả</option>
+              <option value="vendor">Nhà bán</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <!-- Password -->
+          <div class="flex flex-col gap-1.5">
+            <label class="text-[13px] font-semibold text-on-surface-variant flex items-center gap-2 uppercase tracking-wide">
+              <span class="material-symbols-outlined text-[18px] text-primary/80">lock</span>
+              Mật khẩu tự chọn
+            </label>
+            <input 
+              v-model="phoneRegForm.password"
+              required
+              type="password"
+              placeholder="Tối thiểu 8 ký tự"
+              autocomplete="new-password"
+              class="w-full h-11 bg-surface-container-lowest border border-outline-variant/60 rounded-xl px-4 text-sm text-on-surface placeholder:text-outline/40 focus:outline-none focus:border-primary transition-all duration-200" 
+            />
+          </div>
+
+          <!-- Password Confirmation -->
+          <div class="flex flex-col gap-1.5">
+            <label class="text-[13px] font-semibold text-on-surface-variant flex items-center gap-2 uppercase tracking-wide">
+              <span class="material-symbols-outlined text-[18px] text-primary/80">verified_user</span>
+              Xác nhận mật khẩu
+            </label>
+            <input 
+              v-model="phoneRegForm.password_confirmation"
+              required
+              type="password"
+              placeholder="••••••••"
+              autocomplete="new-password"
+              class="w-full h-11 bg-surface-container-lowest border border-outline-variant/60 rounded-xl px-4 text-sm text-on-surface placeholder:text-outline/40 focus:outline-none focus:border-primary transition-all duration-200" 
+            />
+          </div>
+        </div>
+
+        <button 
+          type="submit"
+          :disabled="loading"
+          class="w-full h-12 bg-primary text-on-primary font-semibold rounded-xl hover:bg-primary-container hover:shadow-lg active:scale-[0.98] transition-all duration-200 flex justify-center items-center gap-2 cursor-pointer mt-4"
+        >
+          <template v-if="loading">
+            <span class="pi pi-spin pi-spinner text-sm"></span>
+            <span>Đang thiết lập tài khoản...</span>
+          </template>
+          <template v-else>
+            <span>Hoàn tất đăng ký</span>
+            <span class="material-symbols-outlined text-[20px]">arrow_forward</span>
+          </template>
+        </button>
+      </form>
+    </Dialog>
   </div>
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from 'primevue/usetoast'
+import Dialog from 'primevue/dialog'
+import apiClient from '@/services/axios'
 
 const email = ref('')
 const password = ref('')
@@ -171,9 +596,224 @@ const remember = ref(false)
 const loading = ref(false)
 const showPassword = ref(false)
 
+const googleRegDialogVisible = ref(false)
+const googleRegForm = reactive({
+  email: '',
+  name: '',
+  google_id: '',
+  phone: '',
+  gender: 'male',
+  birthday: '',
+  desired_role: 'customer',
+  password: '',
+  password_confirmation: ''
+})
+
+const phoneDialogVisible = ref(false)
+const phoneRegDialogVisible = ref(false)
+const otpSent = ref(false)
+const phoneInput = ref('')
+const otpInput = ref('')
+const mockOtpCode = ref('')
+
+const phoneRegForm = reactive({
+  name: '',
+  phone: '',
+  email: '',
+  gender: 'male',
+  birthday: '',
+  desired_role: 'customer',
+  password: '',
+  password_confirmation: ''
+})
+
+const mockGoogleAccounts = [
+  { name: 'Trần Thị Bích Ngọc (Khách)', email: 'customer1@gmail.com', google_id: 'google_customer1' },
+  { name: 'Nhà sách Trẻ (Vendor)', email: 'vendor1@gmail.com', google_id: 'google_vendor1' },
+  { name: 'Quản trị viên (Admin)', email: 'admin@komibook.id.vn', google_id: 'google_admin' }
+]
+
 const router = useRouter()
 const authStore = useAuthStore()
 const toast = useToast()
+
+const openGoogleLogin = () => {
+  googleDialogVisible.value = true
+}
+
+const openPhoneLogin = () => {
+  phoneDialogVisible.value = true
+  otpSent.value = false
+  phoneInput.value = ''
+  otpInput.value = ''
+}
+
+const handleSendOtp = async () => {
+  if (!phoneInput.value || !/^(0[3|5|7|8|9])+([0-9]{8})$/.test(phoneInput.value)) {
+    toast.add({ severity: 'warn', summary: 'Cảnh báo', detail: 'Số điện thoại không đúng định dạng Việt Nam.', life: 3000 })
+    return
+  }
+  
+  loading.value = true
+  try {
+    const res = await authStore.sendPhoneOtp(phoneInput.value)
+    otpSent.value = true
+    mockOtpCode.value = res.data.otp || '123456'
+    toast.add({ severity: 'success', summary: 'Thành công', detail: 'Mã OTP đã được gửi đến số điện thoại của bạn!', life: 3000 })
+  } catch (error) {
+    console.error('Send OTP error:', error)
+    let errorMessage = 'Gửi OTP không thành công, vui lòng thử lại.'
+    if (error.response?.data?.message) {
+      errorMessage = error.response.data.message
+    }
+    toast.add({ severity: 'error', summary: 'Lỗi', detail: errorMessage, life: 3000 })
+  } finally {
+    loading.value = false
+  }
+}
+
+const handleVerifyOtp = async () => {
+  if (!otpInput.value || otpInput.value.length !== 6) {
+    toast.add({ severity: 'warn', summary: 'Cảnh báo', detail: 'Vui lòng nhập đúng 6 chữ số mã OTP.', life: 3000 })
+    return
+  }
+  
+  loading.value = true
+  try {
+    const res = await authStore.verifyPhoneOtp(phoneInput.value, otpInput.value)
+    
+    if (res.status === 'success') {
+      toast.add({ severity: 'success', summary: 'Thành công', detail: 'Đăng nhập thành công!', life: 3000 })
+      phoneDialogVisible.value = false
+      setTimeout(() => {
+        router.push({ name: 'dashboard' })
+      }, 500)
+    } else if (res.status === 'needs_registration') {
+      phoneDialogVisible.value = false
+      phoneRegForm.phone = res.data.phone
+      phoneRegForm.name = ''
+      phoneRegForm.email = ''
+      phoneRegForm.gender = 'male'
+      phoneRegForm.birthday = ''
+      phoneRegForm.desired_role = 'customer'
+      phoneRegForm.password = ''
+      phoneRegForm.password_confirmation = ''
+      phoneRegDialogVisible.value = true
+    }
+  } catch (error) {
+    console.error('Verify OTP error:', error)
+    toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Mã OTP không chính xác hoặc đã hết hạn.', life: 3000 })
+  } finally {
+    loading.value = false
+  }
+}
+
+const handlePhoneRegister = async () => {
+  if (phoneRegForm.password !== phoneRegForm.password_confirmation) {
+    toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Mật khẩu xác nhận không khớp.', life: 3000 })
+    return
+  }
+  
+  loading.value = true
+  try {
+    await authStore.register({ ...phoneRegForm })
+    phoneRegDialogVisible.value = false
+    toast.add({ severity: 'success', summary: 'Thành công', detail: 'Đăng ký tài khoản bằng số điện thoại thành công!', life: 3000 })
+    setTimeout(() => {
+      router.push({ name: 'dashboard' })
+    }, 500)
+  } catch (error) {
+    console.error('Phone register completion error:', error)
+    let errorMessage = 'Đăng ký không thành công, vui lòng thử lại.'
+    if (error.response?.data?.message) {
+      errorMessage = error.response.data.message
+    } else if (error.response?.data?.errors) {
+      errorMessage = Object.values(error.response.data.errors)[0][0]
+    }
+    toast.add({ severity: 'error', summary: 'Lỗi đăng ký', detail: errorMessage, life: 3000 })
+  } finally {
+    loading.value = false
+  }
+}
+
+const handleGoogleMockLogin = async (account) => {
+  googleDialogVisible.value = false
+  loading.value = true
+  try {
+    const res = await authStore.loginWithGoogle({
+      email: account.email,
+      name: account.name,
+      google_id: account.google_id
+    })
+    
+    if (res.status === 'success') {
+      toast.add({ severity: 'success', summary: 'Thành công', detail: 'Đăng nhập bằng Google thành công!', life: 3000 })
+      setTimeout(() => {
+        router.push({ name: 'dashboard' })
+      }, 500)
+    } else if (res.status === 'needs_registration') {
+      // Bắt đầu luồng hoàn tất đăng ký
+      googleRegForm.email = res.data.email
+      googleRegForm.name = res.data.name
+      googleRegForm.google_id = res.data.google_id
+      googleRegForm.phone = ''
+      googleRegForm.gender = 'male'
+      googleRegForm.birthday = ''
+      googleRegForm.desired_role = 'customer'
+      googleRegForm.password = ''
+      googleRegForm.password_confirmation = ''
+      googleRegDialogVisible.value = true
+    }
+  } catch (error) {
+    console.error('Google login error:', error)
+    toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Không thể kết nối tài khoản Google.', life: 3000 })
+  } finally {
+    loading.value = false
+  }
+}
+
+const handleGoogleRegister = async () => {
+  if (googleRegForm.password !== googleRegForm.password_confirmation) {
+    toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Mật khẩu xác nhận không khớp.', life: 3000 })
+    return
+  }
+  
+  loading.value = true
+  try {
+    await authStore.register({ ...googleRegForm })
+    googleRegDialogVisible.value = false
+    toast.add({ severity: 'success', summary: 'Thành công', detail: 'Tài khoản Google đã được đăng ký và liên kết thành công!', life: 3000 })
+    setTimeout(() => {
+      router.push({ name: 'dashboard' })
+    }, 500)
+  } catch (error) {
+    console.error('Google register completion error:', error)
+    let errorMessage = 'Đăng ký không thành công, vui lòng thử lại.'
+    if (error.response?.data?.message) {
+      errorMessage = error.response.data.message
+    } else if (error.response?.data?.errors) {
+      errorMessage = Object.values(error.response.data.errors)[0][0]
+    }
+    toast.add({ severity: 'error', summary: 'Lỗi đăng ký', detail: errorMessage, life: 3000 })
+  } finally {
+    loading.value = false
+  }
+}
+
+const handleCustomGoogleMockLogin = async () => {
+  if (!customGoogleEmail.value) {
+    toast.add({ severity: 'warn', summary: 'Cảnh báo', detail: 'Vui lòng nhập tên tài khoản Google.', life: 3000 })
+    return
+  }
+  const emailStr = customGoogleEmail.value.includes('@') ? customGoogleEmail.value : `${customGoogleEmail.value}@gmail.com`
+  const nameStr = customGoogleEmail.value.split('@')[0]
+  
+  await handleGoogleMockLogin({
+    email: emailStr,
+    name: nameStr,
+    google_id: `google_custom_${Date.now()}`
+  })
+}
 
 const handleLogin = async () => {
   if (!email.value || !password.value) return

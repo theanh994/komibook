@@ -40,48 +40,73 @@ class BookController extends Controller
     {
         // 1. Tắt Global Scope MultiVendor (Bản thân Book tự động bị thu gọn list với user đăng nhập là vendor. Nên ta phải huỷ global scope)
         $query = Book::withoutGlobalScopes()
-            ->where('status', 'published')
-            ->with(['vendor', 'category', 'series']); // Eager loading
+            ->select('books.*')
+            ->where('books.status', 'published')
+            ->with(['vendor', 'category', 'categories', 'series']); // Eager loading
             
         // 2. Lọc theo category_id nếu có params
         if ($request->has('category_id') && $request->category_id !== '') {
-            $query->where('category_id', $request->category_id);
+            $query->where(function($q) use ($request) {
+                $q->where('books.category_id', $request->category_id)
+                  ->orWhereHas('categories', function($subq) use ($request) {
+                      $subq->where('categories.id', $request->category_id);
+                  });
+            });
         }
 
         // 2b. Tìm kiếm theo từ khoá (title hoặc author)
         if ($request->filled('search')) {
             $search = $request->search;
             $query->where(function ($q) use ($search) {
-                $q->where('title', 'LIKE', "%{$search}%")
-                  ->orWhere('author', 'LIKE', "%{$search}%");
+                $q->where('books.title', 'LIKE', "%{$search}%")
+                  ->orWhere('books.author', 'LIKE', "%{$search}%");
             });
         }
 
         // 2c. Lọc theo khoảng giá
         if ($request->filled('min_price')) {
             $query->where(function($q) use ($request) {
-                $q->where('sale_price', '>=', $request->min_price)
+                $q->where('books.sale_price', '>=', $request->min_price)
                   ->orWhere(function($subq) use ($request) {
-                      $subq->whereNull('sale_price')->where('price', '>=', $request->min_price);
+                      $subq->whereNull('books.sale_price')->where('books.price', '>=', $request->min_price);
                   });
             });
         }
         if ($request->filled('max_price')) {
             $query->where(function($q) use ($request) {
-                $q->where('sale_price', '<=', $request->max_price)
+                $q->where('books.sale_price', '<=', $request->max_price)
                   ->orWhere(function($subq) use ($request) {
-                      $subq->whereNull('sale_price')->where('price', '<=', $request->max_price);
+                      $subq->whereNull('books.sale_price')->where('books.price', '<=', $request->max_price);
                   });
             });
         }
 
         // 2d. Lọc theo Loại sách
         if ($request->filled('type') && $request->type !== 'all') {
-            $query->where('type', $request->type);
+            $query->where('books.type', $request->type);
         }
 
-        // 3. Hỗ trợ sắp xếp (ví dụ: mới nhất)
-        $query->orderBy('created_at', 'desc');
+        // 3. Hỗ trợ sắp xếp
+        $sort = $request->input('sort', 'newest');
+        switch ($sort) {
+            case 'price_asc':
+                $query->orderByRaw('COALESCE(books.sale_price, books.price) ASC');
+                break;
+            case 'price_desc':
+                $query->orderByRaw('COALESCE(books.sale_price, books.price) DESC');
+                break;
+            case 'popular':
+                $query->leftJoin('order_items', 'books.id', '=', 'order_items.book_id')
+                    ->leftJoin('orders', 'order_items.order_id', '=', 'orders.id')
+                    ->select('books.*', \Illuminate\Support\Facades\DB::raw('COALESCE(SUM(CASE WHEN orders.status = "completed" THEN order_items.quantity ELSE 0 END), 0) as total_sold'))
+                    ->groupBy('books.id')
+                    ->orderBy('total_sold', 'desc');
+                break;
+            case 'newest':
+            default:
+                $query->orderBy('books.created_at', 'desc');
+                break;
+        }
 
         if ($request->boolean('all')) {
             $books = $query->get();
@@ -92,7 +117,7 @@ class BookController extends Controller
         }
 
         // 4. Phân trang
-        $books = $query->paginate(12);
+        $books = $query->paginate($request->integer('per_page', 12));
 
         return BookResource::collection($books)->additional([
             'status'  => 'success',
@@ -107,13 +132,17 @@ class BookController extends Controller
     {
         $query = Book::withoutGlobalScopes()
             ->where('status', 'published')
-            ->with(['vendor', 'category', 'series', 'reviews.user', 'chapters']);
+            ->with(['vendor', 'category', 'categories', 'series', 'reviews.user', 'chapters'])
+            ->withCount('wishlists');
 
         if (is_numeric($identifier)) {
             $book = $query->where('id', $identifier)->firstOrFail();
         } else {
             $book = $query->where('slug', $identifier)->firstOrFail();
         }
+
+        // Increment page views counter
+        $book->increment('views');
 
         return response()->json([
             'status'  => 'success',
@@ -123,7 +152,19 @@ class BookController extends Controller
     }
 
     /**
-     * Lấy danh sách sách cùng Series.
+     * Lấy danh sách tất cả các bộ sách (Series) hiện có.
+     */
+    public function allSeries()
+    {
+        $series = \App\Models\Series::orderBy('title', 'asc')->get(['id', 'title']);
+        return response()->json([
+            'status' => 'success',
+            'data'   => $series,
+        ]);
+    }
+
+    /**
+     * Lấy danh sách sách cùng Series / Cùng Bộ (Chỉ khi đã gán series_id).
      */
     public function seriesBooks($bookId)
     {
@@ -140,13 +181,89 @@ class BookController extends Controller
             ->where('series_id', $book->series_id)
             ->where('id', '!=', $book->id)
             ->where('status', 'published')
-            ->with(['vendor', 'category'])
-            ->limit(10)
+            ->with(['vendor', 'category', 'categories'])
+            ->orderBy('id', 'asc')
+            ->limit(12)
             ->get();
 
         return response()->json([
             'status' => 'success',
             'data'   => BookResource::collection($seriesBooks),
+        ]);
+    }
+
+    /**
+     * Lấy danh sách sách liên quan (cùng Thể loại / Danh mục).
+     */
+    public function relatedBooks($bookId)
+    {
+        $book = Book::withoutGlobalScopes()->with('categories')->findOrFail($bookId);
+
+        // Lấy tất cả ID danh mục cuốn sách này thuộc về
+        $catIds = [];
+        if ($book->category_id) {
+            $catIds[] = (int) $book->category_id;
+        }
+        if ($book->categories && $book->categories->isNotEmpty()) {
+            $catIds = array_merge($catIds, $book->categories->pluck('id')->toArray());
+        }
+        $catIds = array_unique(array_filter($catIds));
+
+        $query = Book::withoutGlobalScopes()
+            ->where('id', '!=', $book->id)
+            ->where('status', 'published');
+
+        if (!empty($catIds)) {
+            $query->where(function ($q) use ($catIds) {
+                $q->whereIn('category_id', $catIds)
+                  ->orWhereHas('categories', function ($cq) use ($catIds) {
+                      $cq->whereIn('categories.id', $catIds);
+                  });
+            });
+        }
+
+        $relatedBooks = $query->with(['vendor', 'category', 'categories'])
+            ->inRandomOrder()
+            ->limit(10)
+            ->get();
+
+        // Nếu số lượng sách cùng thể loại ít hơn 4, bổ sung các sách phát hành khác để luôn xuất hiện khu vực này
+        if ($relatedBooks->count() < 4) {
+            $excludeIds = $relatedBooks->pluck('id')->push($book->id)->toArray();
+            $additionalBooks = Book::withoutGlobalScopes()
+                ->whereNotIn('id', $excludeIds)
+                ->where('status', 'published')
+                ->with(['vendor', 'category', 'categories'])
+                ->inRandomOrder()
+                ->limit(10 - $relatedBooks->count())
+                ->get();
+            $relatedBooks = $relatedBooks->concat($additionalBooks);
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'data'   => BookResource::collection($relatedBooks),
+        ]);
+    }
+
+    /**
+     * Lấy danh sách sách cùng Tác giả.
+     */
+    public function authorBooks($bookId)
+    {
+        $book = Book::withoutGlobalScopes()->findOrFail($bookId);
+
+        $authorBooks = Book::withoutGlobalScopes()
+            ->where('author', $book->author)
+            ->where('id', '!=', $book->id)
+            ->where('status', 'published')
+            ->with(['vendor', 'category', 'categories'])
+            ->limit(10)
+            ->get();
+
+        return response()->json([
+            'status' => 'success',
+            'data'   => BookResource::collection($authorBooks),
         ]);
     }
 

@@ -188,6 +188,22 @@ const router = createRouter({
           meta: { requiresAuth: true, role: 'admin', hideHeader: true, title: 'Quản lý Users' }
         },
         {
+          path: 'books',
+          name: 'admin-books',
+          component: () => import('@/views/admin/BooksView.vue'),
+          meta: { requiresAuth: true, role: 'admin', hideHeader: true, title: 'Quản lý Toàn bộ Sách' }
+        },
+        {
+          path: 'books/categories',
+          name: 'admin-books-categories',
+          component: () => import('@/views/admin/CategoriesView.vue'),
+          meta: { requiresAuth: true, role: 'admin', hideHeader: true, title: 'Quản lý Thể loại Sách' }
+        },
+        {
+          path: 'categories',
+          redirect: '/admin/books/categories'
+        },
+        {
           path: 'coupons',
           name: 'admin-coupons',
           component: () => import('@/views/admin/PromotionsView.vue'),
@@ -289,6 +305,24 @@ const router = createRouter({
           name: 'vendor-books',
           component: () => import('@/views/vendor/BooksView.vue'),
           meta: { requiresAuth: true, role: 'vendor', hideHeader: true, title: 'Quản lý Sách' }
+        },
+        {
+          path: 'series',
+          name: 'vendor-series',
+          component: () => import('@/views/vendor/SeriesView.vue'),
+          meta: { requiresAuth: true, role: 'vendor', hideHeader: true, title: 'Quản lý Bộ Sách' }
+        },
+        {
+          path: 'books/create',
+          name: 'vendor-book-create',
+          component: () => import('@/views/vendor/BookFormView.vue'),
+          meta: { requiresAuth: true, role: 'vendor', hideHeader: true, title: 'Thêm Sách Mới' }
+        },
+        {
+          path: 'books/:id/edit',
+          name: 'vendor-book-edit',
+          component: () => import('@/views/vendor/BookFormView.vue'),
+          meta: { requiresAuth: true, role: 'vendor', hideHeader: true, title: 'Chỉnh Sửa Sách' }
         },
         {
           path: 'warehouses',

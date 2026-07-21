@@ -376,6 +376,7 @@ class AuthorDrmInventoryTest extends TestCase
             'email' => 'author_new@komibook.id.vn',
             'password' => 'password123',
             'password_confirmation' => 'password123',
+            'phone' => '0987111222',
             'desired_role' => 'author',
         ]);
 
@@ -456,6 +457,248 @@ class AuthorDrmInventoryTest extends TestCase
             ->assertJson([
                 'status' => 'error',
                 'message' => 'Tác giả đối tác chỉ được sở hữu và đăng ký tối đa 1 nhà kho duy nhất.'
+            ]);
+    }
+
+    /**
+     * Test đăng ký tài khoản có số điện thoại, giới tính, ngày sinh.
+     */
+    public function test_registration_with_phone_gender_birthday()
+    {
+        $response = $this->postJson('/api/auth/register', [
+            'name' => 'Nguyễn Văn Test',
+            'email' => 'testphone@gmail.com',
+            'password' => 'password123',
+            'password_confirmation' => 'password123',
+            'phone' => '0987654321',
+            'gender' => 'male',
+            'birthday' => '2000-01-01',
+        ]);
+
+        $response->assertStatus(201)
+            ->assertJson([
+                'status' => 'success',
+                'message' => 'Đăng ký thành công.',
+            ]);
+
+        $this->assertDatabaseHas('users', [
+            'email' => 'testphone@gmail.com',
+            'phone' => '0987654321',
+            'gender' => 'male',
+            'birthday' => '2000-01-01',
+        ]);
+    }
+
+    /**
+     * Test đăng nhập bằng số điện thoại.
+     */
+    public function test_login_with_phone_number()
+    {
+        User::factory()->create([
+            'email' => 'userphone@gmail.com',
+            'phone' => '0123456789',
+            'password' => bcrypt('password123'),
+        ]);
+
+        $response = $this->postJson('/api/auth/login', [
+            'email' => '0123456789',
+            'password' => 'password123',
+        ]);
+
+        $response->assertStatus(200)
+            ->assertJson([
+                'status' => 'success',
+                'message' => 'Đăng nhập thành công.',
+            ]);
+    }
+
+    /**
+     * Test đăng nhập/đăng ký qua Google.
+     */
+    public function test_google_social_login()
+    {
+        // 1. Gửi request google-login của tài khoản chưa tồn tại
+        $response1 = $this->postJson('/api/auth/google-login', [
+            'email' => 'googleuser@gmail.com',
+            'name' => 'Google User',
+            'google_id' => 'google_123456789',
+        ]);
+
+        $response1->assertStatus(200)
+            ->assertJson([
+                'status' => 'needs_registration',
+                'message' => 'Tài khoản Google chưa liên kết. Vui lòng hoàn tất thông tin đăng ký.',
+                'data' => [
+                    'email' => 'googleuser@gmail.com',
+                    'name' => 'Google User',
+                    'google_id' => 'google_123456789',
+                ]
+            ]);
+
+        // 2. Tiến hành hoàn tất đăng ký bằng cách gửi API register kèm google_id và các thông tin bổ sung + đặt mật khẩu tự chọn
+        $response2 = $this->postJson('/api/auth/register', [
+            'name' => 'Google User Custom Name',
+            'email' => 'googleuser@gmail.com',
+            'password' => 'mycustompassword123',
+            'password_confirmation' => 'mycustompassword123',
+            'phone' => '0989888888',
+            'gender' => 'female',
+            'birthday' => '1995-10-10',
+            'google_id' => 'google_123456789',
+        ]);
+
+        $response2->assertStatus(201)
+            ->assertJson([
+                'status' => 'success',
+            ]);
+
+        $this->assertDatabaseHas('users', [
+            'email' => 'googleuser@gmail.com',
+            'google_id' => 'google_123456789',
+            'phone' => '0989888888',
+            'gender' => 'female',
+            'birthday' => '1995-10-10',
+        ]);
+
+        // 3. Đăng nhập lại qua Google sau khi đã liên kết xong -> Phải tự động đăng nhập thẳng
+        $response3 = $this->postJson('/api/auth/google-login', [
+            'email' => 'googleuser@gmail.com',
+            'name' => 'Google User Custom Name',
+            'google_id' => 'google_123456789',
+        ]);
+
+        $response3->assertStatus(200)
+            ->assertJson([
+                'status' => 'success',
+                'message' => 'Đăng nhập Google thành công.',
+            ]);
+        
+        $this->assertNotNull($response3->json('data.access_token'));
+    }
+
+    /**
+     * Test đăng ký tài khoản chỉ bằng số điện thoại (không điền email).
+     */
+    public function test_registration_with_phone_only_no_email()
+    {
+        $response = $this->postJson('/api/auth/register', [
+            'name' => 'Người Dùng SĐT',
+            'phone' => '0912345678',
+            'password' => 'password123',
+            'password_confirmation' => 'password123',
+            'gender' => 'male',
+            'birthday' => '1990-05-05',
+        ]);
+
+        $response->assertStatus(201)
+            ->assertJson([
+                'status' => 'success',
+            ]);
+
+        $this->assertDatabaseHas('users', [
+            'phone' => '0912345678',
+            'email' => null,
+            'gender' => 'male',
+        ]);
+    }
+
+    /**
+     * Test đăng ký tài khoản chỉ bằng email (không điền số điện thoại).
+     */
+    public function test_registration_with_email_only_no_phone()
+    {
+        $response = $this->postJson('/api/auth/register', [
+            'name' => 'Người Dùng Email',
+            'email' => 'user_email_only@komibook.id.vn',
+            'password' => 'password123',
+            'password_confirmation' => 'password123',
+        ]);
+
+        $response->assertStatus(201)
+            ->assertJson([
+                'status' => 'success',
+            ]);
+
+        $this->assertDatabaseHas('users', [
+            'email' => 'user_email_only@komibook.id.vn',
+            'phone' => null,
+        ]);
+    }
+
+    /**
+     * Test gửi và xác thực OTP cho số điện thoại chưa đăng ký.
+     */
+    public function test_phone_otp_flow_unregistered()
+    {
+        // 1. Gửi OTP
+        $response1 = $this->postJson('/api/auth/phone/send-otp', [
+            'phone' => '0989999999',
+        ]);
+        $response1->assertStatus(200);
+
+        // 2. Xác thực với OTP đúng (dùng mã mặc định 123456 hoặc lấy từ response)
+        $otp = $response1->json('data.otp') ?? '123456';
+        $response2 = $this->postJson('/api/auth/phone/verify-otp', [
+            'phone' => '0989999999',
+            'otp' => $otp,
+        ]);
+
+        $response2->assertStatus(200)
+            ->assertJson([
+                'status' => 'needs_registration',
+                'message' => 'Số điện thoại hợp lệ. Vui lòng hoàn tất thông tin đăng ký.',
+                'data' => [
+                    'phone' => '0989999999',
+                ]
+            ]);
+    }
+
+    /**
+     * Test gửi và xác thực OTP đăng nhập cho số điện thoại đã đăng ký.
+     */
+    public function test_phone_otp_flow_registered()
+    {
+        // Tạo trước tài khoản
+        User::factory()->create([
+            'phone' => '0988888888',
+        ]);
+
+        // 1. Gửi OTP
+        $response1 = $this->postJson('/api/auth/phone/send-otp', [
+            'phone' => '0988888888',
+        ]);
+        $response1->assertStatus(200);
+
+        // 2. Xác thực OTP
+        $otp = $response1->json('data.otp') ?? '123456';
+        $response2 = $this->postJson('/api/auth/phone/verify-otp', [
+            'phone' => '0988888888',
+            'otp' => $otp,
+        ]);
+
+        $response2->assertStatus(200)
+            ->assertJson([
+                'status' => 'success',
+                'message' => 'Xác thực số điện thoại thành công.',
+            ]);
+        
+        $this->assertNotNull($response2->json('data.access_token'));
+    }
+
+    /**
+     * Test nhập sai mã OTP số điện thoại.
+     */
+    public function test_phone_otp_flow_invalid_code()
+    {
+        $response = $this->postJson('/api/auth/phone/verify-otp', [
+            'phone' => '0987777777',
+            'otp' => '999999', // OTP sai
+        ]);
+
+        $response->assertStatus(422)
+            ->assertJson([
+                'status' => 'error',
+                'message' => 'Mã OTP không chính xác hoặc đã hết hạn.',
             ]);
     }
 }

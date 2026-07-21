@@ -49,6 +49,43 @@ export const useAuthStore = defineStore('auth', {
       await this.fetchUser()
     },
 
+    async loginWithGoogle(googleData) {
+      await apiClient.get('/sanctum/csrf-cookie')
+      const response = await apiClient.post('/api/auth/google-login', googleData)
+      
+      const responseData = response.data.data || response.data
+      
+      if (response.data.status === 'success') {
+        this.token = responseData.access_token || responseData.token
+        localStorage.setItem('token', this.token)
+        sessionStorage.removeItem('token')
+        await this.fetchUser()
+      }
+      
+      return response.data;
+    },
+
+    async sendPhoneOtp(phone) {
+      const response = await apiClient.post('/api/auth/phone/send-otp', { phone })
+      return response.data
+    },
+
+    async verifyPhoneOtp(phone, otp) {
+      await apiClient.get('/sanctum/csrf-cookie')
+      const response = await apiClient.post('/api/auth/phone/verify-otp', { phone, otp })
+      
+      const responseData = response.data.data || response.data
+      
+      if (response.data.status === 'success') {
+        this.token = responseData.access_token || responseData.token
+        localStorage.setItem('token', this.token)
+        sessionStorage.removeItem('token')
+        await this.fetchUser()
+      }
+      
+      return response.data
+    },
+
     async fetchUser() {
       if (!this.token) return
       

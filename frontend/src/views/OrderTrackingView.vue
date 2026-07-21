@@ -397,15 +397,9 @@ const formatTime = (date) => {
 
 const getCoverUrl = (path) => {
   if (!path) return ''
-  // Nếu là path đã có sẵn /storage/ (từ backend mới)
+  if (path.startsWith('http://') || path.startsWith('https://')) return path
   if (path.startsWith('/storage/')) return path
-  
-  // Nếu là URL tuyệt đối từ domain cũ, chuyển về tương đối
-  if (path.includes('/storage/')) {
-    return path.substring(path.indexOf('/storage/'))
-  }
-
-  // Fallback cho path cũ
+  if (path.includes('/storage/')) return path.substring(path.indexOf('/storage/'))
   return `/storage/${path}`
 }
 

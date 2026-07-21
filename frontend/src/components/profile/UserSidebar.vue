@@ -2,7 +2,10 @@
   <aside class="w-full lg:w-72 shrink-0">
     <div class="bg-surface-container-lowest rounded-3xl border border-outline-variant/30 soft-shadow overflow-hidden sticky top-24">
       <!-- User Info Header -->
-      <div class="p-lg bg-surface-container-low/50 border-b border-outline-variant/20 flex flex-col items-center text-center">
+      <div class="p-lg bg-surface-container-low/50 border-b border-outline-variant/20 flex flex-col items-center text-center relative">
+        <router-link to="/" class="absolute top-3 left-3 w-8 h-8 rounded-lg overflow-hidden shadow-xs border border-white/60 hover:scale-105 transition-transform" title="Trang chủ KomiBook">
+          <img src="@/assets/logo.png" alt="KomiBook Logo" class="w-full h-full object-cover" />
+        </router-link>
         <div class="relative mb-md group cursor-pointer" @click="$emit('avatar-click')">
           <div class="w-20 h-20 rounded-full overflow-hidden border-4 border-surface shadow-sm">
             <img v-if="user?.avatar" :src="getAvatarUrl(user.avatar)" alt="Avatar" class="w-full h-full object-cover" />

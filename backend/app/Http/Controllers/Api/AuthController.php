@@ -31,6 +31,10 @@ class AuthController extends Controller
             'name'     => $request->name,
             'email'    => $request->email,
             'password' => $request->password, // Model tự hash qua cast 'hashed'
+            'phone'    => $request->phone,
+            'gender'   => $request->gender,
+            'birthday' => $request->birthday,
+            'google_id' => $request->google_id,
             'role'     => 'customer',
         ]);
 
@@ -78,10 +82,17 @@ class AuthController extends Controller
      */
     public function login(LoginRequest $request): JsonResponse
     {
-        if (! Auth::attempt($request->only('email', 'password'))) {
+        $loginField = filter_var($request->email, FILTER_VALIDATE_EMAIL) ? 'email' : 'phone';
+
+        $credentials = [
+            $loginField => $request->email,
+            'password' => $request->password,
+        ];
+
+        if (! Auth::attempt($credentials)) {
             return response()->json([
                 'status'  => 'error',
-                'message' => 'Email hoặc mật khẩu không chính xác.',
+                'message' => 'Tài khoản hoặc mật khẩu không chính xác.',
                 'data'    => null,
             ], 401);
         }
@@ -202,5 +213,96 @@ class AuthController extends Controller
         return $status === Password::PASSWORD_RESET
             ? response()->json(['status' => 'success', 'message' => __($status)])
             : response()->json(['status' => 'error', 'message' => __($status)], 400);
+    }
+
+    /**
+     * Đăng nhập hoặc đăng ký bằng tài khoản Google.
+     */
+    public function googleLogin(Request $request): JsonResponse
+    {
+        $email = $request->email;
+        $name = $request->name;
+        $googleId = $request->google_id;
+
+        // Nếu client gửi lên id_token (từ Google SDK thực tế trên frontend)
+        if ($request->has('id_token')) {
+            $idToken = $request->id_token;
+            $verifyResponse = \Illuminate\Support\Facades\Http::get("https://oauth2.googleapis.com/tokeninfo?id_token={$idToken}");
+
+            if ($verifyResponse->failed()) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Token xác minh tài khoản Google không hợp lệ hoặc đã hết hạn.',
+                    'errors' => [
+                        'id_token' => ['Token Google không hợp lệ.']
+                    ]
+                ], 422);
+            }
+
+            $payload = $verifyResponse->json();
+            $email = $payload['email'] ?? null;
+            $name = $payload['name'] ?? null;
+            $googleId = $payload['sub'] ?? null;
+
+            if (empty($email) || empty($googleId)) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Không thể trích xuất thông tin định danh từ Google Token.',
+                ], 422);
+            }
+        } else {
+            // Nếu không gửi id_token, chỉ cho phép mock bằng google_id + email khi ở môi trường phát triển (debug/local)
+            if (config('app.env') !== 'local' && !config('app.debug')) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Yêu cầu Token xác minh Google (id_token) ở môi trường production.',
+                ], 422);
+            }
+
+            // Môi trường dev: validate các trường mock gửi lên
+            $request->validate([
+                'email' => 'required|string|email',
+                'name' => 'required|string',
+                'google_id' => 'required|string',
+            ]);
+        }
+
+        // Tiến hành đăng nhập/đăng ký
+        $user = User::where('google_id', $googleId)
+                    ->orWhere('email', $email)
+                    ->first();
+
+        if ($user) {
+            // Nếu chưa có google_id thì gán
+            if (empty($user->google_id)) {
+                $user->google_id = $googleId;
+                $user->save();
+            }
+
+            $user->tokens()->delete();
+            $user->load(['vendor', 'membershipTier', 'author']);
+            $token = $user->createToken('auth_token')->plainTextToken;
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Đăng nhập Google thành công.',
+                'data' => [
+                    'user' => new UserResource($user),
+                    'access_token' => $token,
+                    'token_type' => 'Bearer',
+                ],
+            ]);
+        }
+
+        // Tài khoản chưa tồn tại -> Yêu cầu thiết lập/hoàn tất thông tin đăng ký
+        return response()->json([
+            'status' => 'needs_registration',
+            'message' => 'Tài khoản Google chưa liên kết. Vui lòng hoàn tất thông tin đăng ký.',
+            'data' => [
+                'email' => $email,
+                'name' => $name,
+                'google_id' => $googleId,
+            ]
+        ]);
     }
 }

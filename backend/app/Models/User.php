@@ -29,6 +29,10 @@ class User extends Authenticatable
         'avatar',
         'points',
         'membership_tier_id',
+        'phone',
+        'gender',
+        'birthday',
+        'google_id',
     ];
 
     /**

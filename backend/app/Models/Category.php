@@ -49,11 +49,11 @@ class Category extends Model
     }
 
     /**
-     * Các sách thuộc danh mục này.
+     * Các cuốn sách thuộc danh mục này (Many-to-Many).
      */
-    public function books(): HasMany
+    public function books()
     {
-        return $this->hasMany(Book::class);
+        return $this->belongsToMany(Book::class, 'book_category');
     }
 
     // ─── Helper Methods ───────────────────────────────────────────────────────

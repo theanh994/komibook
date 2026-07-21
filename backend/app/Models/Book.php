@@ -25,12 +25,22 @@ class Book extends Model
         'title',
         'slug',
         'author',
+        'translator',
         'description',
         'cover_image',
+        'gallery_images',
+        'dimensions',
+        'cover_format',
+        'weight',
+        'language',
+        'target_age',
+        'pages',
+        'release_date',
         'isbn',
         'price',
         'sale_price',
         'stock',
+        'views',
         'type',
         'status',
         'file_path',
@@ -44,9 +54,12 @@ class Book extends Model
     protected function casts(): array
     {
         return [
-            'price'      => 'integer',
-            'sale_price' => 'integer',
-            'stock'      => 'integer',
+            'price'          => 'integer',
+            'sale_price'     => 'integer',
+            'stock'          => 'integer',
+            'pages'          => 'integer',
+            'views'          => 'integer',
+            'gallery_images' => 'array',
         ];
     }
 
@@ -74,6 +87,22 @@ class Book extends Model
     public function category(): BelongsTo
     {
         return $this->belongsTo(Category::class);
+    }
+
+    /**
+     * Sách thuộc về nhiều Danh mục (Categories).
+     */
+    public function categories()
+    {
+        return $this->belongsToMany(Category::class, 'book_category');
+    }
+
+    /**
+     * Danh sách lượt yêu thích.
+     */
+    public function wishlists(): HasMany
+    {
+        return $this->hasMany(Wishlist::class);
     }
 
     /**

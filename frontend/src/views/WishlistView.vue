@@ -121,6 +121,7 @@ const formatCurrency = (val) => new Intl.NumberFormat('vi-VN', { style: 'currenc
  
 const getCoverUrl = (path) => {
   if (!path) return ''
+  if (path.startsWith('http://') || path.startsWith('https://')) return path
   if (path.startsWith('/storage/')) return path
   if (path.includes('/storage/')) return path.substring(path.indexOf('/storage/'))
   return `/storage/${path}`

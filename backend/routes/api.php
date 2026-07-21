@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\PhoneAuthController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -11,16 +12,22 @@ use Illuminate\Support\Facades\Route;
 Route::prefix('auth')->name('auth.')->group(function () {
     Route::post('/register', [AuthController::class, 'register'])->name('register');
     Route::post('/login',    [AuthController::class, 'login'])->name('login')->middleware('throttle:login');
+    Route::post('/google-login', [AuthController::class, 'googleLogin'])->name('google-login');
+    Route::post('/phone/send-otp', [PhoneAuthController::class, 'sendOtp'])->name('phone.send-otp');
+    Route::post('/phone/verify-otp', [PhoneAuthController::class, 'verifyOtp'])->name('phone.verify-otp');
     Route::post('/forgot-password', [AuthController::class, 'forgotPassword'])->name('forgot-password')->middleware('throttle:forgot-password');
     Route::post('/reset-password',  [AuthController::class, 'resetPassword'])->name('reset-password');
 });
 
 // Các endpoint Catalog công cộng
 Route::get('/categories', [\App\Http\Controllers\Api\CategoryController::class, 'index']);
+Route::get('/series',     [\App\Http\Controllers\Api\BookController::class, 'allSeries']);
 Route::get('/books',      [\App\Http\Controllers\Api\BookController::class, 'index']);
 Route::get('/books/top-selling', [\App\Http\Controllers\Api\BookController::class, 'topSelling']);
 Route::get('/books/{slug}', [\App\Http\Controllers\Api\BookController::class, 'show']);
 Route::get('/books/{id}/series', [\App\Http\Controllers\Api\BookController::class, 'seriesBooks']);
+Route::get('/books/{id}/author', [\App\Http\Controllers\Api\BookController::class, 'authorBooks']);
+Route::get('/books/{id}/related', [\App\Http\Controllers\Api\BookController::class, 'relatedBooks']);
 
 // Help Center công khai
 Route::get('/help-center/articles', [\App\Http\Controllers\Api\HelpCenterController::class, 'index']);
@@ -95,6 +102,15 @@ Route::middleware(['auth:sanctum', 'role:vendor'])->prefix('vendor')->name('vend
     // Thống kê dashboard
     Route::get('dashboard-stats', [\App\Http\Controllers\Api\Vendor\DashboardController::class, 'stats'])->name('dashboard.stats');
 
+    Route::post('books/bulk-series', [\App\Http\Controllers\Api\Vendor\BookController::class, 'bulkSeries'])->name('books.bulkSeries');
+    Route::post('books/bulk-discount', [\App\Http\Controllers\Api\Vendor\BookController::class, 'bulkDiscount'])->name('books.bulkDiscount');
+
+    // Quản lý Bộ Sách (Vendor Series)
+    Route::get('series', [\App\Http\Controllers\Api\Vendor\SeriesController::class, 'index'])->name('series.index');
+    Route::put('series/{id}', [\App\Http\Controllers\Api\Vendor\SeriesController::class, 'update'])->name('series.update');
+    Route::post('series/{id}/apply-discount', [\App\Http\Controllers\Api\Vendor\SeriesController::class, 'applyDiscount'])->name('series.applyDiscount');
+    Route::delete('series/{id}', [\App\Http\Controllers\Api\Vendor\SeriesController::class, 'destroy'])->name('series.destroy');
+
     Route::apiResource('books', \App\Http\Controllers\Api\Vendor\BookController::class);
 
     // Quản lý đơn hàng
@@ -160,6 +176,15 @@ Route::middleware(['auth:sanctum', 'role:admin'])->prefix('admin')->name('admin.
     Route::get('users',              [\App\Http\Controllers\Api\Admin\UserController::class, 'index'])->name('users.index');
     Route::get('users/{id}',         [\App\Http\Controllers\Api\Admin\UserController::class, 'show'])->name('users.show');
     Route::patch('users/{id}/role',  [\App\Http\Controllers\Api\Admin\UserController::class, 'updateRole'])->name('users.updateRole');
+
+    // Quản lý Toàn bộ Sách (Admin)
+    Route::get('books',                [\App\Http\Controllers\Api\Admin\BookController::class, 'index'])->name('books.index');
+    Route::get('books/{book}',          [\App\Http\Controllers\Api\Admin\BookController::class, 'show'])->name('books.show');
+    Route::patch('books/{book}/status', [\App\Http\Controllers\Api\Admin\BookController::class, 'updateStatus'])->name('books.updateStatus');
+    Route::delete('books/{book}',       [\App\Http\Controllers\Api\Admin\BookController::class, 'destroy'])->name('books.destroy');
+
+    // Quản lý Thể loại Sách
+    Route::apiResource('categories', \App\Http\Controllers\Api\Admin\CategoryController::class);
 
     // Quản lý Coupons và Flash Sales
     Route::apiResource('coupons', \App\Http\Controllers\Api\Admin\CouponController::class);

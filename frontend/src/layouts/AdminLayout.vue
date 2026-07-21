@@ -27,7 +27,18 @@ const vendorMenuItems = [
   {
     label: 'Quản lý Sách',
     icon: 'pi pi-book',
-    route: '/vendor/books',
+    children: [
+      {
+        label: 'Tất cả sách',
+        icon: 'pi pi-list',
+        route: '/vendor/books',
+      },
+      {
+        label: 'Quản lý Bộ Sách',
+        icon: 'pi pi-clone',
+        route: '/vendor/series',
+      },
+    ],
   },
   {
     label: 'Quản lý Kho hàng',
@@ -51,6 +62,10 @@ const vendorMenuItems = [
   },
 ]
 
+const expandedSubmenus = ref({
+  'Quản lý Sách': true,
+})
+
 const adminMenuItems = [
   {
     label: 'Tổng quan',
@@ -61,6 +76,22 @@ const adminMenuItems = [
     label: 'Quản lý Users',
     icon: 'pi pi-users',
     route: '/admin/users',
+  },
+  {
+    label: 'Quản lý Sách',
+    icon: 'pi pi-book',
+    children: [
+      {
+        label: 'Tất cả sách',
+        icon: 'pi pi-list',
+        route: '/admin/books',
+      },
+      {
+        label: 'Thể loại sách',
+        icon: 'pi pi-tags',
+        route: '/admin/books/categories',
+      },
+    ],
   },
   {
     label: 'Khuyến mãi',
@@ -152,12 +183,26 @@ const bottomItems = [
   },
 ]
 
+const toggleSubmenu = (label) => {
+  expandedSubmenus.value[label] = !expandedSubmenus.value[label]
+}
+
 const isActive = (item) => {
-  return route.path === item.route || route.path.startsWith(item.route + '/')
+  if (item.route) {
+    return route.path === item.route || route.path.startsWith(item.route + '/')
+  }
+  if (item.children) {
+    return item.children.some((child) => route.path === child.route || route.path.startsWith(child.route + '/'))
+  }
+  return false
 }
 
 const navigateTo = (item) => {
-  router.push(item.route)
+  if (item.children) {
+    toggleSubmenu(item.label)
+  } else if (item.route) {
+    router.push(item.route)
+  }
 }
 
 const toggleSidebar = () => {
@@ -190,6 +235,17 @@ const shopName = computed(() => {
   return authStore.user?.vendor?.shop_name || authStore.user?.name || 'Vendor'
 })
 
+const userAvatarUrl = computed(() => {
+  const avatar = authStore.user?.avatar || authStore.user?.vendor?.logo
+  if (!avatar) return ''
+  if (avatar.startsWith('http://') || avatar.startsWith('https://')) return avatar
+  if (avatar.startsWith('/storage/')) return avatar
+  if (avatar.includes('/storage/')) {
+    return avatar.substring(avatar.indexOf('/storage/'))
+  }
+  return `/storage/${avatar}`
+})
+
 onMounted(() => {
   if (window.innerWidth <= 768) {
     sidebarCollapsed.value = true
@@ -213,9 +269,9 @@ onMounted(() => {
     >
       <!-- Sidebar Header -->
       <div class="sidebar-header">
-        <router-link to="/" class="sidebar-brand">
-          <div class="brand-icon">
-            <i class="pi pi-book"></i>
+        <router-link to="/" class="sidebar-brand" title="Về trang chủ KomiBook">
+          <div class="brand-icon overflow-hidden bg-white/10 p-0.5 shadow-md flex items-center justify-center">
+            <img src="@/assets/logo.png" alt="KomiBook Logo" class="w-full h-full object-cover rounded-lg" />
           </div>
           <Transition name="fade">
             <div v-if="!sidebarCollapsed" class="brand-text">
@@ -231,19 +287,60 @@ onMounted(() => {
         <div class="nav-section">
           <span v-if="!sidebarCollapsed" class="nav-label">MENU CHÍNH</span>
           <ul class="nav-list">
-            <li
-              v-for="item in menuItems"
-              :key="item.route"
-              class="nav-item"
-              :class="{ active: isActive(item) }"
-              @click="navigateTo(item)"
-            >
-              <div class="nav-indicator"></div>
-              <i :class="item.icon" class="nav-icon"></i>
-              <Transition name="fade">
-                <span v-if="!sidebarCollapsed" class="nav-text">{{ item.label }}</span>
-              </Transition>
-            </li>
+            <template v-for="item in menuItems" :key="item.label || item.route">
+              <!-- Regular Item -->
+              <li
+                v-if="!item.children"
+                class="nav-item"
+                :class="{ active: isActive(item) }"
+                @click="navigateTo(item)"
+              >
+                <div class="nav-indicator"></div>
+                <i :class="item.icon" class="nav-icon"></i>
+                <Transition name="fade">
+                  <span v-if="!sidebarCollapsed" class="nav-text">{{ item.label }}</span>
+                </Transition>
+              </li>
+
+              <!-- Item with Children Submenu -->
+              <li v-else class="nav-group-wrapper">
+                <div
+                  class="nav-item nav-parent-item"
+                  :class="{ active: isActive(item) }"
+                  @click="navigateTo(item)"
+                >
+                  <div class="nav-indicator"></div>
+                  <i :class="item.icon" class="nav-icon"></i>
+                  <Transition name="fade">
+                    <div v-if="!sidebarCollapsed" class="flex items-center justify-between w-full pr-1">
+                      <span class="nav-text">{{ item.label }}</span>
+                      <i
+                        class="pi text-[10px] transition-transform duration-200"
+                        :class="expandedSubmenus[item.label] ? 'pi-chevron-down' : 'pi-chevron-right'"
+                      ></i>
+                    </div>
+                  </Transition>
+                </div>
+
+                <!-- Submenu Items -->
+                <ul
+                  v-if="expandedSubmenus[item.label] && !sidebarCollapsed"
+                  class="sub-nav-list"
+                >
+                  <li
+                    v-for="child in item.children"
+                    :key="child.route"
+                    class="nav-item sub-nav-item"
+                    :class="{ active: isActive(child) }"
+                    @click.stop="navigateTo(child)"
+                  >
+                    <div class="nav-indicator"></div>
+                    <i :class="child.icon" class="nav-icon sub-nav-icon"></i>
+                    <span class="nav-text text-xs font-medium">{{ child.label }}</span>
+                  </li>
+                </ul>
+              </li>
+            </template>
           </ul>
         </div>
       </nav>
@@ -281,8 +378,8 @@ onMounted(() => {
         </div>
 
         <div class="topbar-right">
-          <!-- Notifications placeholder -->
-          <button class="topbar-icon-btn">
+          <!-- Notifications Button -->
+          <button class="topbar-icon-btn" @click="router.push('/notifications')" title="Thông báo">
             <i class="pi pi-bell"></i>
             <span class="notification-dot"></span>
           </button>
@@ -294,7 +391,11 @@ onMounted(() => {
             aria-haspopup="true"
             aria-controls="admin_user_menu"
           >
+            <div v-if="userAvatarUrl" class="w-8 h-8 rounded-full overflow-hidden border border-slate-200 shadow-xs shrink-0 bg-slate-100 flex items-center justify-center">
+              <img :src="userAvatarUrl" :alt="authStore.user?.name" class="w-full h-full object-cover" />
+            </div>
             <Avatar
+              v-else
               icon="pi pi-user"
               shape="circle"
               class="user-avatar"
@@ -465,6 +566,21 @@ onMounted(() => {
 
 .nav-item.active .nav-indicator {
   height: 20px;
+}
+
+.sub-nav-list {
+  list-style: none;
+  padding: 0 0 0 20px;
+  margin: 2px 0 6px 0;
+}
+
+.sub-nav-item {
+  padding: 8px 12px;
+  font-size: 13px;
+}
+
+.sub-nav-icon {
+  font-size: 14px;
 }
 
 .nav-icon {

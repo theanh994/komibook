@@ -53,12 +53,21 @@ export const useCartStore = defineStore('cart', () => {
   })
 
   const addToCart = (book, quantity = 1) => {
+    if (!book) return false
+
+    // Stock & status validation check: Physical books with stock <= 0 or status != published
+    const isOutOfStock = book.type !== 'ebook' && (Number(book.stock) <= 0 || (book.status && book.status !== 'published'))
+    if (isOutOfStock) {
+      return false
+    }
+
     const existing = items.value.find(item => item.book.id === book.id)
     if (existing) {
       existing.quantity += quantity
     } else {
       items.value.push({ book, quantity })
     }
+    return true
   }
 
   const updateQuantity = (bookId, newQuantity) => {

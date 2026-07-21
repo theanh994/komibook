@@ -44,6 +44,7 @@ class EbookSeeder extends Seeder
                 'stock' => 999,
                 'type' => 'ebook',
                 'status' => 'published',
+                'cover_image' => 'https://images.unsplash.com/photo-1541963463532-d68292c34b19?q=80&w=600&auto=format&fit=crop',
                 'file_path' => 'ebooks/Memory' . $i . ' - ThinLongNguyn6.pdf',
             ]);
         }
