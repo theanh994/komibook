@@ -2,30 +2,33 @@
 
 namespace Tests\Feature;
 
-use Tests\TestCase;
-use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Http\UploadedFile;
-use Illuminate\Support\Facades\Storage;
-use App\Models\User;
+use App\Models\Author;
 use App\Models\Book;
+use App\Models\Category;
+use App\Models\MembershipTier;
 use App\Models\Order;
 use App\Models\OrderItem;
-use App\Models\Warehouse;
-use App\Models\InventoryAudit;
-use App\Models\StockTransfer;
-use App\Models\SupportTicket;
-use App\Models\MembershipTier;
+use App\Models\User;
 use App\Models\Vendor;
-use App\Models\Category;
+use App\Models\Warehouse;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Storage;
+use Tests\TestCase;
 
 class AuthorDrmInventoryTest extends TestCase
 {
     use RefreshDatabase;
 
     protected $user;
+
     protected $admin;
+
     protected $vendorUser;
+
     protected $vendor;
+
     protected $category;
 
     protected function setUp(): void
@@ -36,17 +39,17 @@ class AuthorDrmInventoryTest extends TestCase
 
         // Tạo người dùng thường
         $this->user = User::factory()->create([
-            'role' => 'customer'
+            'role' => 'customer',
         ]);
 
         // Tạo quản trị viên
         $this->admin = User::factory()->create([
-            'role' => 'admin'
+            'role' => 'admin',
         ]);
 
         // Tạo vendor
         $this->vendorUser = User::factory()->create([
-            'role' => 'vendor'
+            'role' => 'vendor',
         ]);
 
         $this->vendor = Vendor::create([
@@ -59,7 +62,7 @@ class AuthorDrmInventoryTest extends TestCase
         // Tạo category
         $this->category = Category::create([
             'name' => 'Kinh Tế',
-            'slug' => 'kinh-te'
+            'slug' => 'kinh-te',
         ]);
     }
 
@@ -77,18 +80,18 @@ class AuthorDrmInventoryTest extends TestCase
                 'bank_name' => 'Vietcombank',
                 'bank_account_number' => '007100012345',
                 'bank_holder_name' => 'NGUYEN VAN A',
-                'identity_document' => $file
+                'identity_document' => $file,
             ]);
 
         $response->assertStatus(201)
             ->assertJson([
                 'status' => 'success',
-                'message' => 'Gửi yêu cầu đăng ký tác giả thành công! Chờ ban quản trị phê duyệt.'
+                'message' => 'Gửi yêu cầu đăng ký tác giả thành công! Chờ ban quản trị phê duyệt.',
             ]);
 
         $this->assertDatabaseHas('authors', [
             'pen_name' => 'Nam Cao',
-            'user_id' => $this->user->id
+            'user_id' => $this->user->id,
         ]);
     }
 
@@ -118,7 +121,7 @@ class AuthorDrmInventoryTest extends TestCase
             'author' => 'Tác giả A',
             'type' => 'ebook',
             'price' => 150000,
-            'file_path' => 'ebooks/demo.pdf'
+            'file_path' => 'ebooks/demo.pdf',
         ]);
 
         // Tạo đơn hàng chưa thanh toán
@@ -134,14 +137,14 @@ class AuthorDrmInventoryTest extends TestCase
             'shipping_address' => '123 Test Street',
             'phone' => '0901234567',
             'name' => 'John Doe',
-            'payment_method' => 'online'
+            'payment_method' => 'online',
         ]);
 
         $orderItem = OrderItem::create([
             'order_id' => $order->id,
             'book_id' => $book->id,
             'price' => 150000,
-            'quantity' => 1
+            'quantity' => 1,
         ]);
 
         $response = $this->actingAs($this->user)
@@ -149,7 +152,7 @@ class AuthorDrmInventoryTest extends TestCase
 
         $response->assertStatus(403)
             ->assertJson([
-                'message' => 'Đơn hàng chưa được thanh toán. Vui lòng thanh toán trước khi đọc.'
+                'message' => 'Đơn hàng chưa được thanh toán. Vui lòng thanh toán trước khi đọc.',
             ]);
     }
 
@@ -184,20 +187,20 @@ class AuthorDrmInventoryTest extends TestCase
                         'book_id' => $book->id,
                         'system_qty' => 10,
                         'physical_qty' => 9,
-                        'discrepancy_reason' => 'Mất mát'
-                    ]
-                ]
+                        'discrepancy_reason' => 'Mất mát',
+                    ],
+                ],
             ]);
 
         $response->assertStatus(201)
             ->assertJson([
                 'status' => 'success',
-                'message' => 'Lập phiếu kiểm kê nháp thành công.'
+                'message' => 'Lập phiếu kiểm kê nháp thành công.',
             ]);
 
         $this->assertDatabaseHas('inventory_audits', [
             'warehouse_id' => $warehouse->id,
-            'audit_period' => '2026-07'
+            'audit_period' => '2026-07',
         ]);
     }
 
@@ -236,20 +239,20 @@ class AuthorDrmInventoryTest extends TestCase
                 'items' => [
                     [
                         'book_id' => $book->id,
-                        'quantity' => 5
-                    ]
-                ]
+                        'quantity' => 5,
+                    ],
+                ],
             ]);
 
         $response->assertStatus(201)
             ->assertJson([
                 'status' => 'success',
-                'message' => 'Lập phiếu điều chuyển nháp thành công.'
+                'message' => 'Lập phiếu điều chuyển nháp thành công.',
             ]);
 
         $this->assertDatabaseHas('stock_transfers', [
             'from_warehouse_id' => $from->id,
-            'to_warehouse_id' => $to->id
+            'to_warehouse_id' => $to->id,
         ]);
     }
 
@@ -263,13 +266,13 @@ class AuthorDrmInventoryTest extends TestCase
                 'name' => 'Kim Cương',
                 'min_points' => 10000,
                 'discount_percent' => 20,
-                'benefits' => 'Freeship mọi đơn, phòng chờ VIP, hỗ trợ 24/7'
+                'benefits' => 'Freeship mọi đơn, phòng chờ VIP, hỗ trợ 24/7',
             ]);
 
         $response->assertStatus(201);
         $this->assertDatabaseHas('membership_tiers', [
             'name' => 'Kim Cương',
-            'min_points' => 10000
+            'min_points' => 10000,
         ]);
     }
 
@@ -283,18 +286,18 @@ class AuthorDrmInventoryTest extends TestCase
                 'subject' => 'Không thanh toán được qua ví điện tử',
                 'category' => 'billing',
                 'priority' => 'high',
-                'message' => 'Tôi bấm thanh toán MoMo nhưng trang web báo lỗi không kết nối.'
+                'message' => 'Tôi bấm thanh toán MoMo nhưng trang web báo lỗi không kết nối.',
             ]);
 
         $response->assertStatus(201)
             ->assertJson([
                 'status' => 'success',
-                'message' => 'Gửi yêu cầu hỗ trợ thành công.'
+                'message' => 'Gửi yêu cầu hỗ trợ thành công.',
             ]);
 
         $this->assertDatabaseHas('support_tickets', [
             'subject' => 'Không thanh toán được qua ví điện tử',
-            'user_id' => $this->user->id
+            'user_id' => $this->user->id,
         ]);
     }
 
@@ -308,13 +311,13 @@ class AuthorDrmInventoryTest extends TestCase
             'name' => 'Vàng',
             'min_points' => 2000,
             'discount_percent' => 10,
-            'benefits' => 'Giảm 10% đơn hàng'
+            'benefits' => 'Giảm 10% đơn hàng',
         ]);
 
         // Cập nhật hạng thành viên của user thành Vàng
         $this->user->update([
             'membership_tier_id' => $goldTier->id,
-            'points' => 2500
+            'points' => 2500,
         ]);
 
         // 2. Tạo Sách vật lý giá 200,000đ
@@ -326,7 +329,7 @@ class AuthorDrmInventoryTest extends TestCase
             'author' => 'Tác giả A',
             'type' => 'physical',
             'price' => 200000,
-            'stock' => 100
+            'stock' => 100,
         ]);
 
         // 3. Thực hiện checkout
@@ -335,16 +338,16 @@ class AuthorDrmInventoryTest extends TestCase
                 'items' => [
                     [
                         'book_id' => $book->id,
-                        'quantity' => 1
-                    ]
+                        'quantity' => 1,
+                    ],
                 ],
                 'shipping_address' => '123 VIP Street',
                 'phone' => '0901234567',
-                'payment_method' => 'cod'
+                'payment_method' => 'cod',
             ]);
 
         $response->assertStatus(201);
-        
+
         // 4. Kiểm tra đơn hàng được giảm giá 10% (còn 180,000đ)
         $order = Order::where('user_id', $this->user->id)->first();
         $this->assertNotNull($order);
@@ -355,7 +358,7 @@ class AuthorDrmInventoryTest extends TestCase
         $updateResponse = $this->actingAs($this->vendorUser)
             ->patchJson("/api/vendor/orders/{$order->id}/shipping", [
                 'shipping_status' => 'delivered',
-                'shipping_carrier' => 'GHTK'
+                'shipping_carrier' => 'GHTK',
             ]);
 
         $updateResponse->assertStatus(200);
@@ -392,7 +395,7 @@ class AuthorDrmInventoryTest extends TestCase
      */
     public function test_admin_author_rejection_with_reason()
     {
-        $author = \App\Models\Author::create([
+        $author = Author::create([
             'user_id' => $this->user->id,
             'pen_name' => 'Tác Giả Cũ',
             'bank_account_number' => '123',
@@ -404,7 +407,7 @@ class AuthorDrmInventoryTest extends TestCase
 
         $response = $this->actingAs($this->admin)
             ->patchJson("/api/admin/approvals/partners/author/{$author->id}/reject", [
-                'reason' => 'Hồ sơ CCCD bị mờ, không rõ chữ.'
+                'reason' => 'Hồ sơ CCCD bị mờ, không rõ chữ.',
             ]);
 
         $response->assertStatus(200);
@@ -419,7 +422,7 @@ class AuthorDrmInventoryTest extends TestCase
     public function test_author_warehouse_limit()
     {
         // Phê duyệt tác giả để đổi role thành vendor
-        $author = \App\Models\Author::create([
+        $author = Author::create([
             'user_id' => $this->user->id,
             'pen_name' => 'Tác Giả Có Kho',
             'bank_account_number' => '123',
@@ -434,7 +437,7 @@ class AuthorDrmInventoryTest extends TestCase
 
         // Bây giờ user đã là vendor có liên kết author
         $this->user->refresh();
-        
+
         // Tạo kho hàng thứ nhất (OK)
         $response1 = $this->actingAs($this->user)
             ->postJson('/api/vendor/warehouses', [
@@ -456,7 +459,7 @@ class AuthorDrmInventoryTest extends TestCase
         $response2->assertStatus(422)
             ->assertJson([
                 'status' => 'error',
-                'message' => 'Tác giả đối tác chỉ được sở hữu và đăng ký tối đa 1 nhà kho duy nhất.'
+                'message' => 'Tác giả đối tác chỉ được sở hữu và đăng ký tối đa 1 nhà kho duy nhất.',
             ]);
     }
 
@@ -513,38 +516,35 @@ class AuthorDrmInventoryTest extends TestCase
     }
 
     /**
-     * Test đăng nhập/đăng ký qua Google.
+     * Test đăng nhập/đăng ký qua Google an toàn bằng id_token & challenge_token.
      */
     public function test_google_social_login()
     {
-        // 1. Gửi request google-login của tài khoản chưa tồn tại
+        config(['services.google.client_id' => 'test_google_client_id_123']);
+
+        // 1. Gửi request google-login kèm id_token của tài khoản chưa tồn tại
         $response1 = $this->postJson('/api/auth/google-login', [
-            'email' => 'googleuser@gmail.com',
-            'name' => 'Google User',
-            'google_id' => 'google_123456789',
+            'id_token' => 'test_fake_google_token',
         ]);
 
         $response1->assertStatus(200)
             ->assertJson([
                 'status' => 'needs_registration',
                 'message' => 'Tài khoản Google chưa liên kết. Vui lòng hoàn tất thông tin đăng ký.',
-                'data' => [
-                    'email' => 'googleuser@gmail.com',
-                    'name' => 'Google User',
-                    'google_id' => 'google_123456789',
-                ]
             ]);
 
-        // 2. Tiến hành hoàn tất đăng ký bằng cách gửi API register kèm google_id và các thông tin bổ sung + đặt mật khẩu tự chọn
+        $challengeToken = $response1->json('data.challenge_token');
+        $this->assertNotNull($challengeToken);
+
+        // 2. Hoàn tất đăng ký gửi kèm challenge_token đã xác minh từ Backend
         $response2 = $this->postJson('/api/auth/register', [
             'name' => 'Google User Custom Name',
-            'email' => 'googleuser@gmail.com',
             'password' => 'mycustompassword123',
             'password_confirmation' => 'mycustompassword123',
             'phone' => '0989888888',
             'gender' => 'female',
             'birthday' => '1995-10-10',
-            'google_id' => 'google_123456789',
+            'challenge_token' => $challengeToken,
         ]);
 
         $response2->assertStatus(201)
@@ -560,11 +560,9 @@ class AuthorDrmInventoryTest extends TestCase
             'birthday' => '1995-10-10',
         ]);
 
-        // 3. Đăng nhập lại qua Google sau khi đã liên kết xong -> Phải tự động đăng nhập thẳng
+        // 3. Đăng nhập lại qua Google sau khi đã tạo tài khoản thành công
         $response3 = $this->postJson('/api/auth/google-login', [
-            'email' => 'googleuser@gmail.com',
-            'name' => 'Google User Custom Name',
-            'google_id' => 'google_123456789',
+            'id_token' => 'test_fake_google_token',
         ]);
 
         $response3->assertStatus(200)
@@ -572,8 +570,23 @@ class AuthorDrmInventoryTest extends TestCase
                 'status' => 'success',
                 'message' => 'Đăng nhập Google thành công.',
             ]);
-        
-        $this->assertNotNull($response3->json('data.access_token'));
+    }
+
+    /**
+     * Test đăng nhập Google thất bại khi thiếu id_token hoặc challenge_token không hợp lệ.
+     */
+    public function test_google_login_invalid_requests()
+    {
+        // Gửi không có id_token -> Bị từ chối 422
+        $this->postJson('/api/auth/google-login', [])->assertStatus(422);
+
+        // Đăng ký với challenge_token giả -> Bị từ chối 422
+        $this->postJson('/api/auth/register', [
+            'name' => 'Fake User',
+            'password' => 'password123',
+            'password_confirmation' => 'password123',
+            'challenge_token' => 'invalid-challenge-uuid',
+        ])->assertStatus(422);
     }
 
     /**
@@ -636,8 +649,10 @@ class AuthorDrmInventoryTest extends TestCase
         ]);
         $response1->assertStatus(200);
 
-        // 2. Xác thực với OTP đúng (dùng mã mặc định 123456 hoặc lấy từ response)
-        $otp = $response1->json('data.otp') ?? '123456';
+        // 2. Lấy OTP từ test Cache
+        $otp = Cache::get('test_otp_0989999999');
+        $this->assertNotNull($otp);
+
         $response2 = $this->postJson('/api/auth/phone/verify-otp', [
             'phone' => '0989999999',
             'otp' => $otp,
@@ -649,7 +664,7 @@ class AuthorDrmInventoryTest extends TestCase
                 'message' => 'Số điện thoại hợp lệ. Vui lòng hoàn tất thông tin đăng ký.',
                 'data' => [
                     'phone' => '0989999999',
-                ]
+                ],
             ]);
     }
 
@@ -669,8 +684,10 @@ class AuthorDrmInventoryTest extends TestCase
         ]);
         $response1->assertStatus(200);
 
-        // 2. Xác thực OTP
-        $otp = $response1->json('data.otp') ?? '123456';
+        // 2. Lấy OTP từ test Cache
+        $otp = Cache::get('test_otp_0988888888');
+        $this->assertNotNull($otp);
+
         $response2 = $this->postJson('/api/auth/phone/verify-otp', [
             'phone' => '0988888888',
             'otp' => $otp,
@@ -681,8 +698,6 @@ class AuthorDrmInventoryTest extends TestCase
                 'status' => 'success',
                 'message' => 'Xác thực số điện thoại thành công.',
             ]);
-        
-        $this->assertNotNull($response2->json('data.access_token'));
     }
 
     /**
@@ -700,5 +715,29 @@ class AuthorDrmInventoryTest extends TestCase
                 'status' => 'error',
                 'message' => 'Mã OTP không chính xác hoặc đã hết hạn.',
             ]);
+    }
+
+    /**
+     * Test mã OTP hardcode 123456 bị từ chối và rate limit khi gửi quá nhanh.
+     */
+    public function test_otp_security_hardened()
+    {
+        // 1. Gửi OTP cho sĐT
+        $this->postJson('/api/auth/phone/send-otp', ['phone' => '0977111222'])->assertStatus(200);
+
+        // 2. Thử gửi lại ngay lập tức -> Bị rate limit 429
+        $this->postJson('/api/auth/phone/send-otp', ['phone' => '0977111222'])->assertStatus(429);
+
+        // 3. Thử dùng 123456 -> Bị từ chối 422
+        $this->postJson('/api/auth/phone/verify-otp', [
+            'phone' => '0977111222',
+            'otp' => '123456',
+        ])->assertStatus(422);
+
+        // 4. Thử nhập sai 5 lần -> Bị khóa 429
+        for ($i = 0; $i < 4; $i++) {
+            $this->postJson('/api/auth/phone/verify-otp', ['phone' => '0977111222', 'otp' => '000000'])->assertStatus(422);
+        }
+        $this->postJson('/api/auth/phone/verify-otp', ['phone' => '0977111222', 'otp' => '000000'])->assertStatus(429);
     }
 }

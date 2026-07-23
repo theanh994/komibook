@@ -8,7 +8,6 @@ import { useAuthStore } from '@/stores/auth'
 import Button from 'primevue/button'
 import Toast from 'primevue/toast'
 import Textarea from 'primevue/textarea'
-import Select from 'primevue/select'
 import FileUpload from 'primevue/fileupload'
 
 const route = useRoute()
@@ -57,6 +56,27 @@ const fetchTicketDetails = async () => {
   }
 }
 
+const downloadAttachment = async (msg) => {
+  try {
+    const url = msg.attachment_url
+    if (!url) {
+      toast.add({ severity: 'warn', summary: 'Cảnh báo', detail: 'Tin nhắn không có file đính kèm.', life: 3000 })
+      return
+    }
+    const response = await apiClient.get(url, { responseType: 'blob' })
+    const blobUrl = window.URL.createObjectURL(new Blob([response.data]))
+    const link = document.createElement('a')
+    link.href = blobUrl
+    link.setAttribute('download', `ticket-attachment-${msg.id}`)
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    window.URL.revokeObjectURL(blobUrl)
+  } catch {
+    toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Không thể tải file đính kèm.', life: 3000 })
+  }
+}
+
 const onFileSelect = (e) => {
   attachment.value = e.files?.[0] || null
 }
@@ -82,7 +102,7 @@ const sendReply = async () => {
       attachment.value = null
       fetchTicketDetails()
     }
-  } catch (e) {
+  } catch {
     toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Không thể gửi phản hồi.', life: 3000 })
   } finally {
     sending.value = false
@@ -96,7 +116,7 @@ const updateStatus = async (status) => {
       toast.add({ severity: 'success', summary: 'Thành công', detail: 'Đã cập nhật trạng thái ticket.', life: 2000 })
       ticket.value.status = status
     }
-  } catch (e) {
+  } catch {
     toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Không thể cập nhật trạng thái.', life: 3000 })
   }
 }
@@ -111,7 +131,7 @@ const assignToMe = async () => {
       ticket.value.assigned_admin_id = authStore.user?.id
       ticket.value.status = 'pending'
     }
-  } catch (e) {
+  } catch {
     toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Không thể nhận xử lý.', life: 3000 })
   }
 }
@@ -171,10 +191,10 @@ onMounted(() => {
               <p class="leading-relaxed whitespace-pre-line">{{ msg.message }}</p>
               
               <!-- Attachment preview -->
-              <div v-if="msg.attachment" class="mt-2 pt-2 border-t border-slate-100/20 text-xs">
-                <a :href="'/storage/' + msg.attachment" target="_blank" class="flex items-center gap-1.5 underline opacity-90 hover:opacity-100">
-                  <i class="pi pi-image"></i> Xem tệp đính kèm
-                </a>
+              <div v-if="msg.has_attachment || msg.attachment" class="mt-2 pt-2 border-t border-slate-100/20 text-xs">
+                <button type="button" @click="downloadAttachment(msg)" class="flex items-center gap-1.5 underline opacity-90 hover:opacity-100 bg-transparent border-none text-inherit cursor-pointer">
+                  <i class="pi pi-download"></i> Tải / Xem tệp đính kèm
+                </button>
               </div>
             </div>
           </div>

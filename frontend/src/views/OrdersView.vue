@@ -1,26 +1,26 @@
 <template>
   <div class="min-h-screen bg-background">
-    <div class="w-full px-gutter max-w-[1280px] mx-auto py-xl flex flex-col lg:flex-row gap-xl">
+    <div class="w-full px-gutter max-w-[1280px] mx-auto py-xl flex flex-col lg:flex-row items-stretch gap-xl">
       
       <!-- Sidebar -->
       <UserSidebar :user="authStore.user" />
 
       <!-- Main Content -->
-      <main class="flex-1 space-y-lg">
-        <div class="bg-surface-container-lowest rounded-3xl border border-outline-variant/30 soft-shadow overflow-hidden min-h-[600px]">
+      <main class="flex-1 min-w-0 w-full flex flex-col">
+        <div class="bg-surface-container-lowest rounded-3xl border border-outline-variant/30 soft-shadow overflow-hidden flex-1 flex flex-col">
           <div class="p-lg md:p-xl border-b border-outline-variant/10 flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
               <h1 class="text-2xl font-black text-on-surface tracking-tight mb-1">Đơn hàng của tôi</h1>
               <p class="text-sm text-on-surface-variant font-medium">Theo dõi lịch sử mua sắm và trạng thái đơn hàng của bạn.</p>
             </div>
             
-            <div class="flex gap-2 p-1 bg-surface-container-low rounded-xl">
+            <div class="flex p-1 bg-surface-container-low rounded-xl border border-outline-variant/20">
               <button 
                 v-for="filter in statusFilters" 
                 :key="filter.value"
                 @click="currentFilter = filter.value"
-                class="px-4 py-1.5 rounded-lg text-xs font-bold transition-all border-none cursor-pointer"
-                :class="currentFilter === filter.value ? 'bg-primary text-on-primary shadow-sm' : 'text-outline hover:text-on-surface'"
+                class="px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all border-none cursor-pointer whitespace-nowrap"
+                :class="currentFilter === filter.value ? 'bg-primary text-on-primary shadow-xs' : 'text-outline hover:text-on-surface'"
               >
                 {{ filter.label }}
               </button>
@@ -35,16 +35,17 @@
             </div>
 
             <!-- Empty State -->
-            <div v-else-if="filteredOrders.length === 0" class="py-20 text-center animate-fade-in">
-              <div class="w-24 h-24 bg-surface-container-high rounded-full flex items-center justify-center mx-auto mb-lg text-outline/30">
-                <span class="material-symbols-outlined text-5xl">order_approve</span>
+            <div v-else-if="filteredOrders.length === 0" class="py-16 text-center animate-fade-in">
+              <div class="w-20 h-20 bg-surface-container-high rounded-3xl flex items-center justify-center mx-auto mb-4 text-outline/40 border border-outline-variant/10">
+                <span class="material-symbols-outlined text-4xl">inventory_2</span>
               </div>
-              <h3 class="text-xl font-bold text-on-surface mb-2">Chưa có đơn hàng nào</h3>
-              <p class="text-on-surface-variant mb-xl max-w-sm mx-auto text-sm leading-relaxed">
+              <h3 class="text-lg font-bold text-on-surface mb-1 tracking-tight">Chưa có đơn hàng nào</h3>
+              <p class="text-xs text-on-surface-variant mb-6 max-w-xs mx-auto font-medium leading-relaxed">
                 Có vẻ như bạn chưa đặt mua sản phẩm nào. Hãy khám phá kho sách khổng lồ của chúng tôi!
               </p>
-              <button @click="$router.push('/catalog')" class="bg-primary text-on-primary px-xl py-md rounded-2xl font-bold shadow-md hover:bg-primary/90 transition-all active:scale-95">
-                Khám phá ngay
+              <button @click="$router.push('/catalog')" class="bg-primary text-on-primary px-5 py-2.5 rounded-xl font-bold text-xs shadow-md hover:bg-primary/90 active:scale-95 transition-all border-none cursor-pointer flex items-center gap-2 mx-auto">
+                <span>Khám phá KomiBook</span>
+                <span class="material-symbols-outlined text-sm">arrow_forward</span>
               </button>
             </div>
 

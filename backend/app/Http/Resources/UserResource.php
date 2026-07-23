@@ -18,19 +18,25 @@ class UserResource extends JsonResource
     public function toArray(Request $request): array
     {
         return [
-            'id'         => $this->id,
-            'name'       => $this->name,
-            'email'      => $this->email,
-            'phone'      => $this->phone,
-            'gender'     => $this->gender,
-            'birthday'   => $this->birthday,
-            'google_id'  => $this->google_id,
-            'address'    => $this->address,
-            'avatar'     => $this->avatar,
+            'id' => $this->id,
+            'name' => $this->name,
+            'email' => $this->email,
+            'phone' => $this->phone,
+            'gender' => $this->gender,
+            'birthday' => $this->birthday,
+            'address' => $this->address,
+            'avatar' => $this->avatar,
             'avatar_url' => $this->avatar_url,
-            'role'       => $this->role,
-            'points'     => $this->points ?? 0,
+            'role' => $this->role,
+            'points' => $this->points ?? 0,
             'created_at' => $this->created_at?->toISOString(),
+
+            'favorite_categories' => $this->favoriteCategories ? $this->favoriteCategories->map(fn ($cat) => [
+                'id' => $cat->id,
+                'name' => $cat->name,
+                'slug' => $cat->slug,
+                'icon' => $cat->icon,
+            ]) : [],
 
             'membership_tier' => $this->membershipTier ? [
                 'id' => $this->membershipTier->id,
@@ -51,11 +57,11 @@ class UserResource extends JsonResource
             'vendor_profile' => $this->when(
                 $this->role === 'vendor' || $this->role === 'author',
                 fn () => $this->whenLoaded('vendor', fn () => [
-                    'shop_name'   => $this->vendor->shop_name,
-                    'slug'        => $this->vendor->slug,
-                    'logo'        => $this->vendor->logo ? '/storage/' . $this->vendor->logo : null,
+                    'shop_name' => $this->vendor->shop_name,
+                    'slug' => $this->vendor->slug,
+                    'logo' => $this->vendor->logo ? '/storage/'.$this->vendor->logo : null,
                     'description' => $this->vendor->description,
-                    'status'      => $this->vendor->status,
+                    'status' => $this->vendor->status,
                 ])
             ),
         ];

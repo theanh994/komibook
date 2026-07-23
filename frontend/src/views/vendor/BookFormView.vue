@@ -20,11 +20,11 @@
           </p>
         </div>
 
-        <div class="flex flex-wrap items-center gap-2.5">
+        <div class="flex items-center gap-3 shrink-0">
           <button 
             type="button" 
             @click="$router.push('/vendor/books')" 
-            class="px-5 py-2.5 border border-outline-variant/60 rounded-xl text-on-surface-variant font-bold text-xs uppercase tracking-widest hover:bg-surface-container-high transition-all border-none cursor-pointer h-11"
+            class="px-4 py-2.5 border border-outline-variant/40 rounded-xl text-on-surface-variant font-bold text-xs uppercase tracking-wider hover:bg-surface-container-high transition-all cursor-pointer bg-transparent"
           >
             Hủy
           </button>
@@ -32,20 +32,20 @@
             type="button" 
             @click="submitForm('draft')" 
             :disabled="saving"
-            class="px-5 py-2.5 border border-primary text-primary font-bold text-xs uppercase tracking-widest rounded-xl hover:bg-primary/10 transition-all cursor-pointer flex items-center gap-2 h-11"
+            class="px-4.5 py-2.5 border border-primary/50 text-primary font-bold text-xs uppercase tracking-wider rounded-xl hover:bg-primary/10 transition-all cursor-pointer flex items-center gap-1.5 bg-transparent"
           >
-            <span class="material-symbols-outlined text-sm">draft</span>
-            Lưu Bản Nháp
+            <span class="material-symbols-outlined text-base">draft</span>
+            <span>Lưu Bản Nháp</span>
           </button>
           <button 
             type="button" 
             @click="submitForm('published')" 
             :disabled="saving"
-            class="px-6 py-2.5 bg-primary text-on-primary font-bold text-xs uppercase tracking-widest rounded-xl shadow-md shadow-primary/20 hover:scale-[1.02] active:scale-95 transition-all cursor-pointer flex items-center gap-2 h-11"
+            class="px-5 py-2.5 bg-primary text-on-primary font-bold text-xs uppercase tracking-wider rounded-xl shadow-md hover:bg-primary/90 active:scale-95 transition-all cursor-pointer flex items-center gap-1.5 border-none"
           >
-            <span v-if="saving" class="material-symbols-outlined animate-spin text-sm">progress_activity</span>
-            <span v-else class="material-symbols-outlined text-sm">check_circle</span>
-            {{ isEditMode ? 'Cập Nhật Sách' : 'Xuất Bản Sách' }}
+            <span v-if="saving" class="material-symbols-outlined animate-spin text-base">progress_activity</span>
+            <span v-else class="material-symbols-outlined text-base">check_circle</span>
+            <span>{{ isEditMode ? 'Cập Nhật Sách' : 'Xuất Bản Sách' }}</span>
           </button>
         </div>
       </div>
@@ -275,6 +275,7 @@
                 <span class="material-symbols-outlined text-sm">add</span>
                 Tải lên ảnh bìa chính
               </button>
+              <p class="text-[10px] text-outline font-medium mt-1.5 text-center">Hỗ trợ PNG, JPG, WEBP (Tối đa 10MB)</p>
             </div>
 
             <hr class="border-outline-variant/15" />
@@ -534,6 +535,11 @@ const galleryPreviewUrls = ref([])
 const handleCoverFileChange = (e) => {
   const file = e.target.files?.[0] || null
   if (file) {
+    if (file.size > 10 * 1024 * 1024) {
+      toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Dung lượng ảnh bìa tối đa là 10MB.', life: 4000 })
+      e.target.value = ''
+      return
+    }
     coverFile.value = file
     coverPreviewUrl.value = URL.createObjectURL(file)
   }
@@ -541,10 +547,14 @@ const handleCoverFileChange = (e) => {
 
 const handleGalleryFileChange = (e) => {
   const files = Array.from(e.target.files || [])
-  galleryFiles.value.push(...files)
-  files.forEach(file => {
+  for (const file of files) {
+    if (file.size > 10 * 1024 * 1024) {
+      toast.add({ severity: 'error', summary: 'Lỗi', detail: `Ảnh ${file.name} vượt quá dung lượng tối đa 10MB.`, life: 4000 })
+      continue
+    }
+    galleryFiles.value.push(file)
     galleryPreviewUrls.value.push(URL.createObjectURL(file))
-  })
+  }
 }
 
 const handleEbookFileChange = (e) => {

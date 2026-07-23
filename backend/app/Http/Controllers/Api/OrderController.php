@@ -23,6 +23,46 @@ class OrderController extends Controller
         return OrderResource::collection($orders);
     }
 
+    public function myLibrary(Request $request)
+    {
+        $userId = $request->user()->id;
+
+        $orders = Order::where('user_id', $userId)
+            ->with(['orderItems.book'])
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        $libraryItems = [];
+        $seenBookIds = [];
+
+        foreach ($orders as $order) {
+            foreach ($order->orderItems as $item) {
+                if ($item->book && !in_array($item->book_id, $seenBookIds)) {
+                    $seenBookIds[] = $item->book_id;
+                    $libraryItems[] = [
+                        'order_id' => $order->id,
+                        'status' => $order->order_status,
+                        'purchased_at' => $order->created_at?->toISOString(),
+                        'book' => [
+                            'id' => $item->book->id,
+                            'title' => $item->book->title,
+                            'slug' => $item->book->slug,
+                            'cover_image' => $item->book->cover_image,
+                            'author' => $item->book->author_name ?? 'KomiBook Author',
+                            'type' => $item->book->type ?? 'physical',
+                            'file_path' => $item->book->file_path,
+                        ]
+                    ];
+                }
+            }
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'data' => $libraryItems,
+        ]);
+    }
+
     public function generateEbookLink(Request $request, $order_id, $book_id)
     {
         $order = Order::where('user_id', $request->user()->id)

@@ -12,8 +12,9 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware) {
-        $middleware->trustProxies(at: '*');
+        $middleware->trustProxies(at: ['127.0.0.1']);
         $middleware->statefulApi();
+        $middleware->append(\App\Http\Middleware\SecurityHeadersMiddleware::class);
 
         // Đăng ký middleware kiểm tra role (admin/vendor)
         $middleware->alias([

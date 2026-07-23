@@ -1,13 +1,13 @@
 <template>
-  <div class="min-h-screen bg-background py-xl px-gutter">
-    <div class="max-w-[1200px] mx-auto flex flex-col lg:flex-row gap-xl">
+  <div class="min-h-screen bg-background">
+    <div class="w-full px-gutter max-w-[1280px] mx-auto py-xl flex flex-col lg:flex-row items-stretch gap-xl">
       
       <!-- Sidebar -->
       <UserSidebar :user="authStore.user" />
 
       <!-- Main Content -->
-      <main class="flex-1 space-y-lg">
-        <div class="bg-surface-container-lowest rounded-3xl border border-outline-variant/30 soft-shadow overflow-hidden min-h-[600px] flex flex-col">
+      <main class="flex-1 min-w-0 w-full flex flex-col">
+        <div class="bg-surface-container-lowest rounded-3xl border border-outline-variant/30 soft-shadow overflow-hidden flex-1 flex flex-col">
           <div class="p-lg md:p-xl border-b border-outline-variant/10 flex justify-between items-center">
             <div>
               <h1 class="text-2xl font-black text-on-surface tracking-tight mb-1">Thông báo</h1>
@@ -16,7 +16,7 @@
             <button
               v-if="hasUnread"
               @click="handleMarkAllAsRead"
-              class="text-xs font-black uppercase text-primary hover:underline bg-transparent border-none cursor-pointer"
+              class="px-3.5 py-1.5 rounded-lg text-xs font-bold text-primary hover:bg-primary/10 transition-all border-none bg-transparent cursor-pointer"
             >
               Đánh dấu đã đọc tất cả
             </button>

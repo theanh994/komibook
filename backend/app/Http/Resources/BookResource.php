@@ -20,7 +20,7 @@ class BookResource extends JsonResource
             'slug'           => $this->slug,
             'author'         => $this->author,
             'translator'     => $this->translator,
-            'description'    => $this->description,
+            'description'    => \App\Services\HtmlSanitizer::sanitize($this->description),
             'cover_image'    => $this->cover_image ? (filter_var($this->cover_image, FILTER_VALIDATE_URL) ? $this->cover_image : '/storage/' . $this->cover_image) : null,
             'gallery_images' => is_array($this->gallery_images) ? array_map(function ($img) {
                 return filter_var($img, FILTER_VALIDATE_URL) ? $img : '/storage/' . $img;

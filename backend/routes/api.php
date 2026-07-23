@@ -60,6 +60,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/books/{id}/check-ownership', [\App\Http\Controllers\Api\BookController::class, 'checkOwnership']);
     Route::post('/coupons/apply', [\App\Http\Controllers\Api\CouponController::class, 'apply']);
     Route::get('/my-orders', [\App\Http\Controllers\Api\OrderController::class, 'myOrders']);
+    Route::get('/my-library', [\App\Http\Controllers\Api\OrderController::class, 'myLibrary']);
     Route::get('/orders/{order}/ebooks/{book}/generate-link', [\App\Http\Controllers\Api\OrderController::class, 'generateEbookLink']);
     
     // VNPAY Create payment
@@ -86,12 +87,14 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/auth/register-author', [\App\Http\Controllers\Api\AuthorController::class, 'register']);
     Route::get('/author/status',          [\App\Http\Controllers\Api\AuthorController::class, 'status']);
     Route::get('/author/dashboard-stats', [\App\Http\Controllers\Api\AuthorController::class, 'dashboardStats']);
+    Route::get('/authors/{id}/identity-document', [\App\Http\Controllers\Api\AuthorController::class, 'downloadIdentityDocument']);
 
     // Tickets yêu cầu hỗ trợ (Khách hàng)
     Route::get('/support/tickets', [\App\Http\Controllers\Api\SupportTicketController::class, 'index']);
     Route::post('/support/tickets', [\App\Http\Controllers\Api\SupportTicketController::class, 'store']);
     Route::get('/support/tickets/{id}', [\App\Http\Controllers\Api\SupportTicketController::class, 'show']);
     Route::post('/support/tickets/{id}/message', [\App\Http\Controllers\Api\SupportTicketController::class, 'reply']);
+    Route::get('/support/tickets/{ticket}/messages/{message}/attachment', [\App\Http\Controllers\Api\SupportTicketController::class, 'downloadAttachment']);
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════

@@ -101,17 +101,6 @@
 
         <!-- User Section -->
         <template v-if="authStore.isAuthenticated">
-          <!-- Admin/Vendor Dashboard Link -->
-          <Button
-            v-if="authStore.isAdmin || authStore.isVendor"
-            :label="authStore.isAdmin ? 'Hệ thống' : 'Gian hàng'"
-            :icon="authStore.isAdmin ? 'pi pi-cog' : 'pi pi-shop'"
-            class="p-button-primary font-bold shadow-sm hidden lg:inline-flex"
-            @click="goToDashboard"
-          />
-
-          <div class="h-8 w-px bg-outline-variant mx-1 hidden md:block"></div>
-
           <!-- User Avatar & Menu -->
           <div class="flex items-center gap-sm cursor-pointer" @click="toggleUserMenu" aria-haspopup="true" aria-controls="overlay_menu">
             <div class="hidden lg:flex flex-col items-end mr-1">

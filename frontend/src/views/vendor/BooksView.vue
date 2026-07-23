@@ -245,6 +245,15 @@ const openBulkDiscountDialog = () => {
   bulkDiscountDialogVisible.value = true
 }
 
+const onDiscountInput = () => {
+  if (bulkDiscountPercent.value > 15) {
+    bulkDiscountPercent.value = 15
+    toast.add({ severity: 'warn', summary: 'Cảnh báo', detail: 'Mức giảm giá tối đa cho phép là 15%', life: 3000 })
+  } else if (bulkDiscountPercent.value < 0) {
+    bulkDiscountPercent.value = 0
+  }
+}
+
 const submitBulkDiscount = async () => {
   if (bulkDiscountPercent.value === null || bulkDiscountPercent.value === undefined) {
     toast.add({ severity: 'warn', summary: 'Cảnh báo', detail: 'Vui lòng nhập % giảm giá.', life: 3000 })
@@ -630,15 +639,20 @@ onMounted(() => {
             <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider">Mức Giảm Giá (%)</label>
             <span class="text-xs font-extrabold text-amber-600">Tối đa 15%</span>
           </div>
-          <InputNumber
-            v-model="bulkDiscountPercent"
-            :min="0"
-            :max="15"
-            suffix="%"
-            class="w-full !h-11 text-sm"
-            placeholder="Nhập 0% để xóa giảm giá"
-          />
-          <p class="text-[11px] text-slate-500 mt-1">Nhập 0% để đưa tất cả các cuốn sách đã chọn về giá gốc ban đầu.</p>
+          <div class="relative">
+            <input
+              type="number"
+              v-model.number="bulkDiscountPercent"
+              min="0"
+              max="15"
+              step="1"
+              @input="onDiscountInput"
+              placeholder="Nhập mức giảm giá (0 - 15)"
+              class="w-full h-11 px-4 pr-10 rounded-xl border border-slate-300 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-600/20 text-sm font-bold text-slate-800 outline-none transition-all"
+            />
+            <span class="absolute right-3.5 top-1/2 -translate-y-1/2 text-sm font-black text-slate-400 pointer-events-none">%</span>
+          </div>
+          <p class="text-[11px] text-slate-500 mt-1.5">Nhập 0% để đưa tất cả các cuốn sách đã chọn về giá gốc ban đầu.</p>
         </div>
       </div>
 

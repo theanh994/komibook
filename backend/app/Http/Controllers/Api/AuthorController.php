@@ -7,6 +7,7 @@ use App\Models\Author;
 use App\Models\Book;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Storage;
 
 class AuthorController extends Controller
 {
@@ -31,13 +32,14 @@ class AuthorController extends Controller
         if ($existing) {
             return response()->json([
                 'status' => 'error',
-                'message' => 'Bạn đã gửi yêu cầu đăng ký tác giả trước đó rồi.'
+                'message' => 'Bạn đã gửi yêu cầu đăng ký tác giả trước đó rồi.',
             ], 422);
         }
 
         $filePath = null;
         if ($request->hasFile('identity_document')) {
-            $filePath = $request->file('identity_document')->store('authors/cccd', 'public');
+            // Lưu tài liệu vào private disk để bảo vệ khỏi truy cập công khai
+            $filePath = $request->file('identity_document')->store('authors/cccd', 'private');
         }
 
         $author = Author::create([
@@ -54,8 +56,50 @@ class AuthorController extends Controller
         return response()->json([
             'status' => 'success',
             'message' => 'Gửi yêu cầu đăng ký tác giả thành công! Chờ ban quản trị phê duyệt.',
-            'data' => $author
+            'data' => $author,
         ], 201);
+    }
+
+    /**
+     * Truy cập an toàn file CCCD/tài liệu tác giả (chỉ admin hoặc chính tác giả).
+     */
+    public function downloadIdentityDocument(Request $request, $id)
+    {
+        $author = Author::findOrFail($id);
+        $user = Auth::user();
+
+        if ($user->role !== 'admin' && $user->id !== $author->user_id) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Bạn không có quyền truy cập tài liệu này.',
+            ], 403);
+        }
+
+        $path = $author->identity_document;
+        if (! $path) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Tài liệu không tồn tại.',
+            ], 404);
+        }
+
+        if (Storage::disk('private')->exists($path)) {
+            return response()->file(Storage::disk('private')->path($path), [
+                'X-Content-Type-Options' => 'nosniff',
+            ]);
+        }
+
+        // Fallback kiểm tra đĩa public cũ nếu chưa di trú
+        if (Storage::disk('public')->exists($path)) {
+            return response()->file(Storage::disk('public')->path($path), [
+                'X-Content-Type-Options' => 'nosniff',
+            ]);
+        }
+
+        return response()->json([
+            'status' => 'error',
+            'message' => 'Tài liệu không tồn tại.',
+        ], 404);
     }
 
     /**
@@ -68,7 +112,7 @@ class AuthorController extends Controller
 
         return response()->json([
             'status' => 'success',
-            'data' => $author
+            'data' => $author,
         ]);
     }
 
@@ -80,16 +124,16 @@ class AuthorController extends Controller
         $user = Auth::user();
         $author = Author::where('user_id', $user->id)->first();
 
-        if (!$author || $author->status !== 'active') {
+        if (! $author || $author->status !== 'active') {
             return response()->json([
                 'status' => 'error',
-                'message' => 'Bạn chưa phải là tác giả được kích hoạt.'
+                'message' => 'Bạn chưa phải là tác giả được kích hoạt.',
             ], 403);
         }
 
         // Tác giả hoạt động như Vendor, lấy thống kê của Vendor liên kết
         $vendor = $user->vendor;
-        if (!$vendor) {
+        if (! $vendor) {
             return response()->json([
                 'status' => 'success',
                 'data' => [
@@ -97,7 +141,7 @@ class AuthorController extends Controller
                     'total_chapters' => 0,
                     'total_revenue' => 0,
                     'balance' => 0,
-                ]
+                ],
             ]);
         }
 
@@ -115,7 +159,7 @@ class AuthorController extends Controller
                 'total_physical' => $physicalCount,
                 'balance' => $vendor->balance,
                 'total_withdrawn' => $vendor->total_withdrawn,
-            ]
+            ],
         ]);
     }
 }

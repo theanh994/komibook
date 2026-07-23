@@ -116,6 +116,14 @@ class User extends Authenticatable
         return $this->belongsToMany(Book::class, 'wishlists')->withTimestamps();
     }
 
+    /**
+     * Danh sách thể loại sách yêu thích (Cold Start Recommendation Engine).
+     */
+    public function favoriteCategories()
+    {
+        return $this->belongsToMany(Category::class, 'user_favorite_categories')->withTimestamps();
+    }
+
     // ─── Role Helper Methods ──────────────────────────────────────────────────
 
     public function isAdmin(): bool

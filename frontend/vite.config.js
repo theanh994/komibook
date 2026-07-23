@@ -1,3 +1,4 @@
+/* global process */
 import { fileURLToPath, URL } from 'node:url'
 
 import { defineConfig } from 'vite'
@@ -23,19 +24,19 @@ export default defineConfig({
       '/api': {
         target: 'http://127.0.0.1:8000',
         changeOrigin: true,
-        cookieDomainRewrite: 'komibook.id.vn',
-        headers: { Accept: 'application/json' }
+        headers: { Accept: 'application/json' },
+        ...(process.env.VITE_COOKIE_DOMAIN ? { cookieDomainRewrite: process.env.VITE_COOKIE_DOMAIN } : {})
       },
       '/sanctum': {
         target: 'http://127.0.0.1:8000',
         changeOrigin: true,
-        cookieDomainRewrite: 'komibook.id.vn',
-        headers: { Accept: 'application/json' }
+        headers: { Accept: 'application/json' },
+        ...(process.env.VITE_COOKIE_DOMAIN ? { cookieDomainRewrite: process.env.VITE_COOKIE_DOMAIN } : {})
       },
       '/storage': {
         target: 'http://127.0.0.1:8000',
         changeOrigin: true,
-        cookieDomainRewrite: 'komibook.id.vn'
+        ...(process.env.VITE_COOKIE_DOMAIN ? { cookieDomainRewrite: process.env.VITE_COOKIE_DOMAIN } : {})
       }
     }
   }

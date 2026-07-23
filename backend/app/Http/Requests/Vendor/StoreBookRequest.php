@@ -45,9 +45,9 @@ class StoreBookRequest extends FormRequest
             'stock'                 => ['required', 'integer', 'min:0'],
             'type'                  => ['required', Rule::in(['physical', 'ebook'])],
             'status'                => ['nullable', Rule::in(['draft', 'published'])],
-            'cover_image'           => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
+            'cover_image'           => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:10240'],
             'gallery_images'        => ['nullable', 'array'],
-            'gallery_images.*'      => ['image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
+            'gallery_images.*'      => ['image', 'mimes:jpg,jpeg,png,webp', 'max:10240'],
             'ebook_file'            => ['nullable', 'file', 'mimes:pdf,epub', 'max:51200', 'required_if:type,ebook'],
         ];
     }

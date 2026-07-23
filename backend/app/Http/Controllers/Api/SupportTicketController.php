@@ -7,6 +7,8 @@ use App\Models\SupportTicket;
 use App\Models\TicketMessage;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 class SupportTicketController extends Controller
 {
@@ -20,7 +22,7 @@ class SupportTicketController extends Controller
 
         return response()->json([
             'status' => 'success',
-            'data' => $tickets
+            'data' => $tickets,
         ]);
     }
 
@@ -34,14 +36,20 @@ class SupportTicketController extends Controller
             'category' => 'required|string|max:100',
             'priority' => 'required|in:low,medium,high',
             'message' => 'required|string',
-            'attachment' => 'nullable|file|max:5120',
+            'attachment' => ['nullable', 'file', 'max:5120', 'mimes:jpeg,jpg,png,gif,pdf,doc,docx,txt'],
+        ], [
+            'attachment.mimes' => 'File đính kèm chỉ chấp nhận định dạng: jpeg, jpg, png, gif, pdf, doc, docx, txt.',
+            'attachment.max' => 'Dung lượng file đính kèm không vượt quá 5MB.',
         ]);
 
         $user = Auth::user();
 
         $attachmentPath = null;
         if ($request->hasFile('attachment')) {
-            $attachmentPath = $request->file('attachment')->store('tickets', 'public');
+            $file = $request->file('attachment');
+            $ext = $file->getClientOriginalExtension();
+            $filename = (string) Str::uuid().($ext ? '.'.$ext : '');
+            $attachmentPath = $file->storeAs('tickets', $filename, 'private');
         }
 
         $ticket = SupportTicket::create([
@@ -62,7 +70,7 @@ class SupportTicketController extends Controller
         return response()->json([
             'status' => 'success',
             'message' => 'Gửi yêu cầu hỗ trợ thành công.',
-            'data' => $ticket->load('messages')
+            'data' => $ticket->load('messages'),
         ], 201);
     }
 
@@ -75,16 +83,16 @@ class SupportTicketController extends Controller
         $ticket = SupportTicket::with(['messages.sender'])->findOrFail($id);
 
         // Bảo mật: Chỉ chủ nhân hoặc admin mới được xem
-        if ($ticket->user_id !== $user->id && !$user->isAdmin()) {
+        if ($ticket->user_id !== $user->id && ! $user->isAdmin()) {
             return response()->json([
                 'status' => 'error',
-                'message' => 'Bạn không có quyền xem yêu cầu hỗ trợ này.'
+                'message' => 'Bạn không có quyền xem yêu cầu hỗ trợ này.',
             ], 403);
         }
 
         return response()->json([
             'status' => 'success',
-            'data' => $ticket
+            'data' => $ticket,
         ]);
     }
 
@@ -95,22 +103,28 @@ class SupportTicketController extends Controller
     {
         $request->validate([
             'message' => 'required|string',
-            'attachment' => 'nullable|file|max:5120',
+            'attachment' => ['nullable', 'file', 'max:5120', 'mimes:jpeg,jpg,png,gif,pdf,doc,docx,txt'],
+        ], [
+            'attachment.mimes' => 'File đính kèm chỉ chấp nhận định dạng: jpeg, jpg, png, gif, pdf, doc, docx, txt.',
+            'attachment.max' => 'Dung lượng file đính kèm không vượt quá 5MB.',
         ]);
 
         $user = Auth::user();
         $ticket = SupportTicket::findOrFail($id);
 
-        if ($ticket->user_id !== $user->id && !$user->isAdmin()) {
+        if ($ticket->user_id !== $user->id && ! $user->isAdmin()) {
             return response()->json([
                 'status' => 'error',
-                'message' => 'Bạn không có quyền phản hồi yêu cầu hỗ trợ này.'
+                'message' => 'Bạn không có quyền phản hồi yêu cầu hỗ trợ này.',
             ], 403);
         }
 
         $attachmentPath = null;
         if ($request->hasFile('attachment')) {
-            $attachmentPath = $request->file('attachment')->store('tickets', 'public');
+            $file = $request->file('attachment');
+            $ext = $file->getClientOriginalExtension();
+            $filename = (string) Str::uuid().($ext ? '.'.$ext : '');
+            $attachmentPath = $file->storeAs('tickets', $filename, 'private');
         }
 
         $message = TicketMessage::create([
@@ -132,8 +146,51 @@ class SupportTicketController extends Controller
         return response()->json([
             'status' => 'success',
             'message' => 'Gửi phản hồi thành công.',
-            'data' => $message->load('sender')
+            'data' => $message->load('sender'),
         ], 201);
+    }
+
+    /**
+     * Tải/Truy cập an toàn file đính kèm support ticket (chỉ người tạo ticket hoặc admin).
+     */
+    public function downloadAttachment(Request $request, $ticketId, $messageId)
+    {
+        $ticket = SupportTicket::findOrFail($ticketId);
+        $user = Auth::user();
+
+        if ($ticket->user_id !== $user->id && ! $user->isAdmin()) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Bạn không có quyền truy cập file đính kèm của ticket này.',
+            ], 403);
+        }
+
+        $message = TicketMessage::where('support_ticket_id', $ticket->id)->findOrFail($messageId);
+        $path = $message->attachment;
+
+        if (! $path) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Tin nhắn này không có file đính kèm.',
+            ], 404);
+        }
+
+        if (Storage::disk('private')->exists($path)) {
+            return response()->file(Storage::disk('private')->path($path), [
+                'X-Content-Type-Options' => 'nosniff',
+            ]);
+        }
+
+        if (Storage::disk('public')->exists($path)) {
+            return response()->file(Storage::disk('public')->path($path), [
+                'X-Content-Type-Options' => 'nosniff',
+            ]);
+        }
+
+        return response()->json([
+            'status' => 'error',
+            'message' => 'File đính kèm không tồn tại.',
+        ], 404);
     }
 
     /**
@@ -145,7 +202,7 @@ class SupportTicketController extends Controller
 
         return response()->json([
             'status' => 'success',
-            'data' => $tickets
+            'data' => $tickets,
         ]);
     }
 
@@ -166,7 +223,7 @@ class SupportTicketController extends Controller
         return response()->json([
             'status' => 'success',
             'message' => 'Đã gán yêu cầu hỗ trợ thành công.',
-            'data' => $ticket
+            'data' => $ticket,
         ]);
     }
 
@@ -186,7 +243,7 @@ class SupportTicketController extends Controller
         return response()->json([
             'status' => 'success',
             'message' => 'Cập nhật trạng thái ticket thành công.',
-            'data' => $ticket
+            'data' => $ticket,
         ]);
     }
 }

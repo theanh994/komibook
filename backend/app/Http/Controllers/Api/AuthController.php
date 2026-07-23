@@ -6,13 +6,17 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\LoginRequest;
 use App\Http\Requests\Auth\RegisterRequest;
 use App\Http\Resources\UserResource;
+use App\Models\Author;
 use App\Models\User;
+use App\Models\Vendor;
+use App\Services\GoogleTokenVerifierInterface;
+use Illuminate\Auth\Events\PasswordReset;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Password;
-use Illuminate\Support\Facades\Hash;
-use Illuminate\Auth\Events\PasswordReset;
 use Illuminate\Support\Str;
 
 class AuthController extends Controller
@@ -22,51 +26,90 @@ class AuthController extends Controller
     /**
      * Đăng ký tài khoản mới.
      *
+     * - Nếu có challenge_token từ Google: Lấy email và google_id từ Cache đã xác minh.
      * - Tạo user với role mặc định 'customer'.
-     * - Tạo Sanctum API token và trả về kèm UserResource.
+     * - Đăng nhập Session cookie cho SPA. Không phát hành Bearer access_token.
      */
     public function register(RegisterRequest $request): JsonResponse
     {
-        $user = User::create([
-            'name'     => $request->name,
-            'email'    => $request->email,
-            'password' => $request->password, // Model tự hash qua cast 'hashed'
-            'phone'    => $request->phone,
-            'gender'   => $request->gender,
-            'birthday' => $request->birthday,
-            'google_id' => $request->google_id,
-            'role'     => 'customer',
-        ]);
+        $email = $request->email;
+        $googleId = null;
 
-        if ($request->desired_role === 'author') {
-            \App\Models\Author::create([
-                'user_id' => $user->id,
-                'pen_name' => $user->name,
-                'bank_account_number' => 'Pending',
-                'bank_name' => 'Pending',
-                'bank_holder_name' => strtoupper($user->name),
-                'identity_document' => 'Pending',
-                'status' => 'pending',
-            ]);
-        } elseif ($request->desired_role === 'vendor') {
-            \App\Models\Vendor::withoutGlobalScopes()->create([
-                'user_id'     => $user->id,
-                'shop_name'   => 'Shop ' . $user->name,
-                'slug'        => \Illuminate\Support\Str::slug('Shop ' . $user->name . '-' . rand(1000, 9999)),
-                'description' => '',
-                'status'      => 'pending',
-            ]);
+        // Bảo mật AUTH-01: Không cho phép client gửi google_id trực tiếp mà không qua challenge_token
+        if ($request->filled('google_id') && ! $request->filled('challenge_token')) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Không thể tự khai báo google_id trực tiếp. Vui lòng xác thực qua Google.',
+            ], 422);
         }
 
-        $token = $user->createToken('auth_token')->plainTextToken;
+        // Nếu có challenge_token từ Google authentication
+        if ($request->filled('challenge_token')) {
+            $googleData = Cache::pull('google_challenge_'.$request->challenge_token);
+            if (! $googleData) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Mã xác thực Google (challenge_token) không hợp lệ hoặc đã hết hạn.',
+                ], 422);
+            }
+
+            $email = $googleData['email'];
+            $googleId = $googleData['google_id'];
+        }
+
+        // Thực hiện trong Database Transaction và kiểm tra lại duy nhất email/google_id
+        $user = DB::transaction(function () use ($request, $email, $googleId) {
+            if ($googleId && User::where('google_id', $googleId)->exists()) {
+                throw new \InvalidArgumentException('Tài khoản Google này đã được liên kết với người dùng khác.');
+            }
+            if ($email && User::where('email', $email)->exists()) {
+                throw new \InvalidArgumentException('Email này đã được đăng ký trên hệ thống.');
+            }
+
+            $newUser = User::create([
+                'name' => $request->name,
+                'email' => $email,
+                'password' => $request->password,
+                'phone' => $request->phone,
+                'gender' => $request->gender,
+                'birthday' => $request->birthday,
+                'google_id' => $googleId,
+                'role' => 'customer',
+            ]);
+
+            if ($request->desired_role === 'author') {
+                Author::create([
+                    'user_id' => $newUser->id,
+                    'pen_name' => $newUser->name,
+                    'bank_account_number' => 'Pending',
+                    'bank_name' => 'Pending',
+                    'bank_holder_name' => strtoupper($newUser->name),
+                    'identity_document' => 'Pending',
+                    'status' => 'pending',
+                ]);
+            } elseif ($request->desired_role === 'vendor') {
+                Vendor::withoutGlobalScopes()->create([
+                    'user_id' => $newUser->id,
+                    'shop_name' => 'Shop '.$newUser->name,
+                    'slug' => Str::slug('Shop '.$newUser->name.'-'.rand(1000, 9999)),
+                    'description' => '',
+                    'status' => 'pending',
+                ]);
+            }
+
+            return $newUser;
+        });
+
+        Auth::login($user);
+        if ($request->hasSession()) {
+            $request->session()->regenerate();
+        }
 
         return response()->json([
-            'status'  => 'success',
+            'status' => 'success',
             'message' => 'Đăng ký thành công.',
-            'data'    => [
-                'user'         => new UserResource($user),
-                'access_token' => $token,
-                'token_type'   => 'Bearer',
+            'data' => [
+                'user' => new UserResource($user),
             ],
         ], 201);
     }
@@ -77,8 +120,7 @@ class AuthController extends Controller
      * Đăng nhập.
      *
      * - Xác thực credentials bằng Auth::attempt().
-     * - Xóa tất cả token cũ (single-device policy) trước khi cấp token mới.
-     * - Load thêm vendor relation nếu user là vendor.
+     * - Đăng nhập Session cookie cho SPA và regenerate session. Không trả Bearer token.
      */
     public function login(LoginRequest $request): JsonResponse
     {
@@ -89,32 +131,31 @@ class AuthController extends Controller
             'password' => $request->password,
         ];
 
-        if (! Auth::attempt($credentials)) {
+        if (! Auth::attempt($credentials, $request->boolean('remember'))) {
             return response()->json([
-                'status'  => 'error',
+                'status' => 'error',
                 'message' => 'Tài khoản hoặc mật khẩu không chính xác.',
-                'data'    => null,
+                'data' => null,
             ], 401);
         }
 
         /** @var User $user */
         $user = Auth::user();
 
-        // Single-device policy: xóa tất cả token cũ trước khi cấp mới
+        if ($request->hasSession()) {
+            $request->session()->regenerate();
+        }
+
+        // Single-device policy clean up tokens nếu có token cũ
         $user->tokens()->delete();
 
-        // Eager load relationships
-        $user->load(['vendor', 'membershipTier', 'author']);
-
-        $token = $user->createToken('auth_token')->plainTextToken;
+        $user->load(['vendor', 'membershipTier', 'author', 'favoriteCategories']);
 
         return response()->json([
-            'status'  => 'success',
+            'status' => 'success',
             'message' => 'Đăng nhập thành công.',
-            'data'    => [
-                'user'         => new UserResource($user),
-                'access_token' => $token,
-                'token_type'   => 'Bearer',
+            'data' => [
+                'user' => new UserResource($user),
             ],
         ]);
     }
@@ -124,23 +165,26 @@ class AuthController extends Controller
     /**
      * Đăng xuất.
      *
-     * - Thu hồi (delete) token hiện tại của user — không ảnh hưởng token khác.
+     * - Invalidate Session và regenerate CSRF token cho SPA.
      */
     public function logout(Request $request): JsonResponse
     {
-        // Support either token or session based authentication
-        if ($request->user()->currentAccessToken() && method_exists($request->user()->currentAccessToken(), 'delete')) {
+        if ($request->user() && $request->user()->currentAccessToken() && method_exists($request->user()->currentAccessToken(), 'delete')) {
             $request->user()->currentAccessToken()->delete();
         }
 
-        \Illuminate\Support\Facades\Auth::guard('web')->logout();
-        $request->session()->invalidate();
-        $request->session()->regenerateToken();
+        if (Auth::guard('web')->check()) {
+            Auth::guard('web')->logout();
+        }
+        if ($request->hasSession()) {
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
+        }
 
         return response()->json([
-            'status'  => 'success',
+            'status' => 'success',
             'message' => 'Đăng xuất thành công.',
-            'data'    => null,
+            'data' => null,
         ]);
     }
 
@@ -148,20 +192,18 @@ class AuthController extends Controller
 
     /**
      * Lấy thông tin user đang đăng nhập.
-     *
-     * - Load thêm vendor relation nếu user là vendor.
      */
     public function me(Request $request): JsonResponse
     {
         /** @var User $user */
         $user = $request->user();
 
-        $user->load(['vendor', 'membershipTier', 'author']);
+        $user->load(['vendor', 'membershipTier', 'author', 'favoriteCategories']);
 
         return response()->json([
-            'status'  => 'success',
+            'status' => 'success',
             'message' => 'Lấy thông tin người dùng thành công.',
-            'data'    => [
+            'data' => [
                 'user' => new UserResource($user),
             ],
         ]);
@@ -215,94 +257,85 @@ class AuthController extends Controller
             : response()->json(['status' => 'error', 'message' => __($status)], 400);
     }
 
+    // ─── Google Login ─────────────────────────────────────────────────────────
+
     /**
-     * Đăng nhập hoặc đăng ký bằng tài khoản Google.
+     * Đăng nhập hoặc đăng ký bằng tài khoản Google (Dùng Verifier Abstraction & Registration Challenge).
      */
-    public function googleLogin(Request $request): JsonResponse
+    public function googleLogin(Request $request, GoogleTokenVerifierInterface $verifier): JsonResponse
     {
-        $email = $request->email;
-        $name = $request->name;
-        $googleId = $request->google_id;
+        $request->validate([
+            'id_token' => 'required|string',
+        ], [
+            'id_token.required' => 'Yêu cầu Token xác minh Google (id_token).',
+        ]);
 
-        // Nếu client gửi lên id_token (từ Google SDK thực tế trên frontend)
-        if ($request->has('id_token')) {
-            $idToken = $request->id_token;
-            $verifyResponse = \Illuminate\Support\Facades\Http::get("https://oauth2.googleapis.com/tokeninfo?id_token={$idToken}");
-
-            if ($verifyResponse->failed()) {
-                return response()->json([
-                    'status' => 'error',
-                    'message' => 'Token xác minh tài khoản Google không hợp lệ hoặc đã hết hạn.',
-                    'errors' => [
-                        'id_token' => ['Token Google không hợp lệ.']
-                    ]
-                ], 422);
-            }
-
-            $payload = $verifyResponse->json();
-            $email = $payload['email'] ?? null;
-            $name = $payload['name'] ?? null;
-            $googleId = $payload['sub'] ?? null;
-
-            if (empty($email) || empty($googleId)) {
-                return response()->json([
-                    'status' => 'error',
-                    'message' => 'Không thể trích xuất thông tin định danh từ Google Token.',
-                ], 422);
-            }
-        } else {
-            // Nếu không gửi id_token, chỉ cho phép mock bằng google_id + email khi ở môi trường phát triển (debug/local)
-            if (config('app.env') !== 'local' && !config('app.debug')) {
-                return response()->json([
-                    'status' => 'error',
-                    'message' => 'Yêu cầu Token xác minh Google (id_token) ở môi trường production.',
-                ], 422);
-            }
-
-            // Môi trường dev: validate các trường mock gửi lên
-            $request->validate([
-                'email' => 'required|string|email',
-                'name' => 'required|string',
-                'google_id' => 'required|string',
-            ]);
+        // Cấu hình Fail Closed ở mọi môi trường nếu chưa cài Client ID
+        $clientId = config('services.google.client_id');
+        if (empty($clientId)) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Hệ thống chưa được cấu hình Google Client ID.',
+            ], 500);
         }
 
-        // Tiến hành đăng nhập/đăng ký
+        try {
+            $payload = $verifier->verify($request->id_token);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => $e->getMessage(),
+            ], 422);
+        }
+
+        $email = $payload['email'];
+        $name = $payload['name'] ?? '';
+        $googleId = $payload['sub'];
+
+        // Tìm kiếm user theo google_id hoặc email
         $user = User::where('google_id', $googleId)
-                    ->orWhere('email', $email)
-                    ->first();
+            ->orWhere('email', $email)
+            ->first();
 
         if ($user) {
-            // Nếu chưa có google_id thì gán
+            // Liên kết google_id nếu chưa có
             if (empty($user->google_id)) {
                 $user->google_id = $googleId;
                 $user->save();
             }
 
-            $user->tokens()->delete();
-            $user->load(['vendor', 'membershipTier', 'author']);
-            $token = $user->createToken('auth_token')->plainTextToken;
+            Auth::login($user);
+            if ($request->hasSession()) {
+                $request->session()->regenerate();
+            }
+
+            $user->load(['vendor', 'membershipTier', 'author', 'favoriteCategories']);
 
             return response()->json([
                 'status' => 'success',
                 'message' => 'Đăng nhập Google thành công.',
                 'data' => [
                     'user' => new UserResource($user),
-                    'access_token' => $token,
-                    'token_type' => 'Bearer',
                 ],
             ]);
         }
 
-        // Tài khoản chưa tồn tại -> Yêu cầu thiết lập/hoàn tất thông tin đăng ký
+        // Tạo Registration Challenge Token dùng 1 lần trong 10 phút, chống race/replay
+        $challengeToken = (string) Str::uuid();
+        Cache::put('google_challenge_'.$challengeToken, [
+            'google_id' => $googleId,
+            'email' => $email,
+            'name' => $name,
+        ], now()->addMinutes(10));
+
         return response()->json([
             'status' => 'needs_registration',
             'message' => 'Tài khoản Google chưa liên kết. Vui lòng hoàn tất thông tin đăng ký.',
             'data' => [
+                'challenge_token' => $challengeToken,
                 'email' => $email,
                 'name' => $name,
-                'google_id' => $googleId,
-            ]
+            ],
         ]);
     }
 }

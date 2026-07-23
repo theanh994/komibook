@@ -1,13 +1,13 @@
 <template>
-  <div class="min-h-screen bg-background py-xl px-gutter">
-    <div class="max-w-[1280px] mx-auto flex flex-col lg:flex-row gap-xl">
+  <div class="min-h-screen bg-background">
+    <div class="w-full px-gutter max-w-[1280px] mx-auto py-xl flex flex-col lg:flex-row items-stretch gap-xl">
       
       <!-- Sidebar -->
       <UserSidebar :user="authStore.user" />
- 
+
       <!-- Main Content -->
-      <main class="flex-1 space-y-lg">
-        <div class="bg-surface-container-lowest rounded-3xl border border-outline-variant/30 soft-shadow overflow-hidden min-h-[600px]">
+      <main class="flex-1 min-w-0 w-full flex flex-col">
+        <div class="bg-surface-container-lowest rounded-3xl border border-outline-variant/30 soft-shadow overflow-hidden flex-1 flex flex-col">
           <div class="p-lg md:p-xl border-b border-outline-variant/10">
             <h1 class="text-2xl font-black text-on-surface tracking-tight mb-1">Danh sách yêu thích</h1>
             <p class="text-sm text-on-surface-variant font-medium">Lưu giữ những cuốn sách bạn đang quan tâm.</p>
@@ -21,16 +21,17 @@
             </div>
  
             <!-- Empty State -->
-            <div v-else-if="wishlist.length === 0" class="py-20 text-center animate-fade-in">
-              <div class="w-24 h-24 bg-error-container/20 rounded-full flex items-center justify-center mx-auto mb-lg text-error">
-                <span class="material-symbols-outlined text-5xl">favorite</span>
+            <div v-else-if="wishlist.length === 0" class="py-16 text-center animate-fade-in">
+              <div class="w-20 h-20 bg-error-container/20 rounded-3xl flex items-center justify-center mx-auto mb-4 text-error border border-outline-variant/10">
+                <span class="material-symbols-outlined text-4xl">favorite</span>
               </div>
-              <h3 class="text-xl font-bold text-on-surface mb-2">Chưa có cuốn sách nào</h3>
-              <p class="text-on-surface-variant mb-xl max-w-sm mx-auto text-sm leading-relaxed">
+              <h3 class="text-lg font-bold text-on-surface mb-1 tracking-tight">Chưa có cuốn sách nào</h3>
+              <p class="text-xs text-on-surface-variant mb-6 max-w-xs mx-auto font-medium leading-relaxed">
                 Hãy thả tim cho những cuốn sách bạn yêu thích để chúng xuất hiện ở đây nhé!
               </p>
-              <button @click="$router.push('/catalog')" class="bg-primary text-on-primary px-xl py-md rounded-2xl font-bold shadow-md hover:bg-primary/90 transition-all active:scale-95">
-                Khám phá ngay
+              <button @click="$router.push('/catalog')" class="bg-primary text-on-primary px-5 py-2.5 rounded-xl font-bold text-xs shadow-md hover:bg-primary/90 active:scale-95 transition-all border-none cursor-pointer flex items-center gap-2 mx-auto">
+                <span>Khám phá KomiBook</span>
+                <span class="material-symbols-outlined text-sm">arrow_forward</span>
               </button>
             </div>
  

@@ -223,19 +223,19 @@ class BookController extends Controller
         }
 
         $relatedBooks = $query->with(['vendor', 'category', 'categories'])
-            ->inRandomOrder()
-            ->limit(10)
+            ->orderBy('views', 'desc')
+            ->limit(5)
             ->get();
 
-        // Nếu số lượng sách cùng thể loại ít hơn 4, bổ sung các sách phát hành khác để luôn xuất hiện khu vực này
-        if ($relatedBooks->count() < 4) {
+        // Nếu số lượng sách cùng thể loại ít hơn 5, bổ sung các sách có lượt khám phá cao khác
+        if ($relatedBooks->count() < 5) {
             $excludeIds = $relatedBooks->pluck('id')->push($book->id)->toArray();
             $additionalBooks = Book::withoutGlobalScopes()
                 ->whereNotIn('id', $excludeIds)
                 ->where('status', 'published')
                 ->with(['vendor', 'category', 'categories'])
-                ->inRandomOrder()
-                ->limit(10 - $relatedBooks->count())
+                ->orderBy('views', 'desc')
+                ->limit(5 - $relatedBooks->count())
                 ->get();
             $relatedBooks = $relatedBooks->concat($additionalBooks);
         }

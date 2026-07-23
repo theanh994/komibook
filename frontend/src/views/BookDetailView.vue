@@ -17,9 +17,7 @@
         <router-link to="/catalog" class="hover:text-primary transition-all">Danh mục</router-link>
         <template v-if="displayCategories.length > 0">
           <span class="material-symbols-outlined text-[12px]">chevron_right</span>
-          <router-link 
-            :to="{ name: 'catalog', query: { category_id: displayCategories[0].id } }" 
-            class="text-primary hover:underline hover:opacity-80 transition-all cursor-pointer"
+          <router-link            :to="{ name: 'catalog', query: { category_id: displayCategories[0].id } }"            class="text-primary hover:underline hover:opacity-80 transition-all cursor-pointer"
           >
             {{ displayCategories[0].name }}
           </router-link>
@@ -56,13 +54,11 @@
       <!-- ═══ MAIN CONTENT ═══ -->
       <div v-else class="animate-fade-in">
         <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-          
-          <!-- ─── LEFT COLUMN: COVER & INTERACTIVE GALLERY (STICKY) ─── -->
-          <div class="lg:col-span-5 sticky top-24 self-start z-30">
+          <!-- ─── LEFT COLUMN: COVER & INTERACTIVE GALLERY (STICKY ON DESKTOP) ─── -->
+          <div class="lg:col-span-5 lg:sticky lg:top-24 self-start" :class="isZooming ? 'z-40' : 'z-10'">
             <div class="flex flex-col md:flex-row gap-3 items-start">
-              
               <!-- Thumbnails Sidebar (Fixed 5 items height matching 15% larger main image 530px) -->
-              <div v-if="allImages.length > 1" class="relative group/thumbs order-2 md:order-1 shrink-0 w-full md:w-20 h-[530px]">
+              <div v-if="allImages.length > 1" class="relative group/thumbs order-2 md:order-1 shrink-0 w-full md:w-20 max-h-[530px] h-full">
                 <!-- Floating Small Top Scroll Arrow Button (shown if > 5 images) -->
                 <button
                   v-if="allImages.length > 5"
@@ -74,13 +70,10 @@
                 </button>
 
                 <!-- Thumbnails Scrollable List (Full 530px height, no native scrollbars) -->
-                <div 
-                  ref="thumbnailScrollContainer"
+                <div                  ref="thumbnailScrollContainer"
                   class="flex flex-row md:flex-col gap-2 w-full h-full overflow-x-auto md:overflow-y-auto max-h-[530px] scrollbar-none scroll-smooth py-0.5"
                 >
-                  <div 
-                    v-for="(img, idx) in allImages" 
-                    :key="idx"
+                  <div                    v-for="(img, idx) in allImages"                    :key="idx"
                     class="w-20 h-[99.6px] rounded-none overflow-hidden border border-slate-300 border-solid cursor-pointer shrink-0 transition-all duration-300 relative group bg-white flex items-center justify-center"
                     :class="activeImageIndex === idx ? '!border-2 !border-primary ring-2 ring-primary/40 scale-[1.02] shadow-sm' : 'hover:border-primary/60 opacity-75 hover:opacity-100'"
                     @mouseover="activeImageIndex = idx"
@@ -103,28 +96,19 @@
 
               <!-- Main Cover Image Container (15% Larger: 530px height, 4-side thin border) -->
               <div class="flex-1 w-full order-1 md:order-2 perspective-1000 group/cover relative">
-                <div 
-                  class="relative transform-gpu transition-all duration-500 ease-out preserve-3d group-hover/cover:scale-[1.01]"
+                <div                  class="relative transform-gpu transition-all duration-500 ease-out preserve-3d group-hover/cover:scale-[1.01]"
                 >
                   <!-- Cover Box (15% larger max-h-[530px] & 4-side thin solid border) -->
-                  <div 
-                    class="aspect-[3/4.2] max-h-[530px] bg-white rounded-none overflow-hidden shadow-md border border-slate-300 border-solid relative z-20 cursor-crosshair mx-auto flex items-center justify-center"
+                  <div                    class="aspect-[3/4.2] max-h-[530px] max-w-full bg-white rounded-none overflow-hidden shadow-md border border-slate-300 border-solid relative z-20 cursor-crosshair mx-auto flex items-center justify-center"
                     @mousemove="onMouseMove"
                     @mouseleave="onMouseLeave"
                     @dblclick="openLightbox"
                   >
                     <img :src="activeImageUrl" :alt="book.title" class="w-full h-full object-contain mx-auto select-none rounded-none pointer-events-none" />
-                    
                     <!-- Lens Overlay when Hovering -->
-                    <div 
-                      v-if="isZooming" 
-                      class="absolute border-2 border-primary bg-primary/20 pointer-events-none z-30 rounded-none shadow-md backdrop-blur-[1px]"
-                      :style="{ 
-                        width: lensWidth + 'px', 
-                        height: lensHeight + 'px',
-                        left: lensX + 'px', 
-                        top: lensY + 'px' 
-                      }"
+                    <div                      v-if="isZooming"                      class="absolute border-2 border-primary bg-primary/20 pointer-events-none z-30 rounded-none shadow-md backdrop-blur-[1px]"
+                      :style="{                        width: lensWidth + 'px',                        height: lensHeight + 'px',
+                        left: lensX + 'px',                        top: lensY + 'px'                      }"
                     >
                       <div class="absolute bottom-1 right-1 bg-black/70 text-white text-[8px] px-1 py-0.5 font-bold uppercase rounded-none">Kính lúp</div>
                     </div>
@@ -141,10 +125,8 @@
                   </div>
                 </div>
 
-                <!-- FLOATING MAGNIFIER ZOOM PANEL -->
-                <div 
-                  v-if="isZooming" 
-                  class="hidden lg:block absolute left-[103%] top-0 bg-surface-container-lowest rounded-2xl overflow-hidden shadow-[0_30px_60px_rgba(0,0,0,0.25)] border-2 border-primary z-50 pointer-events-none animate-fade-in"
+                <!-- FLOATING MAGNIFIER ZOOM PANEL (ONLY ON DESKTOP XL SCREEN) -->
+                <div                  v-if="isZooming"                  class="hidden xl:block absolute left-[103%] top-0 bg-surface-container-lowest rounded-2xl overflow-hidden shadow-[0_30px_60px_rgba(0,0,0,0.25)] border-2 border-primary z-50 pointer-events-none animate-fade-in"
                   :style="{
                     width: panelWidth + 'px',
                     height: panelHeight + 'px',
@@ -173,17 +155,12 @@
           </div>
 
           <!-- ─── RIGHT COLUMN: DETAILS & SPECIFICATIONS (7 cols) ─── -->
-          <div class="lg:col-span-7 space-y-6">
-            
+          <div class="lg:col-span-7 space-y-6 relative z-20">
             <div class="bg-surface-container-lowest rounded-[32px] p-6 lg:p-8 border border-outline-variant/10 shadow-sm relative">
-              
               <!-- Header Info -->
               <div class="border-b border-outline-variant/10 pb-6 mb-6">
                 <div class="flex items-center gap-2 mb-3">
-                  <router-link 
-                    v-for="cat in displayCategories" 
-                    :key="cat.id" 
-                    :to="{ name: 'catalog', query: { category_id: cat.id } }"
+                  <router-link                    v-for="cat in displayCategories"                    :key="cat.id"                    :to="{ name: 'catalog', query: { category_id: cat.id } }"
                     class="text-[10px] bg-primary/10 text-primary hover:bg-primary hover:text-white font-bold px-3 py-1 rounded-full uppercase tracking-wider transition-all cursor-pointer no-underline"
                   >
                     {{ cat.name }}
@@ -273,9 +250,7 @@
                   <span class="w-1 h-5 bg-primary rounded-full"></span>
                   Giới thiệu tác phẩm
                 </h3>
-                <div 
-                  class="font-inter text-sm text-on-surface-variant leading-relaxed opacity-90 max-w-full overflow-hidden book-description" 
-                  v-html="formatDescription(book.description)"
+                <div                  class="font-inter text-sm text-on-surface-variant leading-relaxed opacity-90 max-w-full overflow-hidden book-description"                  v-html="formatDescription(book.description)"
                 ></div>
               </div>
 
@@ -283,10 +258,7 @@
               <div v-if="bookTags && bookTags.length > 0" class="mt-6 pt-4 border-t border-outline-variant/10">
                 <div class="flex flex-wrap gap-2 items-center">
                   <span class="text-xs font-bold text-on-surface-variant mr-1">Tags:</span>
-                  <span 
-                    v-for="tag in bookTags" 
-                    :key="tag" 
-                    @click="onTagClick(tag)"
+                  <span                    v-for="tag in bookTags"                    :key="tag"                    @click="onTagClick(tag)"
                     class="bg-surface-container-low text-on-surface-variant hover:text-white hover:bg-[#00b14f] hover:border-[#00b14f] transition-all text-xs font-semibold px-3 py-1 rounded-full cursor-pointer border border-outline-variant/20 shadow-xs active:scale-95 flex items-center gap-1 select-none"
                     title="Bấm để lọc các sách liên quan"
                   >
@@ -303,9 +275,7 @@
                 </h3>
 
                 <div v-if="book.chapters && book.chapters.length > 0" class="space-y-2 max-h-48 overflow-y-auto pr-1">
-                  <div 
-                    v-for="chapter in book.chapters.sort((a,b) => a.order - b.order)" 
-                    :key="chapter.id"
+                  <div                    v-for="chapter in book.chapters.sort((a,b) => a.order - b.order)"                    :key="chapter.id"
                     class="flex items-center justify-between p-3 rounded-xl border border-outline-variant/20 hover:border-primary/20 transition-all bg-surface-container-lowest"
                   >
                     <div class="flex items-center gap-3">
@@ -316,9 +286,7 @@
                     </div>
 
                     <div>
-                      <button 
-                        v-if="chapter.is_free" 
-                        @click="openPreviewChapter(chapter)"
+                      <button                        v-if="chapter.is_free"                        @click="openPreviewChapter(chapter)"
                         class="px-3 py-1 bg-emerald-50 text-emerald-700 border border-emerald-100 hover:bg-emerald-600 hover:text-white rounded-lg text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer"
                       >
                         Đọc thử
@@ -360,13 +328,11 @@
                         {{ review.user?.name?.charAt(0) || 'U' }}
                      </div>
                   </div>
-                  
                   <div class="flex-1 min-w-0">
                      <div class="flex items-center justify-between mb-1">
                         <h4 class="text-xs font-bold text-on-surface truncate">{{ review.user?.name || 'Độc giả KomiBook' }}</h4>
                         <span class="text-[10px] text-outline opacity-50">{{ formatDate(review.created_at) }}</span>
                      </div>
-                     
                      <div class="flex items-center gap-1 mb-2">
                         <span v-for="i in 5" :key="i" class="material-symbols-outlined text-[14px]" :style="{ 'font-variation-settings': i <= review.rating ? `'FILL' 1` : `'FILL' 0`, color: i <= review.rating ? '#ba0035' : '#c3c6ce' }">star</span>
                      </div>
@@ -383,7 +349,7 @@
               </div>
             </section>
 
-            <!-- SÁCH CÙNG BỘ (SERIES BOOKS) -->
+            <!-- SÁCH CÙNG BỘ (SERIES BOOKS - 4 BOOKS PER ROW WITH CAROUSEL ARROWS) -->
             <section v-if="seriesBooks && seriesBooks.length > 0" class="bg-surface-container-lowest rounded-[32px] p-6 lg:p-8 border border-outline-variant/10 shadow-sm relative">
               <header class="flex items-center justify-between gap-4 mb-5">
                 <div>
@@ -393,27 +359,57 @@
                   </h3>
                   <p class="text-xs text-on-surface-variant font-medium opacity-60">Khám phá các tập khác thuộc cùng bộ sách này.</p>
                 </div>
+
+                <!-- Navigation Arrow Controls -->
+                <div v-if="seriesBooks.length > 4" class="flex items-center gap-2">
+                  <span class="text-xs font-semibold text-slate-500 mr-1.5">
+                    {{ seriesPageIndex + 1 }} / {{ totalSeriesPages }}
+                  </span>
+                  <button                    type="button"
+                    :disabled="seriesPageIndex === 0"                    @click="prevSeriesPage"
+                    class="w-9 h-9 rounded-xl border border-outline-variant/30 flex items-center justify-center bg-surface-container-low text-on-surface disabled:opacity-30 disabled:cursor-not-allowed hover:bg-primary hover:text-on-primary hover:border-primary transition-all cursor-pointer shadow-xs"
+                    title="Tập trước"
+                  >
+                    <span class="material-symbols-outlined text-lg">chevron_left</span>
+                  </button>
+                  <button                    type="button"
+                    :disabled="seriesPageIndex >= totalSeriesPages - 1"                    @click="nextSeriesPage"
+                    class="w-9 h-9 rounded-xl border border-outline-variant/30 flex items-center justify-center bg-surface-container-low text-on-surface disabled:opacity-30 disabled:cursor-not-allowed hover:bg-primary hover:text-on-primary hover:border-primary transition-all cursor-pointer shadow-xs"
+                    title="Tập tiếp theo"
+                  >
+                    <span class="material-symbols-outlined text-lg">chevron_right</span>
+                  </button>
+                </div>
               </header>
 
-              <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+              <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 <div
-                  v-for="sBook in seriesBooks"
+                  v-for="sBook in visibleSeriesBooks"
                   :key="sBook.id"
                   @click="goToDetail(sBook.slug)"
-                  class="group bg-surface-container-low/40 rounded-xl overflow-hidden border border-outline-variant/20 p-2 cursor-pointer hover:-translate-y-1 hover:shadow-md transition-all flex flex-col justify-between"
+                  class="group bg-surface-container-lowest rounded-b-2xl rounded-t-none overflow-hidden border border-outline-variant/30 shadow-sm hover:shadow-lg hover:-translate-y-1.5 transition-all duration-300 flex flex-col justify-between cursor-pointer"
                 >
-                  <div class="aspect-[3/4] rounded-lg overflow-hidden bg-white mb-2 relative">
-                    <img :src="getCoverUrl(sBook.cover_image)" :alt="sBook.title" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
-                    <span v-if="sBook.sale_price && sBook.price > sBook.sale_price" class="absolute top-1 right-1 bg-secondary text-on-secondary text-[9px] font-bold px-1.5 py-0.5 rounded">
+                  <!-- Cover Image: Edge-to-edge top, square corners at top, no grey background -->
+                  <div class="relative w-full aspect-[3/4.2] overflow-hidden bg-surface-variant/10">
+                    <img                      :src="getCoverUrl(sBook.cover_image)"                      :alt="sBook.title"                      class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"                    />
+                    <span v-if="sBook.sale_price && sBook.price > sBook.sale_price" class="absolute top-2 right-2 bg-secondary text-on-secondary text-[10px] font-extrabold px-2 py-0.5 rounded-md shadow-sm z-10">
                       -{{ Math.round((1 - sBook.sale_price / sBook.price) * 100) }}%
                     </span>
                   </div>
-                  <h4 class="text-xs font-bold text-on-surface line-clamp-2 leading-snug group-hover:text-primary transition-colors mb-1">
-                    {{ sBook.title }}
-                  </h4>
-                  <p class="text-xs font-extrabold text-[#00b14f]">
-                    {{ formatCurrency(sBook.sale_price || sBook.price) }}
-                  </p>
+                  <!-- Bottom Text & Price Details -->
+                  <div class="p-3.5 pt-3">
+                    <h4 class="text-xs font-bold text-on-surface line-clamp-2 leading-snug group-hover:text-primary transition-colors mb-1.5 min-h-[32px]">
+                      {{ sBook.title }}
+                    </h4>
+                    <div class="flex items-baseline gap-1.5">
+                      <span class="text-xs font-extrabold text-secondary">
+                        {{ formatCurrency(sBook.sale_price || sBook.price) }}
+                      </span>
+                      <span v-if="sBook.sale_price && sBook.price > sBook.sale_price" class="text-[10px] text-outline line-through font-normal">
+                        {{ formatCurrency(sBook.price) }}
+                      </span>
+                    </div>
+                  </div>
                 </div>
               </div>
             </section>
@@ -422,15 +418,14 @@
 
         </div>
 
-        <!-- SÁCH LIÊN QUAN CÙNG THỂ LOẠI (DƯỚI CÙNG TRANG) -->
+        <!-- SÁCH LIÊN QUAN CÙNG THỂ LOẠI (DƯỚI CÙNG TRANG - TOP 5 XEM NHIỀU NHẤT) -->
         <section v-if="relatedCategoryBooks && relatedCategoryBooks.length > 0" class="mt-12 pt-8 border-t border-outline-variant/20">
           <div class="flex justify-between items-end mb-6">
             <div>
               <h2 class="text-2xl font-bold text-primary tracking-tight uppercase flex items-center gap-2">
-                <span class="material-symbols-outlined text-2xl">grid_view</span>
                 Sách liên quan cùng thể loại
               </h2>
-              <p class="text-xs text-on-surface-variant font-medium opacity-60">Gợi ý các đầu sách hấp dẫn có thể bạn sẽ thích.</p>
+              <p class="text-xs text-on-surface-variant font-medium opacity-60">Top 5 đầu sách có lượt khám phá cao nhất cùng thể loại.</p>
             </div>
             <router-link to="/catalog" class="text-sm font-bold text-secondary hover:underline flex items-center gap-1 no-underline">
               Xem tất cả <span class="material-symbols-outlined text-[16px]">chevron_right</span>
@@ -439,25 +434,25 @@
 
           <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
             <div
-              v-for="rBook in relatedCategoryBooks"
+              v-for="rBook in relatedCategoryBooks.slice(0, 5)"
               :key="rBook.id"
               @click="goToDetail(rBook.slug)"
-              class="group bg-surface-container-lowest rounded-xl soft-shadow overflow-hidden cursor-pointer border border-outline-variant/30 flex flex-col h-full transition-all duration-300 hover:-translate-y-1 hover:shadow-card-hover"
+              class="group bg-surface-container-lowest rounded-b-2xl rounded-t-none overflow-hidden border border-outline-variant/30 shadow-sm hover:shadow-lg hover:-translate-y-1.5 transition-all duration-300 flex flex-col justify-between cursor-pointer"
             >
-              <!-- Cover -->
-              <div class="relative pt-[140%] bg-surface-variant/30">
-                <img v-if="rBook.cover_image" :src="getCoverUrl(rBook.cover_image)" :alt="rBook.title" class="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" loading="lazy" />
+              <!-- Cover Image: Edge-to-edge top, square corners at top -->
+              <div class="relative w-full aspect-[3/4.2] overflow-hidden bg-surface-variant/10">
+                <img v-if="rBook.cover_image" :src="getCoverUrl(rBook.cover_image)" :alt="rBook.title" class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" loading="lazy" />
                 <div v-else class="absolute inset-0 flex items-center justify-center"><span class="material-symbols-outlined text-outline text-4xl">image</span></div>
-                
-                <span v-if="rBook.sale_price && rBook.price > rBook.sale_price" class="absolute top-2 left-2 bg-secondary text-on-secondary text-[11px] font-bold px-2 py-0.5 rounded-md shadow-sm z-10">
+                <span v-if="rBook.sale_price && rBook.price > rBook.sale_price" class="absolute top-2 right-2 bg-secondary text-on-secondary text-[10px] font-extrabold px-2 py-0.5 rounded-md shadow-sm z-10">
                   -{{ Math.round((1 - rBook.sale_price / rBook.price) * 100) }}%
                 </span>
               </div>
-              <!-- Info -->
-              <div class="p-3 flex flex-col justify-between flex-grow">
-                <h3 class="text-xs font-bold text-on-surface line-clamp-2 leading-snug mb-2 group-hover:text-primary transition-colors">{{ rBook.title }}</h3>
-                <div class="text-xs font-bold text-[#00b14f] flex items-center gap-1.5 mt-auto">
-                  <span>{{ formatCurrency(rBook.sale_price || rBook.price) }}</span>
+
+              <!-- Bottom Info -->
+              <div class="p-3.5 pt-3">
+                <h3 class="text-xs font-bold text-on-surface line-clamp-2 leading-snug mb-1.5 group-hover:text-primary transition-colors min-h-[32px]">{{ rBook.title }}</h3>
+                <div class="flex items-baseline gap-1.5">
+                  <span class="text-xs font-extrabold text-secondary">{{ formatCurrency(rBook.sale_price || rBook.price) }}</span>
                   <span v-if="rBook.sale_price && rBook.price > rBook.sale_price" class="text-[10px] text-outline line-through font-normal">{{ formatCurrency(rBook.price) }}</span>
                 </div>
               </div>
@@ -470,21 +465,13 @@
     </div>
 
     <!-- REVIEW MODAL -->
-    <Dialog 
-      v-model:visible="showReviewModal" 
-      modal 
-      header="Đánh giá tác phẩm" 
-      class="!max-w-md !w-[90vw] !rounded-[32px] !bg-surface-container-lowest"
+    <Dialog      v-model:visible="showReviewModal"      modal      header="Đánh giá tác phẩm"      class="!max-w-md !w-[90vw] !rounded-[32px] !bg-surface-container-lowest"
     >
       <div class="space-y-4 py-2">
         <div>
           <label class="block text-xs font-bold uppercase text-outline mb-2">Số sao đánh giá</label>
           <div class="flex items-center gap-2">
-             <button 
-               v-for="star in 5" 
-               :key="star" 
-               type="button" 
-               @click="reviewForm.rating = star"
+             <button               v-for="star in 5"               :key="star"               type="button"               @click="reviewForm.rating = star"
                class="p-1 border-none bg-transparent cursor-pointer"
              >
                 <span class="material-symbols-outlined text-2xl" :style="{ 'font-variation-settings': star <= reviewForm.rating ? `'FILL' 1` : `'FILL' 0`, color: star <= reviewForm.rating ? '#ba0035' : '#c3c6ce' }">star</span>
@@ -494,10 +481,7 @@
 
         <div>
           <label class="block text-xs font-bold uppercase text-outline mb-2">Nội dung chia sẻ</label>
-          <textarea 
-            v-model="reviewForm.comment" 
-            rows="4" 
-            placeholder="Cảm nhận của bạn về nội dung, hình thức và thông điệp của cuốn sách..."
+          <textarea            v-model="reviewForm.comment"            rows="4"            placeholder="Cảm nhận của bạn về nội dung, hình thức và thông điệp của cuốn sách..."
             class="w-full p-3 rounded-xl border border-outline-variant/30 text-xs bg-surface-container-low text-on-surface focus:outline-none focus:border-primary"
           ></textarea>
         </div>
@@ -514,11 +498,7 @@
     </Dialog>
 
     <!-- PREVIEW CHAPTER DIALOG -->
-    <Dialog 
-      v-model:visible="previewDialogVisible" 
-      modal 
-      :header="activePreviewChapter?.title || 'Đọc thử'" 
-      class="!max-w-2xl !w-[90vw] !rounded-[32px] !bg-surface-container-lowest"
+    <Dialog      v-model:visible="previewDialogVisible"      modal      :header="activePreviewChapter?.title || 'Đọc thử'"      class="!max-w-2xl !w-[90vw] !rounded-[32px] !bg-surface-container-lowest"
     >
       <div class="p-6 font-literata text-base text-on-surface-variant leading-relaxed overflow-y-auto max-h-[50vh] text-justify whitespace-pre-wrap select-none no-copy">
         {{ activePreviewChapter?.content || 'Không có nội dung hiển thị.' }}
@@ -533,9 +513,7 @@
 
     <!-- DOUBLE-CLICK LIGHTBOX MODAL -->
     <Teleport to="body">
-      <div 
-        v-if="lightboxVisible" 
-        class="fixed inset-0 z-[9999] bg-black/95 backdrop-blur-md flex flex-col justify-between p-6 select-none animate-fade-in"
+      <div        v-if="lightboxVisible"        class="fixed inset-0 z-[9999] bg-black/95 backdrop-blur-md flex flex-col justify-between p-6 select-none animate-fade-in"
       >
         <!-- Top Toolbar Bar -->
         <div class="flex items-center justify-between text-white/80 w-full max-w-7xl mx-auto z-10">
@@ -555,24 +533,14 @@
 
         <!-- Center Image Display with Left/Right Chevrons -->
         <div class="relative flex-1 flex items-center justify-center w-full max-w-7xl mx-auto my-auto overflow-hidden">
-          <button 
-            v-if="allImages.length > 1" 
-            @click="activeImageIndex = (activeImageIndex - 1 + allImages.length) % allImages.length" 
-            class="absolute left-4 z-20 w-12 h-12 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center backdrop-blur-md transition-all border-none cursor-pointer"
+          <button            v-if="allImages.length > 1"            @click="activeImageIndex = (activeImageIndex - 1 + allImages.length) % allImages.length"            class="absolute left-4 z-20 w-12 h-12 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center backdrop-blur-md transition-all border-none cursor-pointer"
           >
             <span class="material-symbols-outlined text-3xl">chevron_left</span>
           </button>
 
-          <img 
-            :src="activeImageUrl" 
-            :alt="book?.title" 
-            class="max-h-[82vh] max-w-[85vw] object-contain shadow-[0_0_50px_rgba(0,0,0,0.8)] rounded-xl transition-all duration-300" 
-          />
+          <img            :src="activeImageUrl"            :alt="book?.title"            class="max-h-[82vh] max-w-[85vw] object-contain shadow-[0_0_50px_rgba(0,0,0,0.8)] rounded-xl transition-all duration-300"          />
 
-          <button 
-            v-if="allImages.length > 1" 
-            @click="activeImageIndex = (activeImageIndex + 1) % allImages.length" 
-            class="absolute right-4 z-20 w-12 h-12 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center backdrop-blur-md transition-all border-none cursor-pointer"
+          <button            v-if="allImages.length > 1"            @click="activeImageIndex = (activeImageIndex + 1) % allImages.length"            class="absolute right-4 z-20 w-12 h-12 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center backdrop-blur-md transition-all border-none cursor-pointer"
           >
             <span class="material-symbols-outlined text-3xl">chevron_right</span>
           </button>
@@ -592,6 +560,7 @@ import { ref, onMounted, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useToast } from 'primevue/usetoast'
 import Dialog from 'primevue/dialog'
+import DOMPurify from 'dompurify'
 import apiClient from '@/services/axios'
 import { useAuthStore } from '@/stores/auth'
 import { useCartStore } from '@/stores/cart'
@@ -607,9 +576,37 @@ const wishlistStore = useWishlistStore()
 const book = ref(null)
 const loading = ref(true)
 const seriesBooks = ref([])
+const relatedCategoryBooks = ref([])
 const relatedAuthorBooks = ref([])
 const recentAnnotations = ref([])
 const ownershipData = ref({ owned: false, order_id: null, book_id: null })
+
+const seriesPageIndex = ref(0)
+const totalSeriesPages = computed(() => Math.ceil((seriesBooks.value?.length || 0) / 4))
+const visibleSeriesBooks = computed(() => {
+  if (!seriesBooks.value || seriesBooks.value.length === 0) return []
+  const start = seriesPageIndex.value * 4
+  return seriesBooks.value.slice(start, start + 4)
+})
+
+const prevSeriesPage = () => {
+  if (seriesPageIndex.value > 0) {
+    seriesPageIndex.value--
+  }
+}
+
+const nextSeriesPage = () => {
+  if (seriesPageIndex.value < totalSeriesPages.value - 1) {
+    seriesPageIndex.value++
+  }
+}
+
+const goToDetail = (slug) => {
+  if (!slug) return
+  router.push(`/book/${slug}`).then(() => {
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  })
+}
 
 const showReviewModal = ref(false)
 const isSubmittingReview = ref(false)
@@ -711,11 +708,9 @@ const quickStats = computed(() => [
 const onTagClick = (tag) => {
   if (!tag) return
   const cleanTag = tag.startsWith('#') ? tag.slice(1).trim() : tag.trim()
-  
   const matchedCat = displayCategories.value.find(
     c => c.name.toLowerCase() === cleanTag.toLowerCase()
   )
-  
   if (matchedCat) {
     router.push({ name: 'catalog', query: { category_id: matchedCat.id } })
   } else {
@@ -726,7 +721,6 @@ const onTagClick = (tag) => {
 const bookTags = computed(() => {
   if (!book.value) return []
   const tags = []
-  
   if (book.value.author && book.value.author !== 'Đang cập nhật' && book.value.author !== 'Nhiều Tác Giả') {
     tags.push(book.value.author)
   }
@@ -764,7 +758,6 @@ const bookMeta = computed(() => {
   if (book.value.translator) {
     meta.push({ label: 'Người dịch', value: book.value.translator })
   }
-  
   if (book.value.type !== 'ebook') {
     meta.push(
       { label: 'Hình thức bìa', value: book.value.cover_format || 'Bìa mềm' },
@@ -916,15 +909,18 @@ const toggleWishlist = async () => {
     } else if (res.status === 'unauthorized') {
       toast.add({ severity: 'warn', summary: 'Thông báo', detail: 'Vui lòng đăng nhập để lưu yêu thích', life: 3000 })
     }
-  } catch (error) {
+  } catch {
     toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Có lỗi xảy ra', life: 3000 })
   }
 }
 
 const formatDescription = (desc) => {
   if (!desc) return ''
-  // Thay thế non-breaking space (&nbsp; hoặc mã unicode \u00a0) thành khoảng trắng thường
-  return desc.replace(/&nbsp;/g, ' ').replace(/\u00a0/g, ' ')
+  let clean = desc.replace(/&nbsp;/g, ' ').replace(/\u00a0/g, ' ')
+  return DOMPurify.sanitize(clean, {
+    ALLOWED_TAGS: ['p', 'br', 'strong', 'b', 'em', 'i', 'u', 'ul', 'ol', 'li', 'blockquote', 'h2', 'h3', 'h4', 'h5', 'h6', 'a', 'span', 'sub', 'sup'],
+    ALLOWED_ATTR: ['href', 'target', 'rel', 'class']
+  })
 }
 
 const formatCurrency = (value) => {
@@ -948,7 +944,9 @@ const getCoverUrl = (path) => {
 watch(() => route.params.slug, (newSlug) => {
   if (newSlug) {
     seriesBooks.value = []
+    seriesPageIndex.value = 0
     relatedAuthorBooks.value = []
+    relatedCategoryBooks.value = []
     ownershipData.value = { owned: false, order_id: null, book_id: null }
     recentAnnotations.value = []
     activeImageIndex.value = 0

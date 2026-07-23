@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { runRouteGuard } from '@/router/guard.js'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -163,7 +164,7 @@ const router = createRouter({
     {
       path: '/dashboard',
       name: 'dashboard',
-      redirect: to => {
+      redirect: () => {
         const authStore = useAuthStore()
         if (authStore.isAdmin) return { name: 'admin-dashboard' }
         if (authStore.isVendor) return { name: 'vendor-dashboard' }
@@ -408,32 +409,9 @@ const router = createRouter({
 })
 
 // Route guard kiểm tra đăng nhập & phân quyền
-router.beforeEach(async (to, from) => {
+router.beforeEach(async (to) => {
   const authStore = useAuthStore()
-  
-  // Khôi phục user state nếu có token nhưng user chưa được load
-  if (authStore.token && !authStore.user) {
-    await authStore.fetchUser()
-  }
-
-  const isAuthenticated = authStore.isAuthenticated
-
-  // 1. Kiểm tra yêu cầu auth chung
-  if (to.meta.requiresAuth && !isAuthenticated) {
-    return { name: 'login' }
-  } 
-  
-  // 2. Chặn truy cập trang guest (login/register) khi đã đăng nhập
-  if (to.meta.guestOnly && isAuthenticated) {
-    return { name: 'dashboard' }
-  }
-
-  // 3. Kiểm tra quyền hạn (Role-based)
-  if (to.meta.role && authStore.user?.role !== to.meta.role) {
-    return { name: 'home' } // Hoặc trang 403
-  }
-  
-  return true
+  return await runRouteGuard(to, authStore)
 })
 
 export default router

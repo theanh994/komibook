@@ -23,11 +23,34 @@ class Author extends Model
         'rejection_reason',
     ];
 
+    protected $hidden = [
+        'identity_document',
+    ];
+
+    protected $appends = [
+        'has_identity_document',
+        'identity_document_url',
+    ];
+
     protected function casts(): array
     {
         return [
             'phone_verified_at' => 'datetime',
         ];
+    }
+
+    public function getHasIdentityDocumentAttribute(): bool
+    {
+        return ! empty($this->attributes['identity_document']);
+    }
+
+    public function getIdentityDocumentUrlAttribute(): ?string
+    {
+        if (empty($this->attributes['identity_document'])) {
+            return null;
+        }
+
+        return "/api/authors/{$this->id}/identity-document";
     }
 
     public function user(): BelongsTo

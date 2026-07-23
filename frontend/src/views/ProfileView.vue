@@ -1,26 +1,37 @@
 <template>
   <div class="min-h-screen bg-background">
-    <div class="w-full px-gutter max-w-[1280px] mx-auto py-xl flex flex-col lg:flex-row gap-xl">
-      
-      <!-- Sidebar -->
+    <div class="w-full px-gutter max-w-[1280px] mx-auto py-xl flex flex-col lg:flex-row items-stretch gap-xl">
+      <!-- Left Sidebar with Context Switcher -->
       <UserSidebar :user="authStore.user" @avatar-click="$refs.avatarInput.click()" />
       <input type="file" ref="avatarInput" class="hidden" accept="image/*" @change="onAvatarSelected" />
 
-      <!-- Main Content -->
-      <main class="flex-1 space-y-lg">
-        
-        <div class="bg-surface-container-lowest rounded-3xl border border-outline-variant/30 soft-shadow overflow-hidden">
-          <div class="p-lg md:p-xl border-b border-outline-variant/10">
-            <h1 class="text-2xl font-black text-on-surface tracking-tight mb-2">Hồ sơ cá nhân</h1>
-            <p class="text-sm text-on-surface-variant font-medium">Quản lý thông tin tài khoản và bảo mật của bạn.</p>
+      <!-- Right Main Content Area -->
+      <main class="flex-1 min-w-0 w-full flex flex-col">
+        <div class="bg-surface-container-lowest rounded-3xl border border-outline-variant/30 soft-shadow overflow-hidden flex-1 flex flex-col">
+          <!-- Header Banner (Clean, no redundant buttons) -->
+          <div class="p-lg md:p-xl border-b border-outline-variant/10 bg-gradient-to-r from-surface-container-low to-surface-container-lowest flex items-center justify-between gap-4">
+            <div>
+              <div class="flex items-center gap-2 mb-1">
+                <h1 class="text-2xl font-black text-on-surface tracking-tight">Thông tin cá nhân</h1>
+                <span                  class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider"
+                  :class="{
+                    'bg-slate-900 text-amber-300': authStore.isAdmin,
+                    'bg-indigo-600 text-white': authStore.isVendor,
+                    'bg-emerald-600 text-white': authStore.user?.author_profile?.status === 'active',
+                    'bg-surface-container-high text-outline': !authStore.isAdmin && !authStore.isVendor && authStore.user?.author_profile?.status !== 'active'
+                  }"
+                >
+                  {{ roleLabel }}
+                </span>
+              </div>
+              <p class="text-xs text-on-surface-variant font-medium">Quản lý thông tin tài khoản, sở thích đọc sách và bảo mật của bạn.</p>
+            </div>
           </div>
 
-          <!-- Tabs -->
-          <div class="px-md pt-md flex gap-md overflow-x-auto no-scrollbar border-b border-outline-variant/10">
-            <button 
-              v-for="tab in tabs" 
-              :key="tab.id"
-              @click="activeTab = tab.id"
+          <!-- Navigation Tabs -->
+          <div class="px-md pt-md flex gap-md overflow-x-auto no-scrollbar border-b border-outline-variant/10 shrink-0">
+            <button              v-for="tab in tabs"              :key="tab.id"
+              @click="switchTab(tab.id)"
               class="px-lg py-md text-sm font-bold transition-all border-none bg-transparent cursor-pointer relative whitespace-nowrap"
               :class="activeTab === tab.id ? 'text-primary' : 'text-outline hover:text-on-surface'"
             >
@@ -29,115 +40,122 @@
             </button>
           </div>
 
-          <div class="p-lg md:p-xl">
-            <!-- Tab: Thông tin chung -->
-            <div v-if="activeTab === 'general'" class="animate-fade-in">
-              <form @submit.prevent="handleUpdateInfo" class="grid grid-cols-1 md:grid-cols-2 gap-xl">
-                <div class="space-y-6">
-                  <div class="space-y-2">
-                    <label class="text-sm font-bold text-on-surface-variant ml-1">Email (Không thể thay đổi)</label>
-                    <div class="relative">
-                      <InputText v-model="infoForm.email" disabled class="w-full !pl-10 !rounded-2xl !bg-surface-container-high !border-none !text-outline" />
-                      <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-[20px]">alternate_email</span>
-                    </div>
+          <div class="p-lg md:p-xl flex-1">
+            <!-- TAB 1: THÔNG TIN CHUNG & SỞ THÍCH ĐỌC SÁCH -->
+            <div v-if="activeTab === 'general'" class="animate-fade-in space-y-8">
+              <form @submit.prevent="handleUpdateInfo" class="space-y-8">
+                <!-- KHU VỰC 1: THÔNG TIN CÁ NHÂN CƠ BẢN (Icons removed inside form inputs) -->
+                <div class="space-y-4">
+                  <div class="border-b border-outline-variant/10 pb-3">
+                    <h2 class="text-base font-bold text-on-surface">1. Thông tin cá nhân cơ bản</h2>
                   </div>
 
-                  <div class="space-y-2">
-                    <label class="text-sm font-bold text-on-surface-variant ml-1">Họ và tên</label>
-                    <div class="relative">
-                      <InputText v-model="infoForm.name" placeholder="Nhập họ và tên..." class="w-full !pl-10 !rounded-2xl !border-outline-variant/40" />
-                      <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-[20px]">person</span>
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <!-- Email (Read-only) -->
+                    <div class="space-y-2">
+                      <label class="text-xs font-bold text-on-surface-variant ml-1 uppercase tracking-wider">Email (Không thể chỉnh sửa)</label>
+                      <InputText v-model="infoForm.email" disabled class="w-full !px-4 !rounded-2xl !bg-surface-container-high !border-none !text-outline !h-11 text-sm font-medium" />
                     </div>
-                  </div>
 
-                  <div class="space-y-2">
-                    <label class="text-sm font-bold text-on-surface-variant ml-1">Số điện thoại</label>
-                    <div class="relative">
-                      <InputText v-model="infoForm.phone" placeholder="Nhập số điện thoại..." class="w-full !pl-10 !rounded-2xl !border-outline-variant/40" />
-                      <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-[20px]">call</span>
+                    <!-- Họ và tên -->
+                    <div class="space-y-2">
+                      <label class="text-xs font-bold text-on-surface-variant ml-1 uppercase tracking-wider">Họ và tên <span class="text-red-500">*</span></label>
+                      <InputText v-model="infoForm.name" placeholder="Nhập họ và tên..." class="w-full !px-4 !rounded-2xl !border-outline-variant/40 !h-11 text-sm" required />
+                    </div>
+
+                    <!-- Số điện thoại -->
+                    <div class="space-y-2">
+                      <label class="text-xs font-bold text-on-surface-variant ml-1 uppercase tracking-wider">Số điện thoại</label>
+                      <InputText v-model="infoForm.phone" placeholder="Ví dụ: 0989999999" class="w-full !px-4 !rounded-2xl !border-outline-variant/40 !h-11 text-sm" />
+                    </div>
+
+                    <!-- Giới tính -->
+                    <div class="space-y-2">
+                      <label class="text-xs font-bold text-on-surface-variant ml-1 uppercase tracking-wider">Giới tính</label>
+                      <select                        v-model="infoForm.gender"                        class="w-full h-11 px-4 bg-surface-container-lowest border border-outline-variant/40 rounded-2xl text-sm text-on-surface focus:outline-none focus:border-primary transition-all cursor-pointer"
+                      >
+                        <option value="male">Nam</option>
+                        <option value="female">Nữ</option>
+                        <option value="other">Khác</option>
+                      </select>
+                    </div>
+
+                    <!-- Ngày sinh (Validation <= Today) -->
+                    <div class="space-y-2">
+                      <div class="flex justify-between items-center">
+                        <label class="text-xs font-bold text-on-surface-variant ml-1 uppercase tracking-wider">Ngày sinh</label>
+                        <span class="text-[11px] text-outline">Tính độ tuổi cho Thuật toán đề xuất</span>
+                      </div>
+                      <input                        type="date"
+                        v-model="infoForm.birthday"                        :max="todayDate"
+                        class="w-full h-11 px-4 bg-surface-container-lowest border border-outline-variant/40 rounded-2xl text-sm text-on-surface focus:outline-none focus:border-primary transition-all cursor-pointer"
+                      />
+                    </div>
+
+                    <!-- Địa chỉ cá nhân -->
+                    <div class="space-y-2 md:col-span-2">
+                      <label class="text-xs font-bold text-on-surface-variant ml-1 uppercase tracking-wider">Địa chỉ cá nhân</label>
+                      <Textarea v-model="infoForm.address" rows="2" placeholder="Nhập địa chỉ nhà của bạn..." class="w-full !px-4 !py-3 !rounded-2xl !border-outline-variant/40 resize-none text-sm" />
                     </div>
                   </div>
                 </div>
 
-                <div class="space-y-6">
-                  <div class="space-y-2 h-full flex flex-col">
-                    <label class="text-sm font-bold text-on-surface-variant ml-1">Địa chỉ cá nhân</label>
-                    <div class="relative flex-1">
-                      <Textarea v-model="infoForm.address" placeholder="Nhập địa chỉ của bạn..." class="w-full !pl-10 !rounded-2xl !border-outline-variant/40 h-full min-h-[150px]" />
-                      <span class="material-symbols-outlined absolute left-3 top-4 text-outline text-[20px]">home</span>
+                <!-- KHU VỰC 2: KHẢO SÁT SỞ THÍCH ĐỌC SÁCH (COLD START RECOMMENDATIONS) -->
+                <div class="space-y-4 pt-4 border-t border-outline-variant/10">
+                  <div class="flex flex-col md:flex-row md:items-center justify-between gap-2 border-b border-outline-variant/10 pb-3">
+                    <div>
+                      <h2 class="text-base font-bold text-on-surface">2. Khảo sát sở thích đọc sách (Cold Start Recommendations)</h2>
+                      <p class="text-xs text-outline">Chọn từ 3 đến 5 thể loại yêu thích để KomiBook đề xuất đúng gu đọc của bạn.</p>
                     </div>
+
+                    <!-- Selected Badge Counter -->
+                    <div                      class="px-3 py-1 rounded-full text-xs font-bold self-start md:self-auto shadow-xs border"
+                      :class="selectedCategoryIds.length >= 3 && selectedCategoryIds.length <= 5                        ? 'bg-emerald-50 text-emerald-700 border-emerald-300'                        : 'bg-amber-50 text-amber-800 border-amber-300'"
+                    >
+                      Đã chọn {{ selectedCategoryIds.length }}/5 thể loại
+                    </div>
+                  </div>
+
+                  <!-- Selectable Category Chips Grid -->
+                  <div v-if="loadingCategories" class="py-4 flex justify-center">
+                    <span class="pi pi-spin pi-spinner text-xl text-primary"></span>
+                  </div>
+
+                  <div v-else class="flex flex-wrap gap-2.5 p-4 bg-surface-container-low/40 rounded-2xl border border-outline-variant/20">
+                    <button
+                      v-for="cat in availableCategories"
+                      :key="cat.id"
+                      type="button"
+                      @click="toggleCategoryPreference(cat.id)"
+                      class="px-3.5 py-2 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer flex items-center gap-1.5 border"
+                      :class="selectedCategoryIds.includes(cat.id)
+                        ? 'bg-gradient-to-r from-primary to-secondary text-white border-transparent shadow-md scale-[1.03]'
+                        : 'bg-white text-slate-700 border-slate-200 hover:border-primary/50 hover:bg-slate-50'"
+                    >
+                      <span>{{ cat.name }}</span>
+                    </button>
                   </div>
                 </div>
 
-                <div class="md:col-span-2 pt-lg flex justify-end">
-                  <button 
-                    type="submit"
+                <!-- Submit Button -->
+                <div class="pt-4 flex justify-end">
+                  <button                    type="submit"
                     :disabled="loadingInfo"
-                    class="bg-primary text-on-primary px-xl py-md rounded-2xl font-bold shadow-md hover:bg-primary/90 transition-all active:scale-95 disabled:opacity-50 flex items-center gap-2"
+                    class="bg-primary text-on-primary px-8 py-3 rounded-xl text-sm font-bold shadow-md hover:bg-primary/90 transition-all active:scale-95 disabled:opacity-50 flex items-center gap-2 border-none cursor-pointer"
                   >
-                    <span v-if="loadingInfo" class="pi pi-spin pi-spinner mr-2"></span>
-                    <span v-else class="material-symbols-outlined text-[20px]">save</span>
-                    Lưu thông tin
+                    <span v-if="loadingInfo" class="pi pi-spin pi-spinner text-xs"></span>
+                    <span>Cập nhật thông tin & Sở thích</span>
                   </button>
                 </div>
+
               </form>
             </div>
 
-            <!-- Tab: Sổ địa chỉ -->
-            <div v-if="activeTab === 'addresses'" class="animate-fade-in space-y-md">
-              <div class="flex justify-between items-center mb-lg">
-                <h3 class="text-lg font-bold text-on-surface">Địa chỉ giao hàng</h3>
-                <button @click="openAddressModal()" class="bg-primary-container text-on-primary-container px-lg py-sm rounded-xl font-bold text-xs hover:opacity-80 transition-all border-none cursor-pointer flex items-center gap-2">
-                  <span class="material-symbols-outlined text-[18px]">add</span>
-                  Thêm mới
-                </button>
-              </div>
-
-              <div v-if="loadingAddresses" class="py-xl flex justify-center">
-                <i class="pi pi-spin pi-spinner text-3xl text-primary"></i>
-              </div>
-              
-              <div v-else-if="addresses.length === 0" class="py-xl text-center space-y-md">
-                <div class="w-16 h-16 bg-surface-container-high rounded-full flex items-center justify-center mx-auto text-outline">
-                  <span class="material-symbols-outlined text-3xl">location_off</span>
-                </div>
-                <p class="text-sm text-outline font-medium">Bạn chưa có địa chỉ giao hàng nào.</p>
-              </div>
-
-              <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-md">
-                <div v-for="addr in addresses" :key="addr.id" class="p-lg rounded-2xl border-2 transition-all group" :class="addr.is_default ? 'border-primary bg-primary-container/5' : 'border-outline-variant/20 hover:border-outline-variant/60'">
-                  <div class="flex justify-between items-start mb-md">
-                    <div class="flex flex-col">
-                      <div class="flex items-center gap-2 mb-1">
-                        <span class="font-bold text-on-surface">{{ addr.receiver_name }}</span>
-                        <span v-if="addr.is_default" class="px-2 py-0.5 bg-primary text-on-primary text-[10px] font-black uppercase tracking-wider rounded-md">Mặc định</span>
-                      </div>
-                      <span class="text-xs text-on-surface-variant font-bold flex items-center gap-1">
-                        <span class="material-symbols-outlined text-[14px]">call</span>
-                        {{ addr.phone }}
-                      </span>
-                    </div>
-                    <div class="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button @click="openAddressModal(addr)" class="w-8 h-8 rounded-full bg-surface-container-high text-on-surface-variant hover:text-primary transition-all border-none cursor-pointer flex items-center justify-center">
-                        <span class="material-symbols-outlined text-[18px]">edit</span>
-                      </button>
-                      <button v-if="!addr.is_default" @click="confirmDeleteAddress(addr.id)" class="w-8 h-8 rounded-full bg-surface-container-high text-on-surface-variant hover:text-error transition-all border-none cursor-pointer flex items-center justify-center">
-                        <span class="material-symbols-outlined text-[18px]">delete</span>
-                      </button>
-                    </div>
-                  </div>
-                  <p class="text-sm text-on-surface-variant leading-relaxed line-clamp-2">{{ addr.address }}</p>
-                  <button v-if="!addr.is_default" @click="setDefaultAddress(addr.id)" class="mt-md text-[11px] font-black uppercase text-secondary hover:underline bg-transparent border-none cursor-pointer">Đặt làm mặc định</button>
-                </div>
-              </div>
-            </div>
-
-            <!-- Tab: VIP & Quyền lợi -->
+            <!-- TAB 2: HẠNG VIP & QUYỀN LỢI -->
             <div v-if="activeTab === 'membership'" class="animate-fade-in space-y-lg">
               <div class="p-6 rounded-3xl text-white relative overflow-hidden shadow-xl"
                 :class="authStore.user?.membership_tier ? 'bg-gradient-to-br from-amber-500 via-yellow-600 to-amber-700' : 'bg-gradient-to-br from-slate-600 to-slate-800'"
               >
-                <!-- Decorative Circle -->
                 <div class="absolute -right-10 -bottom-10 w-40 h-40 bg-white/10 rounded-full blur-2xl"></div>
                 <div class="absolute right-10 top-10 w-24 h-24 bg-white/10 rounded-full blur-xl"></div>
 
@@ -146,9 +164,6 @@
                     <span class="text-xs uppercase tracking-widest font-black opacity-80">Thẻ Thành Viên</span>
                     <h2 class="text-2xl font-black mt-1">{{ authStore.user?.membership_tier?.name || 'Khách hàng Thân thiết' }}</h2>
                   </div>
-                  <span class="material-symbols-outlined text-4xl opacity-90">
-                    {{ authStore.user?.membership_tier ? 'workspace_premium' : 'person' }}
-                  </span>
                 </div>
 
                 <div class="mt-8 flex justify-between items-end relative z-10">
@@ -165,24 +180,15 @@
 
               <!-- VIP Benefits List -->
               <div class="bg-surface-container-low p-6 rounded-2xl border border-outline-variant/20 space-y-4">
-                <h3 class="font-bold text-on-surface flex items-center gap-2">
-                  <span class="material-symbols-outlined text-primary">verified</span>
-                  Quyền lợi đặc quyền của bạn
-                </h3>
+                <h3 class="font-bold text-on-surface">Quyền lợi đặc quyền của bạn</h3>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div class="flex items-start gap-3">
-                    <span class="material-symbols-outlined text-green-600 mt-0.5">check_circle</span>
-                    <div>
-                      <h4 class="text-sm font-bold text-on-surface">Chiết khấu trực tiếp</h4>
-                      <p class="text-xs text-on-surface-variant">Giảm giá {{ authStore.user?.membership_tier?.discount_percent || 0 }}% trực tiếp trên mỗi hóa đơn khi thanh toán.</p>
-                    </div>
+                  <div>
+                    <h4 class="text-sm font-bold text-on-surface">Chiết khấu trực tiếp</h4>
+                    <p class="text-xs text-on-surface-variant">Giảm giá {{ authStore.user?.membership_tier?.discount_percent || 0 }}% trực tiếp trên mỗi hóa đơn khi thanh toán.</p>
                   </div>
-                  <div class="flex items-start gap-3">
-                    <span class="material-symbols-outlined text-green-600 mt-0.5">check_circle</span>
-                    <div>
-                      <h4 class="text-sm font-bold text-on-surface">Tích lũy điểm tự động</h4>
-                      <p class="text-xs text-on-surface-variant">Nhận 1 điểm tích lũy cho mỗi 10.000 VNĐ chi tiêu khi đơn hàng giao thành công.</p>
-                    </div>
+                  <div>
+                    <h4 class="text-sm font-bold text-on-surface">Tích lũy điểm tự động</h4>
+                    <p class="text-xs text-on-surface-variant">Nhận 1 điểm tích lũy cho mỗi 10.000 VNĐ chi tiêu khi đơn hàng giao thành công.</p>
                   </div>
                 </div>
 
@@ -192,43 +198,95 @@
               </div>
             </div>
 
-            <!-- Tab: Bảo mật -->
+            <!-- TAB 3: KHU VỰC 4 - QUẢN LÝ SỔ ĐỊA CHỈ -->
+            <div v-if="activeTab === 'addresses'" class="animate-fade-in space-y-md">
+              <div class="flex justify-between items-center mb-lg">
+                <h3 class="text-lg font-bold text-on-surface">Sổ địa chỉ nhận hàng</h3>
+                <button @click="openAddressModal()" class="bg-primary text-on-primary px-4 py-2.5 rounded-xl font-bold text-xs hover:opacity-90 transition-all border-none cursor-pointer shadow-xs">
+                  Thêm địa chỉ mới
+                </button>
+              </div>
+
+              <div v-if="loadingAddresses" class="py-xl flex justify-center">
+                <i class="pi pi-spin pi-spinner text-3xl text-primary"></i>
+              </div>
+              <div v-else-if="addresses.length === 0" class="py-xl text-center space-y-md">
+                <p class="text-sm text-outline font-medium">Bạn chưa có địa chỉ giao hàng nào.</p>
+              </div>
+
+              <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-md">
+                <div v-for="addr in addresses" :key="addr.id" class="p-lg rounded-2xl border-2 transition-all group" :class="addr.is_default ? 'border-primary bg-primary-container/5' : 'border-outline-variant/20 hover:border-outline-variant/60'">
+                  <div class="flex justify-between items-start mb-md">
+                    <div class="flex flex-col">
+                      <div class="flex items-center gap-2 mb-1">
+                        <span class="font-bold text-on-surface">{{ addr.receiver_name }}</span>
+                        <span v-if="addr.is_default" class="px-2 py-0.5 bg-primary text-on-primary text-[10px] font-black uppercase tracking-wider rounded-md">Mặc định</span>
+                      </div>
+                      <span class="text-xs text-on-surface-variant font-bold">
+                        {{ addr.phone }}
+                      </span>
+                    </div>
+                    <div class="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button @click="openAddressModal(addr)" class="px-2.5 py-1 rounded-lg bg-surface-container-high text-xs font-bold text-on-surface-variant hover:text-primary transition-all border-none cursor-pointer">
+                        Sửa
+                      </button>
+                      <button v-if="!addr.is_default" @click="confirmDeleteAddress(addr.id)" class="px-2.5 py-1 rounded-lg bg-surface-container-high text-xs font-bold text-on-surface-variant hover:text-error transition-all border-none cursor-pointer">
+                        Xóa
+                      </button>
+                    </div>
+                  </div>
+                  <p class="text-sm text-on-surface-variant leading-relaxed line-clamp-2">{{ addr.address }}</p>
+                  <button v-if="!addr.is_default" @click="setDefaultAddress(addr.id)" class="mt-md text-[11px] font-black uppercase text-secondary hover:underline bg-transparent border-none cursor-pointer">Đặt làm mặc định</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- TAB 4: KHU VỰC 5 - ĐỔI MẬT KHẨU BẢO MẬT (Strict Anti-Autofill & Empty Defaults) -->
             <div v-if="activeTab === 'security'" class="w-full block">
               <div class="animate-fade-in py-lg flex flex-col items-center">
                 <div class="w-full max-w-[480px]">
-                  <div class="text-center mb-xl">
-                    <div class="w-16 h-16 bg-error-container/20 text-error rounded-full flex items-center justify-center mx-auto mb-md">
-                      <span class="material-symbols-outlined text-3xl">lock</span>
-                    </div>
-                    <h2 class="text-xl font-black text-on-surface mb-2">Thay đổi mật khẩu</h2>
-                    <p class="text-sm text-on-surface-variant font-medium">Bạn nên sử dụng mật khẩu mạnh để bảo vệ tài khoản.</p>
+                  <div class="text-center mb-xl space-y-1">
+                    <h2 class="text-xl font-black text-on-surface">Thay đổi mật khẩu</h2>
+                    <p class="text-xs text-on-surface-variant font-medium">Để bảo mật tài khoản, vui lòng tự nhập mật khẩu hiện tại trước khi tạo mật khẩu mới.</p>
                   </div>
 
-                  <form @submit.prevent="handleUpdatePassword" class="space-y-6">
+                  <!-- Anti-Autofill Form with Dummy Hidden Fields -->
+                  <form @submit.prevent="handleUpdatePassword" autocomplete="off" action="javascript:void(0);" class="space-y-6">
+                    <!-- Dummy hidden inputs to stop browser password managers from auto-injecting saved passwords -->
+                    <input type="text" class="hidden" name="prevent_autofill_username" tabindex="-1" autocomplete="off" />
+                    <input type="password" class="hidden" name="prevent_autofill_password" tabindex="-1" autocomplete="new-password" />
+
+                    <!-- Mật khẩu hiện tại -->
                     <div class="flex flex-col gap-2">
-                      <label class="text-sm font-bold text-on-surface-variant ml-1">Mật khẩu hiện tại</label>
-                      <Password v-model="passwordForm.current_password" toggleMask placeholder="••••••••" class="w-full" inputClass="w-full !rounded-2xl !border-outline-variant/40 !py-3 !px-4" :feedback="false" />
+                      <label class="text-xs font-bold text-on-surface-variant ml-1 uppercase tracking-wider">Mật khẩu hiện tại <span class="text-red-500">*</span></label>
+                      <Password                        v-model="passwordForm.current_password"                        toggleMask                        autocomplete="new-password"
+                        placeholder="Nhập mật khẩu hiện tại"                        class="w-full"                        inputClass="w-full !rounded-2xl !border-outline-variant/40 !py-3 !px-4 text-sm"                        :feedback="false"                        required
+                      />
                     </div>
 
+                    <!-- Mật khẩu mới -->
                     <div class="flex flex-col gap-2">
-                      <label class="text-sm font-bold text-on-surface-variant ml-1">Mật khẩu mới</label>
-                      <Password v-model="passwordForm.new_password" toggleMask placeholder="Tối thiểu 8 ký tự" class="w-full" inputClass="w-full !rounded-2xl !border-outline-variant/40 !py-3 !px-4" />
+                      <label class="text-xs font-bold text-on-surface-variant ml-1 uppercase tracking-wider">Mật khẩu mới <span class="text-red-500">*</span></label>
+                      <Password                        v-model="passwordForm.new_password"                        toggleMask                        autocomplete="new-password"
+                        placeholder="Tối thiểu 8 ký tự"                        class="w-full"                        inputClass="w-full !rounded-2xl !border-outline-variant/40 !py-3 !px-4 text-sm"                        required
+                      />
                     </div>
 
+                    <!-- Xác nhận mật khẩu mới -->
                     <div class="flex flex-col gap-2">
-                      <label class="text-sm font-bold text-on-surface-variant ml-1">Xác nhận mật khẩu mới</label>
-                      <Password v-model="passwordForm.new_password_confirmation" toggleMask placeholder="Nhập lại mật khẩu mới" class="w-full" inputClass="w-full !rounded-2xl !border-outline-variant/40 !py-3 !px-4" :feedback="false" />
+                      <label class="text-xs font-bold text-on-surface-variant ml-1 uppercase tracking-wider">Xác nhận mật khẩu mới <span class="text-red-500">*</span></label>
+                      <Password                        v-model="passwordForm.new_password_confirmation"                        toggleMask                        autocomplete="new-password"
+                        placeholder="Nhập lại mật khẩu mới"                        class="w-full"                        inputClass="w-full !rounded-2xl !border-outline-variant/40 !py-3 !px-4 text-sm"                        :feedback="false"                        required
+                      />
                     </div>
 
                     <div class="pt-6">
-                      <button 
-                        type="submit"
+                      <button                        type="submit"
                         :disabled="loadingPassword"
-                        class="w-full bg-primary text-on-primary px-xl py-3.5 rounded-2xl font-bold shadow-md hover:opacity-90 transition-all active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-2 border-none cursor-pointer"
+                        class="w-full bg-primary text-on-primary px-5 py-2.5 rounded-xl text-xs font-bold shadow-md hover:bg-primary/90 transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2 border-none cursor-pointer"
                       >
-                        <span v-if="loadingPassword" class="pi pi-spin pi-spinner mr-2"></span>
-                        <span v-else class="material-symbols-outlined text-[20px]">security</span>
-                        Cập nhật mật khẩu
+                        <span v-if="loadingPassword" class="pi pi-spin pi-spinner text-xs"></span>
+                        <span>Xác nhận cập nhật mật khẩu</span>
                       </button>
                     </div>
                   </form>
@@ -263,10 +321,62 @@
       </div>
       <template #footer>
         <div class="flex gap-2 justify-end pt-md">
-          <button @click="addressDialog = false" class="px-lg py-sm rounded-xl text-sm font-bold text-outline hover:bg-surface-container-high transition-all border-none bg-transparent cursor-pointer">Hủy</button>
-          <button @click="saveAddress" :loading="savingAddress" class="px-xl py-sm rounded-xl text-sm font-bold bg-primary text-on-primary shadow-md hover:bg-primary/90 transition-all active:scale-95 border-none cursor-pointer flex items-center gap-2">
-            <span v-if="savingAddress" class="pi pi-spin pi-spinner"></span>
+          <button @click="addressDialog = false" class="px-4 py-2 rounded-xl text-xs font-bold text-outline hover:bg-surface-container-high transition-all border-none bg-transparent cursor-pointer">Hủy</button>
+          <button @click="saveAddress" :disabled="savingAddress" class="px-5 py-2.5 rounded-xl text-xs font-bold bg-primary text-on-primary shadow-md hover:bg-primary/90 transition-all active:scale-95 border-none cursor-pointer flex items-center gap-2">
+            <span v-if="savingAddress" class="pi pi-spin pi-spinner text-xs"></span>
             Lưu địa chỉ
+          </button>
+        </div>
+      </template>
+    </Dialog>
+
+    <!-- Avatar Review / Drag & Crop Modal -->
+    <Dialog v-model:visible="showAvatarModal" header="Chỉnh sửa & Xem trước ảnh đại diện" :modal="true" class="!rounded-3xl !border-none !shadow-2xl" :style="{width: '450px'}">
+      <div class="flex flex-col items-center text-center py-4 space-y-4">
+        <p class="text-xs text-on-surface-variant font-medium">Bấm và kéo ảnh để di chuyển vị trí mong muốn vào khung tròn.</p>
+
+        <!-- Drag Viewport Container -->
+        <div          class="w-44 h-44 rounded-full overflow-hidden border-4 border-primary shadow-xl ring-4 ring-primary/20 relative cursor-grab active:cursor-grabbing select-none bg-slate-900 flex items-center justify-center"
+          @mousedown="startDrag"
+          @mousemove="onDrag"
+          @mouseup="endDrag"
+          @mouseleave="endDrag"
+          @touchstart="startDrag"
+          @touchmove="onDrag"
+          @touchend="endDrag"
+        >
+          <img            :src="avatarPreviewUrl"            alt="Avatar Preview"            @load="onPreviewImgLoaded"
+            class="max-w-none max-h-none pointer-events-none origin-center absolute"
+            :style="{
+              width: imgRenderWidth ? imgRenderWidth + 'px' : 'auto',
+              height: imgRenderHeight ? imgRenderHeight + 'px' : 'auto',
+              transform: `translate(${dragX}px, ${dragY}px) scale(${zoomLevel})`,
+              transition: isDragging ? 'none' : 'transform 0.1s ease-out'
+            }"
+          />
+        </div>
+
+        <!-- Zoom Slider & Reset -->
+        <div class="flex items-center gap-3 w-full max-w-[280px] bg-surface-container-low px-4 py-2 rounded-2xl border border-outline-variant/20">
+          <span class="material-symbols-outlined text-sm text-outline">zoom_out</span>
+          <input            type="range"            min="1"            max="3"            step="0.05"            v-model.number="zoomLevel"            class="flex-1 accent-primary cursor-pointer"
+          />
+          <span class="material-symbols-outlined text-sm text-outline">zoom_in</span>
+          <button            type="button"            @click="resetAvatarTransform"            class="text-[10px] font-bold text-primary hover:underline ml-1 bg-transparent border-none cursor-pointer uppercase"
+          >
+            Đặt lại
+          </button>
+        </div>
+      </div>
+
+      <template #footer>
+        <div class="flex gap-2 justify-end pt-2">
+          <button @click="cancelAvatarPreview" class="px-4 py-2 rounded-xl text-xs font-bold text-outline hover:bg-surface-container-high transition-all border-none bg-transparent cursor-pointer">
+            Hủy bỏ
+          </button>
+          <button @click="confirmAvatarUpload" :disabled="uploadingAvatar" class="px-5 py-2.5 rounded-xl text-xs font-bold bg-primary text-on-primary shadow-md hover:bg-primary/90 transition-all active:scale-95 border-none cursor-pointer flex items-center gap-2">
+            <span v-if="uploadingAvatar" class="pi pi-spin pi-spinner text-xs"></span>
+            Xác nhận cập nhật ảnh
           </button>
         </div>
       </template>
@@ -278,7 +388,8 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from 'primevue/usetoast'
 import { useConfirm } from 'primevue/useconfirm'
@@ -293,21 +404,44 @@ import Dialog from 'primevue/dialog'
 import Toast from 'primevue/toast'
 import ConfirmDialog from 'primevue/confirmdialog'
 
+const router = useRouter()
 const authStore = useAuthStore()
 const toast = useToast()
 const confirm = useConfirm()
 
 const activeTab = ref('general')
 const tabs = [
-  { id: 'general', label: 'Thông tin chung' },
+  { id: 'general', label: 'Thông tin chung & Sở thích' },
   { id: 'membership', label: 'Hạng VIP & Quyền lợi' },
   { id: 'addresses', label: 'Sổ địa chỉ' },
-  { id: 'security', label: 'Bảo mật' }
+  { id: 'security', label: 'Bảo mật & Mật khẩu' }
 ]
+
+const todayDate = computed(() => {
+  return new Date().toISOString().split('T')[0]
+})
+
+const roleLabel = computed(() => {
+  if (authStore.isAdmin) return 'Admin'
+  if (authStore.isVendor) return 'Vendor'
+  if (authStore.user?.author_profile?.status === 'active') return 'Tác Giả'
+  return 'Độc Giả'
+})
 
 // Forms
 const loadingInfo = ref(false)
-const infoForm = reactive({ email: '', name: '', phone: '', address: '' })
+const infoForm = reactive({
+  email: '',
+  name: '',
+  phone: '',
+  gender: 'male',
+  birthday: '',
+  address: ''
+})
+
+const availableCategories = ref([])
+const selectedCategoryIds = ref([])
+const loadingCategories = ref(false)
 
 const loadingPassword = ref(false)
 const passwordForm = reactive({ current_password: '', new_password: '', new_password_confirmation: '' })
@@ -320,15 +454,66 @@ const isEditAddress = ref(false)
 const savingAddress = ref(false)
 const addressForm = ref({ id: null, receiver_name: '', phone: '', address: '', is_default: false })
 
-onMounted(() => {
+const resetPasswordForm = () => {
+  passwordForm.current_password = ''
+  passwordForm.new_password = ''
+  passwordForm.new_password_confirmation = ''
+}
+
+const switchTab = (tabId) => {
+  activeTab.value = tabId
+  if (tabId === 'security') {
+    resetPasswordForm()
+  }
+  window.scrollTo({ top: 0, behavior: 'instant' })
+}
+
+const fetchCategories = async () => {
+  loadingCategories.value = true
+  try {
+    const res = await apiClient.get('/api/categories')
+    availableCategories.value = res.data.data || res.data || []
+  } catch (e) {
+    console.error('Failed to load categories:', e)
+  } finally {
+    loadingCategories.value = false
+  }
+}
+
+const populateUserData = () => {
   if (authStore.user) {
     infoForm.email = authStore.user.email || ''
     infoForm.name = authStore.user.name || ''
     infoForm.phone = authStore.user.phone || ''
+    infoForm.gender = authStore.user.gender || 'male'
+    infoForm.birthday = authStore.user.birthday || ''
     infoForm.address = authStore.user.address || ''
+
+    if (authStore.user.favorite_categories && Array.isArray(authStore.user.favorite_categories)) {
+      selectedCategoryIds.value = authStore.user.favorite_categories.map(c => c.id)
+    }
   }
+}
+
+onMounted(() => {
+  populateUserData()
+  fetchCategories()
   fetchAddresses()
+  resetPasswordForm()
 })
+
+const toggleCategoryPreference = (catId) => {
+  const index = selectedCategoryIds.value.indexOf(catId)
+  if (index > -1) {
+    selectedCategoryIds.value.splice(index, 1)
+  } else {
+    if (selectedCategoryIds.value.length >= 5) {
+      toast.add({ severity: 'warn', summary: 'Cảnh báo', detail: 'Bạn chỉ có thể chọn tối đa 5 thể loại yêu thích.', life: 3000 })
+      return
+    }
+    selectedCategoryIds.value.push(catId)
+  }
+}
 
 const fetchAddresses = async () => {
   loadingAddresses.value = true
@@ -397,43 +582,194 @@ const setDefaultAddress = async (id) => {
 }
 
 const handleUpdateInfo = async () => {
+  if (infoForm.birthday && infoForm.birthday > todayDate.value) {
+    toast.add({ severity: 'error', summary: 'Lỗi ngày sinh', detail: 'Ngày sinh không được vượt quá ngày hiện tại.', life: 4000 })
+    return
+  }
+
+  if (infoForm.phone && !/^(0[3|5|7|8|9])+([0-9]{8})$/.test(infoForm.phone)) {
+    toast.add({ severity: 'error', summary: 'Lỗi số điện thoại', detail: 'Số điện thoại không đúng định dạng Việt Nam (ví dụ 0989999999).', life: 4000 })
+    return
+  }
+
   loadingInfo.value = true
   try {
-    await authStore.updateProfile({ ...infoForm })
-    toast.add({ severity: 'success', summary: 'Thành công', detail: 'Cập nhật thông tin thành công', life: 3000 })
+    await authStore.updateProfile({
+      ...infoForm,
+      favorite_category_ids: selectedCategoryIds.value
+    })
+    toast.add({ severity: 'success', summary: 'Thành công', detail: 'Cập nhật thông tin & sở thích thành công!', life: 3000 })
   } catch (error) {
-    toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Không thể cập nhật thông tin', life: 3000 })
-  } finally { loadingInfo.value = false }
+    console.error('Update profile error:', error)
+    let msg = 'Không thể cập nhật thông tin'
+    if (error.response?.data?.message) msg = error.response.data.message
+    toast.add({ severity: 'error', summary: 'Lỗi', detail: msg, life: 4000 })
+  } finally {    loadingInfo.value = false  }
 }
 
 const handleUpdatePassword = async () => {
+  if (!passwordForm.current_password) {
+    toast.add({ severity: 'warn', summary: 'Cảnh báo', detail: 'Vui lòng nhập mật khẩu hiện tại.', life: 3000 })
+    return
+  }
+  if (!passwordForm.new_password) {
+    toast.add({ severity: 'warn', summary: 'Cảnh báo', detail: 'Vui lòng nhập mật khẩu mới.', life: 3000 })
+    return
+  }
   if (passwordForm.new_password !== passwordForm.new_password_confirmation) {
-    toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Mật khẩu xác nhận không khớp', life: 3000 })
+    toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Mật khẩu xác nhận không khớp.', life: 3000 })
     return
   }
   loadingPassword.value = true
   try {
     await authStore.updatePassword({ ...passwordForm })
-    toast.add({ severity: 'success', summary: 'Thành công', detail: 'Đổi mật khẩu thành công', life: 3000 })
-    passwordForm.current_password = ''
-    passwordForm.new_password = ''
-    passwordForm.new_password_confirmation = ''
+    toast.add({ severity: 'success', summary: 'Thành công', detail: 'Đổi mật khẩu thành công!', life: 3000 })
+    resetPasswordForm()
   } catch (error) {
-    toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Mật khẩu hiện tại không đúng', life: 3000 })
-  } finally { loadingPassword.value = false }
+    console.error('Update password error:', error)
+    let msg = 'Mật khẩu hiện tại không chính xác'
+    if (error.response?.data?.message) msg = error.response.data.message
+    toast.add({ severity: 'error', summary: 'Lỗi', detail: msg, life: 4000 })
+  } finally {    loadingPassword.value = false  }
 }
 
-const onAvatarSelected = async (event) => {
+const selectedAvatarFile = ref(null)
+const avatarPreviewUrl = ref('')
+const showAvatarModal = ref(false)
+const uploadingAvatar = ref(false)
+
+// Drag, Pan, and Zoom interactive state
+const dragX = ref(0)
+const dragY = ref(0)
+const zoomLevel = ref(1)
+const isDragging = ref(false)
+const startX = ref(0)
+const startY = ref(0)
+
+const imgRenderWidth = ref(176)
+const imgRenderHeight = ref(176)
+
+const onPreviewImgLoaded = (e) => {
+  const img = e.target
+  const natW = img.naturalWidth || 176
+  const natH = img.naturalHeight || 176
+  const viewportSize = 176
+  const aspect = natW / natH
+
+  if (aspect >= 1) {
+    imgRenderHeight.value = viewportSize
+    imgRenderWidth.value = viewportSize * aspect
+  } else {
+    imgRenderWidth.value = viewportSize
+    imgRenderHeight.value = viewportSize / aspect
+  }
+
+  dragX.value = 0
+  dragY.value = 0
+  zoomLevel.value = 1
+}
+
+const onAvatarSelected = (event) => {
   const file = event.target.files[0]
   if (!file) return
   event.target.value = ''
-  const formData = new FormData()
-  formData.append('avatar', file)
+  selectedAvatarFile.value = file
+  avatarPreviewUrl.value = URL.createObjectURL(file)
+  dragX.value = 0
+  dragY.value = 0
+  zoomLevel.value = 1
+  showAvatarModal.value = true
+}
+
+const startDrag = (e) => {
+  isDragging.value = true
+  const clientX = e.touches ? e.touches[0].clientX : e.clientX
+  const clientY = e.touches ? e.touches[0].clientY : e.clientY
+  startX.value = clientX - dragX.value
+  startY.value = clientY - dragY.value
+}
+
+const onDrag = (e) => {
+  if (!isDragging.value) return
+  const clientX = e.touches ? e.touches[0].clientX : e.clientX
+  const clientY = e.touches ? e.touches[0].clientY : e.clientY
+  dragX.value = clientX - startX.value
+  dragY.value = clientY - startY.value
+}
+
+const endDrag = () => {
+  isDragging.value = false
+}
+
+const resetAvatarTransform = () => {
+  dragX.value = 0
+  dragY.value = 0
+  zoomLevel.value = 1
+}
+
+const cancelAvatarPreview = () => {
+  showAvatarModal.value = false
+  if (avatarPreviewUrl.value) {
+    URL.revokeObjectURL(avatarPreviewUrl.value)
+    avatarPreviewUrl.value = ''
+  }
+  selectedAvatarFile.value = null
+  resetAvatarTransform()
+}
+
+const confirmAvatarUpload = async () => {
+  if (!avatarPreviewUrl.value) return
+  uploadingAvatar.value = true
+
   try {
+    const img = new Image()
+    img.crossOrigin = 'anonymous'
+    img.src = avatarPreviewUrl.value
+    await new Promise((resolve, reject) => {
+      img.onload = resolve
+      img.onerror = reject
+    })
+
+    const canvas = document.createElement('canvas')
+    const canvasSize = 400
+    canvas.width = canvasSize
+    canvas.height = canvasSize
+    const ctx = canvas.getContext('2d')
+
+    const viewportSize = 176
+    const scaleFactor = canvasSize / viewportSize
+
+    // Clip to circle
+    ctx.beginPath()
+    ctx.arc(canvasSize / 2, canvasSize / 2, canvasSize / 2, 0, Math.PI * 2)
+    ctx.closePath()
+    ctx.clip()
+
+    // Calculated aspect fill sizing
+    const drawWidth = imgRenderWidth.value * zoomLevel.value
+    const drawHeight = imgRenderHeight.value * zoomLevel.value
+
+    const posX = (viewportSize - drawWidth) / 2 + dragX.value
+    const posY = (viewportSize - drawHeight) / 2 + dragY.value
+
+    ctx.drawImage(img, posX * scaleFactor, posY * scaleFactor, drawWidth * scaleFactor, drawHeight * scaleFactor)
+
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.95))
+
+    const formData = new FormData()
+    formData.append('avatar', blob, 'avatar.jpg')
+
     await apiClient.post('/api/profile/avatar', formData, { headers: { 'Content-Type': 'multipart/form-data' } })
     await authStore.fetchUser()
-    toast.add({ severity: 'success', summary: 'Thành công', detail: 'Đổi ảnh đại diện thành công', life: 3000 })
-  } catch(e) { toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Không thể tải lên ảnh', life: 5000 }) }
+    populateUserData()
+    toast.add({ severity: 'success', summary: 'Thành công', detail: 'Đã cập nhật ảnh đại diện mới!', life: 3000 })
+    cancelAvatarPreview()
+  } catch(e) {
+    console.error(e)
+    toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Không thể tải lên ảnh đại diện.', life: 5000 })
+  } finally {
+    uploadingAvatar.value = false
+  }
 }
 </script>
 

@@ -15,14 +15,22 @@ use App\Models\UserAddress;
 class ProfileController extends Controller
 {
     /**
-     * Cập nhật thông tin cá nhân cơ bản
+     * Cập nhật thông tin cá nhân cơ bản & sở thích đọc sách (Cold Start Recommendations)
      */
     public function updateInfo(UpdateProfileRequest $request): JsonResponse
     {
         $user = $request->user();
 
-        // Chỉ update các trường được phép
-        $user->update($request->only(['name', 'phone', 'address']));
+        // Chỉ update các trường cá nhân cơ bản (tuyệt đối không làm ảnh hưởng dữ liệu vendor/author)
+        $user->update($request->only(['name', 'phone', 'gender', 'birthday', 'address']));
+
+        // Đồng bộ thể loại sách yêu thích (Cold Start recommendations)
+        if ($request->has('favorite_category_ids')) {
+            $catIds = (array) $request->input('favorite_category_ids', []);
+            $user->favoriteCategories()->sync($catIds);
+        }
+
+        $user->load(['membershipTier', 'author', 'vendor', 'favoriteCategories']);
 
         return response()->json([
             'status' => 'success',

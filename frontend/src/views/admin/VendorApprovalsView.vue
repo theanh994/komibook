@@ -47,7 +47,7 @@ const approveVendor = async (id) => {
       toast.add({ severity: 'success', summary: 'Đã phê duyệt', detail: 'Đã kích hoạt tài khoản nhà bán đối tác thành công.', life: 3000 })
       fetchApprovals()
     }
-  } catch (e) {
+  } catch {
     toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Không thể phê duyệt tài khoản.', life: 3000 })
   }
 }
@@ -59,7 +59,7 @@ const approveAuthor = async (id) => {
       toast.add({ severity: 'success', summary: 'Đã phê duyệt', detail: 'Đã duyệt đối tác tác giả và tự động kích hoạt gian hàng.', life: 3500 })
       fetchApprovals()
     }
-  } catch (e) {
+  } catch {
     toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Không thể phê duyệt tài khoản.', life: 3000 })
   }
 }
@@ -87,8 +87,29 @@ const rejectPartner = async () => {
       showRejectDialog.value = false
       fetchApprovals()
     }
-  } catch (e) {
+  } catch {
     toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Thao tác từ chối gặp lỗi.', life: 3000 })
+  }
+}
+
+const downloadAuthorDoc = async (author) => {
+  try {
+    const url = author.identity_document_url
+    if (!url) {
+      toast.add({ severity: 'warn', summary: 'Cảnh báo', detail: 'Tác giả chưa cập nhật giấy tờ CCCD.', life: 3000 })
+      return
+    }
+    const response = await apiClient.get(url, { responseType: 'blob' })
+    const blobUrl = window.URL.createObjectURL(new Blob([response.data]))
+    const link = document.createElement('a')
+    link.href = blobUrl
+    link.setAttribute('download', `author-cccd-${author.id}`)
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    window.URL.revokeObjectURL(blobUrl)
+  } catch {
+    toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Không thể tải giấy tờ CCCD.', life: 3000 })
   }
 }
 
@@ -181,6 +202,11 @@ onMounted(() => {
               <p class="text-xs text-slate-500 leading-normal">{{ author.bio }}</p>
               <div class="text-[10px] text-slate-400">
                 Chủ thẻ: <strong class="text-slate-600">{{ author.user?.name }}</strong> | NH: {{ author.bank_name }} | STK: {{ author.bank_account_number }}
+              </div>
+              <div v-if="author.has_identity_document || author.identity_document_url" class="mt-1">
+                <button type="button" @click="downloadAuthorDoc(author)" class="text-[11px] text-indigo-600 hover:underline flex items-center gap-1 font-semibold bg-transparent border-none cursor-pointer p-0">
+                  <i class="pi pi-file-pdf"></i> Tải / Xem giấy tờ CCCD
+                </button>
               </div>
             </div>
 

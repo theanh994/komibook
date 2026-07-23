@@ -6,15 +6,15 @@
        <div class="absolute bottom-[-10%] left-[-10%] w-[400px] h-[400px] bg-primary/10 blur-[120px] rounded-full"></div>
     </div>
 
-    <div class="w-full px-gutter max-w-[1400px] mx-auto py-xl relative z-10">
-      <div class="flex flex-col lg:flex-row gap-xl">
+    <div class="w-full px-gutter max-w-[1280px] mx-auto py-xl relative z-10">
+      <div class="flex flex-col lg:flex-row items-start gap-xl">
         
         <!-- Sidebar -->
-        <UserSidebar :user="authStore.user" class="lg:w-80 shrink-0" />
+        <UserSidebar :user="authStore.user" />
 
         <!-- Main Content -->
         <main class="flex-1 min-w-0">
-          <div class="bg-surface-container-lowest/60 backdrop-blur-xl rounded-[48px] border border-outline-variant/10 shadow-2xl overflow-hidden min-h-[700px] flex flex-col">
+          <div class="bg-surface-container-lowest/60 backdrop-blur-xl rounded-[48px] border border-outline-variant/10 shadow-2xl overflow-hidden min-h-[390px] flex flex-col">
             
             <!-- Hero Header Section -->
             <div class="p-10 md:p-14 border-b border-outline-variant/5 bg-surface-container-low/20 flex flex-col md:flex-row md:items-end justify-between gap-10">
