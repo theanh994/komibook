@@ -387,4 +387,19 @@ class SecurityHardeningTest extends TestCase
         $response->assertHeader('X-Frame-Options', 'SAMEORIGIN');
         $response->assertHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
     }
+
+    /**
+     * Test raw GET unauthenticated API requests without Accept: application/json header
+     * return 401 JSON response instead of 302 redirect or 500 Route [login] not defined error.
+     */
+    public function test_unauthenticated_api_requests_without_json_accept_header_return_401_json()
+    {
+        $meRes = $this->get('/api/auth/me');
+        $meRes->assertStatus(401);
+        $meRes->assertJson(['message' => 'Unauthenticated.']);
+
+        $addressRes = $this->get('/api/profile/addresses');
+        $addressRes->assertStatus(401);
+        $addressRes->assertJson(['message' => 'Unauthenticated.']);
+    }
 }
