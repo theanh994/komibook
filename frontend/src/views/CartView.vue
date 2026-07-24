@@ -341,6 +341,7 @@
 
 <script setup>
 import { useCartStore } from '@/stores/cart'
+import { useAuthStore } from '@/stores/auth'
 import { useRouter, useRoute } from 'vue-router'
 import { ref, computed, onMounted } from 'vue'
 import apiClient from '@/services/axios'
@@ -351,6 +352,7 @@ import { useConfirm } from "primevue/useconfirm"
 import { useToast } from "primevue/usetoast"
 
 const cartStore = useCartStore()
+const authStore = useAuthStore()
 const router = useRouter()
 const route = useRoute()
 const confirm = useConfirm()
@@ -373,7 +375,9 @@ const isApplyingCoupon = ref(false)
 const appliedCoupon = ref(null)
 
 onMounted(() => {
-  fetchAddresses()
+  if (authStore.isAuthenticated) {
+    fetchAddresses()
+  }
   
   // Handle VNPAY Return
   if (route.query.vnp_ResponseCode === '00') {
@@ -387,6 +391,7 @@ onMounted(() => {
 })
 
 const fetchAddresses = async () => {
+  if (!authStore.isAuthenticated) return
   try {
     const res = await apiClient.get('/api/profile/addresses')
     addresses.value = res.data.data
