@@ -11,6 +11,8 @@ use App\Models\OrderItem;
 use App\Models\User;
 use App\Models\Vendor;
 use App\Models\Warehouse;
+use App\Models\WarehouseStock;
+use App\Services\OrderFulfillmentService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Cache;
@@ -330,6 +332,21 @@ class AuthorDrmInventoryTest extends TestCase
             'type' => 'physical',
             'price' => 200000,
             'stock' => 100,
+            'status' => 'published',
+        ]);
+
+        $warehouse = Warehouse::create([
+            'vendor_id' => $this->vendor->id,
+            'name' => 'Kho VIP Test',
+            'address' => '123 VIP Street',
+            'capacity' => 1000,
+            'status' => 'active',
+        ]);
+
+        WarehouseStock::create([
+            'warehouse_id' => $warehouse->id,
+            'book_id' => $book->id,
+            'quantity' => 100,
         ]);
 
         // 3. Thực hiện checkout
@@ -352,6 +369,15 @@ class AuthorDrmInventoryTest extends TestCase
         $order = Order::where('user_id', $this->user->id)->first();
         $this->assertNotNull($order);
         $this->assertEquals(180000, $order->total_amount);
+
+        // Chuyển đơn hàng sang processing để thực hiện state machine fulfillment chính thức
+        $order->status = 'processing';
+        $order->save();
+
+        $fulfillmentService = new OrderFulfillmentService;
+        $fulfillmentService->updateOrderStatusByVendor($order->id, 'shipped', 'vendor', $this->vendorUser->id);
+        $fulfillmentService->updateShippingStatus($order->id, 'picked_up', 'GHTK', 'TRK1', 'vendor', $this->vendorUser->id);
+        $fulfillmentService->updateShippingStatus($order->id, 'delivering', 'GHTK', 'TRK1', 'vendor', $this->vendorUser->id);
 
         // 5. Cập nhật trạng thái giao hàng thành công (delivered) để tích lũy điểm
         // Cần đóng vai trò Vendor để cập nhật trạng thái vận đơn

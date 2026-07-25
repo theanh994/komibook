@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Order extends Model
 {
@@ -55,31 +56,6 @@ class Order extends Model
                 $order->order_code = self::generateOrderCode();
             }
         });
-
-        // Tự động cập nhật số dư cho Vendor khi đơn hàng hoàn thành
-        static::updating(function (Order $order) {
-            if ($order->isDirty('status') && $order->status === 'completed' && $order->getOriginal('status') !== 'completed') {
-                if ($order->payment_status !== 'paid') {
-                    $order->payment_status = 'paid';
-                }
-
-                $vendor = Vendor::withoutGlobalScopes()->find($order->vendor_id);
-                if ($vendor) {
-                    $configPath = storage_path('app/private/system_config.json');
-                    $commissionRate = 10;
-                    if (file_exists($configPath)) {
-                        $config = json_decode(file_get_contents($configPath), true);
-                        if (isset($config['commission_rate'])) {
-                            $commissionRate = (float) $config['commission_rate'];
-                        }
-                    }
-
-                    $vendorEarnings = $order->total_amount * (100 - $commissionRate) / 100;
-                    $vendor->balance += (int)$vendorEarnings;
-                    $vendor->save();
-                }
-            }
-        });
     }
 
     /**
@@ -87,8 +63,9 @@ class Order extends Model
      */
     public static function generateOrderCode(): string
     {
-        $date   = now()->format('Ymd');
+        $date = now()->format('Ymd');
         $random = strtoupper(substr(uniqid(), -6));
+
         return "ORD-{$date}-{$random}";
     }
 
@@ -116,6 +93,29 @@ class Order extends Model
     public function orderItems(): HasMany
     {
         return $this->hasMany(OrderItem::class);
+    }
+
+    /**
+     * Bản ghi liên kết checkout session của đơn hàng này.
+     */
+    public function checkoutSessionOrder(): HasOne
+    {
+        return $this->hasOne(CheckoutSessionOrder::class);
+    }
+
+    public function transitionOperations(): HasMany
+    {
+        return $this->hasMany(OrderTransitionOperation::class);
+    }
+
+    public function loyaltyPointLedger(): HasOne
+    {
+        return $this->hasOne(LoyaltyPointLedger::class);
+    }
+
+    public function vendorEarningLedger(): HasOne
+    {
+        return $this->hasOne(VendorEarningLedger::class);
     }
 
     // ─── Helper Methods ───────────────────────────────────────────────────────

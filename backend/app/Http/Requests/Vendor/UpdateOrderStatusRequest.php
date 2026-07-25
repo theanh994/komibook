@@ -24,7 +24,7 @@ class UpdateOrderStatusRequest extends FormRequest
             'status' => [
                 'required',
                 'string',
-                Rule::in(['processing', 'shipped', 'completed', 'cancelled']),
+                Rule::in(['shipped']),
             ],
         ];
     }
@@ -45,7 +45,7 @@ class UpdateOrderStatusRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'status.in' => 'Trạng thái không hợp lệ. Chỉ chấp nhận: processing, shipped, completed, cancelled.',
+            'status.in' => 'Trạng thái không hợp lệ. Vendor chỉ được phép chuyển trạng thái sang: shipped.',
         ];
     }
 }

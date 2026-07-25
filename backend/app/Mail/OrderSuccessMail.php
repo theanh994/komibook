@@ -3,26 +3,28 @@
 namespace App\Mail;
 
 use App\Models\Order;
-use Illuminate\Bus\Queueable;
-use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Mail\Mailable;
+use Illuminate\Mail\Mailables\Attachment;
 use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
+use Illuminate\Mail\Mailables\Headers;
 use Illuminate\Queue\SerializesModels;
 
-class OrderSuccessMail extends Mailable implements ShouldQueue
+class OrderSuccessMail extends Mailable
 {
-    use Queueable, SerializesModels;
+    use SerializesModels;
 
     public Order $order;
+
+    public ?string $operationKey;
 
     /**
      * Create a new message instance.
      */
-    public function __construct(Order $order)
+    public function __construct(Order $order, ?string $operationKey = null)
     {
         $this->order = $order;
-        $this->queue = 'emails';
+        $this->operationKey = $operationKey;
     }
 
     /**
@@ -31,8 +33,24 @@ class OrderSuccessMail extends Mailable implements ShouldQueue
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: 'Xác nhận đơn hàng #' . $this->order->order_code . ' thành công - KomiBook',
+            subject: 'Xác nhận đơn hàng #'.$this->order->order_code.' thành công - KomiBook',
         );
+    }
+
+    /**
+     * Get the message headers.
+     */
+    public function headers(): Headers
+    {
+        if ($this->operationKey) {
+            $hash = md5($this->operationKey);
+
+            return new Headers(
+                messageId: "{$hash}@komibook.local",
+            );
+        }
+
+        return new Headers;
     }
 
     /**
@@ -48,7 +66,7 @@ class OrderSuccessMail extends Mailable implements ShouldQueue
     /**
      * Get the attachments for the message.
      *
-     * @return array<int, \Illuminate\Mail\Mailables\Attachment>
+     * @return array<int, Attachment>
      */
     public function attachments(): array
     {

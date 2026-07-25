@@ -4,30 +4,62 @@ namespace App\Services;
 
 use App\Jobs\ProcessOrder;
 use App\Models\Book;
+use App\Models\CheckoutSession;
+use App\Models\CheckoutSessionOrder;
+use App\Models\Coupon;
 use App\Models\Order;
 use App\Models\OrderItem;
-use App\Models\Coupon;
+use App\Models\User;
+use App\Services\Inventory\InventoryReservationService;
 use Exception;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Redis;
-use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\File;
 
 class CheckoutService
 {
     /**
-     * Xử lý luồng Checkout chịu tải cao với Redis Lock và Queue.
-     * 
-     * @param array $items [ ['book_id' => 1, 'quantity' => 2], ... ]
-     * @param array $shippingData ['shipping_address' => '...', 'phone' => '...']
-     * @param int $userId
-     * @param string|null $couponCode
+     * Lấy tỷ lệ hoa hồng (commission_rate) từ system_config.json với fallback an toàn.
+     */
+    protected function getCommissionRate(): float
+    {
+        $defaultRate = 10.0;
+        $configPath = storage_path('app/private/system_config.json');
+
+        if (! File::exists($configPath)) {
+            return $defaultRate;
+        }
+
+        try {
+            $content = File::get($configPath);
+            if ($content === false || $content === '') {
+                return $defaultRate;
+            }
+
+            $config = json_decode($content, true);
+            if (! is_array($config) || ! isset($config['commission_rate']) || ! is_numeric($config['commission_rate'])) {
+                return $defaultRate;
+            }
+
+            $rate = (float) $config['commission_rate'];
+
+            return min(100.0, max(0.0, $rate));
+        } catch (\Throwable $e) {
+            return $defaultRate;
+        }
+    }
+
+    /**
+     * Xử lý luồng Checkout với Inventory Reservation.
+     *
+     * @param  array  $items  [ ['book_id' => 1, 'quantity' => 2], ... ]
+     * @param  array  $shippingData  ['shipping_address' => '...', 'phone' => '...']
      * @return array Danh sách Order được tạo
+     *
      * @throws Exception
      */
     public function processCheckout(array $items, array $shippingData, int $userId, ?string $couponCode = null): array
     {
         $bookIds = array_column($items, 'book_id');
-        // Không dùng GlobalScope Vendor ở đây vì giỏ hàng chứa sách của nhiều shop khác nhau
         $books = Book::withoutGlobalScopes()->whereIn('id', $bookIds)->get()->keyBy('id');
 
         // BƯỚC 1: Kiểm tra E-book đã sở hữu
@@ -39,87 +71,37 @@ class CheckoutService
             }
         }
 
-        if (!empty($ebookIds)) {
-            // Tìm các e-book đã mua thành công trước đó
+        if (! empty($ebookIds)) {
             $ownedEbookIds = OrderItem::whereIn('book_id', $ebookIds)
                 ->whereHas('order', function ($q) use ($userId) {
                     $q->withoutGlobalScopes()
-                      ->where('user_id', $userId)
-                      ->whereIn('status', ['pending', 'processing', 'shipped', 'completed']);
+                        ->where('user_id', $userId)
+                        ->whereIn('status', ['pending', 'confirmed', 'processing', 'shipped', 'completed']);
                 })
                 ->pluck('book_id')
                 ->unique()
                 ->toArray();
 
-            if (!empty($ownedEbookIds)) {
+            if (! empty($ownedEbookIds)) {
                 $ownedTitles = $books->only($ownedEbookIds)->pluck('title')->implode(', ');
                 throw new Exception("Bạn đã sở hữu E-book: {$ownedTitles}. Mỗi E-book chỉ được mua 1 lần.");
             }
         }
 
-        // BƯỚC 2a: Redis Stock Lock (có fallback)
-        $useRedis = false;
-        try {
-            // Thử ping Redis để xác định có kết nối được không
-            Redis::ping();
-            $useRedis = true;
-        } catch (\Exception $e) {
-            Log::warning("Redis is not available, falling back to database stock check: " . $e->getMessage());
-        }
-
-        if ($useRedis) {
-            foreach ($items as $item) {
-                $bookId = $item['book_id'];
-                $quantity = $item['quantity'];
-                
-                if (!$books->has($bookId)) {
-                    throw new Exception("Sản phẩm không tồn tại (ID: {$bookId})");
-                }
-                $book = $books->get($bookId);
-
-                $redisKey = "book_stock:{$bookId}";
-
-                // Nếu key chưa có trên Redis, load từ DB lên
-                if (!Redis::exists($redisKey)) {
-                    Redis::set($redisKey, $book->stock);
-                }
-
-                // Trừ tồn kho tạm thời trên Redis
-                $remaining = Redis::decrBy($redisKey, $quantity);
-
-                // Nếu < 0 tức là hết hàng -> Rollback Redis và báo lỗi
-                if ($remaining < 0) {
-                    Redis::incrBy($redisKey, $quantity); // Hoàn lại số lượng vừa trừ
-                    throw new Exception("Sản phẩm '{$book->title}' không đủ số lượng tồn kho.");
-                }
-            }
-        } else {
-            // DB fallback: kiểm tra tồn kho trực tiếp từ CSDL
-            foreach ($items as $item) {
-                $bookId = $item['book_id'];
-                $quantity = $item['quantity'];
-                
-                if (!$books->has($bookId)) {
-                    throw new Exception("Sản phẩm không tồn tại (ID: {$bookId})");
-                }
-                $book = $books->get($bookId);
-                
-                if ($book->stock < $quantity) {
-                    throw new Exception("Sản phẩm '{$book->title}' không đủ số lượng tồn kho.");
-                }
-            }
-        }
-
-        // BƯỚC 2b: Split Orders theo Multi-vendor
+        // BƯỚC 2: Split Orders theo Multi-vendor
         $groupedItems = [];
         $totalCartAmount = 0;
         foreach ($items as $item) {
             $bookId = $item['book_id'];
             $quantity = $item['quantity'];
+
+            if (! $books->has($bookId)) {
+                throw new Exception("Sản phẩm không tồn tại (ID: {$bookId})");
+            }
             $book = $books->get($bookId);
             $vendorId = $book->vendor_id;
 
-            if (!isset($groupedItems[$vendorId])) {
+            if (! isset($groupedItems[$vendorId])) {
                 $groupedItems[$vendorId] = [];
             }
 
@@ -134,13 +116,12 @@ class CheckoutService
             ];
         }
 
-        // BƯỚC 2b.2: Xác thực & Tính toán giảm giá Coupon
+        // BƯỚC 3: Xác thực & Tính toán giảm giá Coupon
         $coupon = null;
         $vendorDiscounts = [];
         if ($couponCode) {
             $coupon = Coupon::where('code', $couponCode)->first();
             if ($coupon) {
-                // Kiểm tra thời gian
                 $now = now();
                 $isValidTime = true;
                 if (($coupon->start_time && $now->lt($coupon->start_time)) || ($coupon->end_time && $now->gt($coupon->end_time))) {
@@ -149,24 +130,21 @@ class CheckoutService
                 if ($coupon->valid_until && $coupon->valid_until->isPast()) {
                     $isValidTime = false;
                 }
-                
-                // Kiểm tra giới hạn sử dụng
+
                 $isValidUsage = true;
                 if ($coupon->usage_limit > 0 && $coupon->used_count >= $coupon->usage_limit) {
                     $isValidUsage = false;
                 }
 
-                // Kiểm tra đơn hàng tối thiểu
                 $isValidMinOrder = $totalCartAmount >= $coupon->min_order_value;
 
                 if ($isValidTime && $isValidUsage && $isValidMinOrder) {
                     $totalCategoryBase = 0;
-                    // Phân bổ giảm giá theo từng vendor
                     foreach ($groupedItems as $vendorId => $vendorItems) {
                         $eligibleBase = 0;
                         foreach ($vendorItems as $vItem) {
                             $book = $books->get($vItem['book_id']);
-                            if (!$coupon->category_id || ($book && $book->category_id == $coupon->category_id)) {
+                            if (! $coupon->category_id || ($book && $book->category_id == $coupon->category_id)) {
                                 $eligibleBase += $vItem['price'] * $vItem['quantity'];
                             }
                         }
@@ -176,7 +154,6 @@ class CheckoutService
 
                     $totalCalculatedDiscount = array_sum($vendorDiscounts);
                     if ($totalCalculatedDiscount > 0) {
-                        // Khống chế số tiền giảm tối đa
                         if ($coupon->max_discount_amount && $totalCalculatedDiscount > $coupon->max_discount_amount) {
                             $scale = $coupon->max_discount_amount / $totalCalculatedDiscount;
                             foreach ($vendorDiscounts as $vendorId => $discount) {
@@ -189,12 +166,12 @@ class CheckoutService
                         }
                     }
                 } else {
-                    $coupon = null; // Huỷ coupon nếu không thoả mãn điều kiện
+                    $coupon = null;
                 }
             }
         }
 
-        // Xác định phương thức thanh toán
+        // BƯỚC 4: Xác định phương thức thanh toán
         $paymentMethod = 'cod';
         if (isset($shippingData['payment_method'])) {
             $pm = strtolower($shippingData['payment_method']);
@@ -203,47 +180,87 @@ class CheckoutService
             }
         }
 
-        // BƯỚC 2c: Create Orders
+        // BƯỚC 5: Tính toán snapshot tài chính cho từng vendor & session
+        $user = User::with('membershipTier')->find($userId);
+        $commissionRate = $this->getCommissionRate();
+
+        $vendorSnapshots = [];
+        $sessionSubtotal = 0;
+        $sessionDiscount = 0;
+        $sessionFee = 0;
+        $sessionTotal = 0;
+
+        foreach ($groupedItems as $vendorId => $vendorItems) {
+            $subtotal = (int) array_sum(array_map(function ($vItem) {
+                return $vItem['price'] * $vItem['quantity'];
+            }, $vendorItems));
+
+            $couponDisc = (int) round($vendorDiscounts[$vendorId] ?? 0);
+
+            $membershipDisc = 0;
+            if ($user && $user->membershipTier && $user->membershipTier->discount_percent > 0) {
+                $afterCoupon = max(0, $subtotal - $couponDisc);
+                $membershipDisc = (int) round(($afterCoupon * (float) $user->membershipTier->discount_percent) / 100.0);
+            }
+
+            $discount = min($subtotal, $couponDisc + $membershipDisc);
+            $fee = 0;
+            $total = max(0, $subtotal - $discount + $fee);
+            $commissionAmt = (int) round(($total * $commissionRate) / 100.0);
+
+            $vendorSnapshots[$vendorId] = [
+                'subtotal_amount' => $subtotal,
+                'discount_amount' => $discount,
+                'fee_amount' => $fee,
+                'total_amount' => $total,
+                'commission_rate' => $commissionRate,
+                'commission_amount' => $commissionAmt,
+            ];
+
+            $sessionSubtotal += $subtotal;
+            $sessionDiscount += $discount;
+            $sessionFee += $fee;
+            $sessionTotal += $total;
+        }
+
+        // BƯỚC 6: DB Transaction - Create Session, Orders, Items, Links, và Inventory Reservations
         $createdOrders = [];
-        $user = \App\Models\User::with('membershipTier')->find($userId);
+        $isCod = ($paymentMethod === 'cod');
 
         try {
             DB::beginTransaction();
 
+            $expiresAt = now()->addMinutes(15);
+
+            $checkoutSession = CheckoutSession::create([
+                'user_id' => $userId,
+                'currency' => 'VND',
+                'subtotal_amount' => $sessionSubtotal,
+                'discount_amount' => $sessionDiscount,
+                'fee_amount' => $sessionFee,
+                'total_amount' => $sessionTotal,
+                'expires_at' => $expiresAt,
+            ]);
+
             foreach ($groupedItems as $vendorId => $vendorItems) {
-                // Tính tổng tiền cho vendor này
-                $subtotalAmount = array_sum(array_map(function($item) {
-                    return $item['price'] * $item['quantity'];
-                }, $vendorItems));
+                $snapshot = $vendorSnapshots[$vendorId];
 
-                // Áp dụng giảm giá coupon cho vendor này nếu có
-                $discountForThisVendor = $vendorDiscounts[$vendorId] ?? 0;
-                $totalAmount = max(0, $subtotalAmount - $discountForThisVendor);
+                $initialStatus = $isCod ? 'confirmed' : 'pending';
 
-                // Áp dụng thêm giảm giá hạng VIP thành viên nếu có
-                if ($user && $user->membershipTier && $user->membershipTier->discount_percent > 0) {
-                    $vipDiscount = ($totalAmount * $user->membershipTier->discount_percent) / 100;
-                    $totalAmount = max(0, $totalAmount - $vipDiscount);
-                }
-
-                // Tạo Order
                 $order = new Order([
                     'user_id' => $userId,
                     'vendor_id' => $vendorId,
-                    'total_amount' => $totalAmount,
-                    'status' => 'pending',
+                    'total_amount' => $snapshot['total_amount'],
+                    'status' => $initialStatus,
                     'payment_status' => 'unpaid',
                     'payment_method' => $paymentMethod,
                     'shipping_address' => $shippingData['shipping_address'],
                     'phone' => $shippingData['phone'],
                 ]);
-                
-                // Sử dụng saveQuietly() để không kích hoạt các event Eloquent (như creating/created)
-                // Điều này giúp tránh việc trait MultiVendorScoped tự động override `vendor_id` thành id của user hiện tại.
+
                 $order->order_code = Order::generateOrderCode();
                 $order->saveQuietly();
 
-                // Tạo OrderItem
                 foreach ($vendorItems as $item) {
                     $orderItem = new OrderItem([
                         'order_id' => $order->id,
@@ -254,10 +271,31 @@ class CheckoutService
                     $orderItem->saveQuietly();
                 }
 
+                $checkoutSessionOrder = new CheckoutSessionOrder([
+                    'checkout_session_id' => $checkoutSession->id,
+                    'order_id' => $order->id,
+                    'vendor_id' => $vendorId,
+                    'subtotal_amount' => $snapshot['subtotal_amount'],
+                    'discount_amount' => $snapshot['discount_amount'],
+                    'fee_amount' => $snapshot['fee_amount'],
+                    'commission_rate' => $snapshot['commission_rate'],
+                    'commission_amount' => $snapshot['commission_amount'],
+                    'total_amount' => $snapshot['total_amount'],
+                ]);
+                $checkoutSessionOrder->saveQuietly();
+
                 $createdOrders[] = $order;
             }
 
-            // Tăng số lượt sử dụng của Coupon
+            // Gọi InventoryReservationService::reserve() cho toàn session
+            $reservationService = app(InventoryReservationService::class);
+            $reservationService->reserve(
+                $checkoutSession,
+                $expiresAt,
+                "checkout-reserve:{$checkoutSession->checkout_code}"
+            );
+
+            // Tăng số lượt sử dụng Coupon
             if ($coupon) {
                 $coupon->increment('used_count');
             }
@@ -265,22 +303,15 @@ class CheckoutService
             DB::commit();
         } catch (Exception $e) {
             DB::rollBack();
-            if ($useRedis) {
-                // Rollback Redis stock nếu DB lưu thất bại
-                try {
-                    foreach ($items as $item) {
-                        Redis::incrBy("book_stock:{$item['book_id']}", $item['quantity']);
-                    }
-                } catch (\Exception $ex) {
-                    Log::error("Failed to rollback Redis stock: " . $ex->getMessage());
-                }
-            }
+
             throw $e;
         }
 
-        // Bước 3: Đẩy Job vào Queue để xử lý bất đồng bộ
-        foreach ($createdOrders as $order) {
-            ProcessOrder::dispatch($order->id);
+        // BƯỚC 7: Post-Commit - Chỉ dispatch ProcessOrder cho đơn COD
+        if ($isCod) {
+            foreach ($createdOrders as $order) {
+                ProcessOrder::dispatch($order->id);
+            }
         }
 
         return $createdOrders;

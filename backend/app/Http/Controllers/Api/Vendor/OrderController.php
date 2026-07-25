@@ -6,8 +6,10 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Vendor\UpdateOrderStatusRequest;
 use App\Http\Resources\OrderResource;
 use App\Models\Order;
+use App\Services\OrderFulfillmentService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class OrderController extends Controller
 {
@@ -30,16 +32,16 @@ class OrderController extends Controller
             $search = $request->search;
             $query->where(function ($q) use ($search) {
                 $q->where('order_code', 'LIKE', "%{$search}%")
-                  ->orWhereHas('user', function ($uq) use ($search) {
-                      $uq->where('name', 'LIKE', "%{$search}%");
-                  });
+                    ->orWhereHas('user', function ($uq) use ($search) {
+                        $uq->where('name', 'LIKE', "%{$search}%");
+                    });
             });
         }
 
         $orders = $query->paginate($request->get('per_page', 15));
 
         return OrderResource::collection($orders)->additional([
-            'status'  => 'success',
+            'status' => 'success',
             'message' => 'Lấy danh sách đơn hàng thành công.',
         ]);
     }
@@ -52,9 +54,9 @@ class OrderController extends Controller
         $order->load(['user', 'orderItems.book']);
 
         return response()->json([
-            'status'  => 'success',
+            'status' => 'success',
             'message' => 'Lấy chi tiết đơn hàng thành công.',
-            'data'    => new OrderResource($order),
+            'data' => new OrderResource($order),
         ]);
     }
 
@@ -64,23 +66,23 @@ class OrderController extends Controller
     public function updateStatus(UpdateOrderStatusRequest $request, Order $order): JsonResponse
     {
         $newStatus = $request->validated()['status'];
-        $oldStatus = $order->status;
+        $actorId = $request->user()?->id;
 
-        // Không cho phép cập nhật đơn đã bị hủy hoặc đã hoàn thành
-        if (in_array($oldStatus, ['cancelled', 'completed'])) {
+        try {
+            $fulfillmentService = app(OrderFulfillmentService::class);
+            $updatedOrder = $fulfillmentService->updateOrderStatusByVendor($order, $newStatus, 'vendor', $actorId);
+
             return response()->json([
-                'status'  => 'error',
-                'message' => "Không thể cập nhật đơn hàng đã ở trạng thái \"{$oldStatus}\".",
+                'status' => 'success',
+                'message' => 'Cập nhật trạng thái đơn hàng thành công!',
+                'data' => new OrderResource($updatedOrder->load('user')),
+            ]);
+        } catch (\LogicException $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => $e->getMessage(),
             ], 422);
         }
-
-        $order->update(['status' => $newStatus]);
-
-        return response()->json([
-            'status'  => 'success',
-            'message' => 'Cập nhật trạng thái đơn hàng thành công!',
-            'data'    => new OrderResource($order->fresh()->load('user')),
-        ]);
     }
 
     /**
@@ -89,35 +91,33 @@ class OrderController extends Controller
     public function bulkUpdateStatus(Request $request): JsonResponse
     {
         $request->validate([
-            'order_ids'   => ['required', 'array', 'min:1'],
+            'order_ids' => ['required', 'array', 'min:1'],
             'order_ids.*' => ['integer', 'exists:orders,id'],
-            'status'      => ['required', 'string', 'in:pending,processing,shipped,completed,cancelled'],
+            'status' => ['required', 'string', 'in:shipped'],
         ]);
 
         $newStatus = $request->status;
-        $orderIds = $request->order_ids;
+        $orderIds = collect($request->order_ids)->map(fn ($id) => (int) $id)->sort()->values()->all();
+        $actorId = $request->user()?->id;
+        $fulfillmentService = app(OrderFulfillmentService::class);
 
-        // Lấy danh sách order thuộc về vendor (đã được auto-scoped) và loại trừ những đơn không thể cập nhật
-        $orders = Order::whereIn('id', $orderIds)
-            ->whereNotIn('status', ['cancelled', 'completed'])
-            ->get();
+        try {
+            DB::transaction(function () use ($orderIds, $newStatus, $actorId, $fulfillmentService) {
+                foreach ($orderIds as $orderId) {
+                    $fulfillmentService->updateOrderStatusByVendor($orderId, $newStatus, 'vendor', $actorId);
+                }
+            });
 
-        if ($orders->isEmpty()) {
             return response()->json([
-                'status'  => 'error',
-                'message' => 'Không có đơn hàng nào hợp lệ để cập nhật.',
+                'status' => 'success',
+                'message' => 'Đã cập nhật trạng thái thành công cho '.count($orderIds).' đơn hàng!',
+                'updated_count' => count($orderIds),
+            ]);
+        } catch (\LogicException $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => $e->getMessage(),
             ], 422);
         }
-
-        // Thực hiện cập nhật từng đơn lẻ để kích hoạt model events
-        foreach ($orders as $order) {
-            $order->update(['status' => $newStatus]);
-        }
-
-        return response()->json([
-            'status'  => 'success',
-            'message' => "Đã cập nhật trạng thái thành công cho {$orders->count()} đơn hàng!",
-            'updated_count' => $orders->count(),
-        ]);
     }
 }

@@ -3,13 +3,14 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
-use App\Models\Order;
-use App\Models\Vendor;
 use App\Http\Resources\OrderResource;
-use Illuminate\Support\Facades\URL;
+use App\Models\Order;
+use App\Services\CheckoutSessionLifecycleService;
+use App\Services\OrderFulfillmentService;
+use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Response;
-use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\URL;
 
 class OrderController extends Controller
 {
@@ -37,7 +38,7 @@ class OrderController extends Controller
 
         foreach ($orders as $order) {
             foreach ($order->orderItems as $item) {
-                if ($item->book && !in_array($item->book_id, $seenBookIds)) {
+                if ($item->book && ! in_array($item->book_id, $seenBookIds)) {
                     $seenBookIds[] = $item->book_id;
                     $libraryItems[] = [
                         'order_id' => $order->id,
@@ -51,7 +52,7 @@ class OrderController extends Controller
                             'author' => $item->book->author_name ?? 'KomiBook Author',
                             'type' => $item->book->type ?? 'physical',
                             'file_path' => $item->book->file_path,
-                        ]
+                        ],
                     ];
                 }
             }
@@ -70,7 +71,7 @@ class OrderController extends Controller
             ->firstOrFail();
 
         // Kiểm tra đơn hàng đã thanh toán hoặc hoàn thành
-        if (!$order->isPaid() && !$order->isCompleted()) {
+        if (! $order->isPaid() && ! $order->isCompleted()) {
             return response()->json(['message' => 'Đơn hàng chưa được thanh toán. Vui lòng thanh toán trước khi đọc.'], 403);
         }
 
@@ -86,35 +87,35 @@ class OrderController extends Controller
         }
 
         $filename = basename($book->file_path);
-        
+
         $relativeUrl = URL::temporarySignedRoute(
-            'api.ebook.stream', 
-            now()->addMinutes(10), 
+            'api.ebook.stream',
+            now()->addMinutes(10),
             [
                 'filename' => $filename,
                 'email' => $request->user()->email,
-                'name' => $request->user()->name
+                'name' => $request->user()->name,
             ],
             false // Generate signature for relative URL only
         );
 
-        $url = rtrim(config('app.url'), '/') . $relativeUrl;
+        $url = rtrim(config('app.url'), '/').$relativeUrl;
 
         return response()->json(['url' => $url]);
     }
-    
+
     public function streamEbook(Request $request, $filename)
     {
         // Verify relative signature to avoid proxy host/scheme mismatches
-        if (!$request->hasValidSignature(false)) {
+        if (! $request->hasValidSignature(false)) {
             abort(401, 'Link đã hết hạn hoặc không hợp lệ.');
         }
 
         // Chặn path traversal attack
         $filename = basename($filename);
-        $path = storage_path('app/private/ebooks/' . $filename);
-        
-        if (!file_exists($path)) {
+        $path = storage_path('app/private/ebooks/'.$filename);
+
+        if (! file_exists($path)) {
             abort(404, 'File e-book không tồn tại trên hệ thống.');
         }
 
@@ -135,54 +136,57 @@ class OrderController extends Controller
     public function updateShippingStatus(Request $request, $id)
     {
         $request->validate([
-            'shipping_status' => 'required|in:pending_pickup,delivering,delivered,failed',
+            'shipping_status' => 'required|in:pending_pickup,picked_up,delivering,delivered,failed',
             'shipping_carrier' => 'nullable|string',
+            'shipping_tracking_code' => 'nullable|string',
         ]);
 
-        $order = Order::findOrFail($id);
+        try {
+            $fulfillmentService = app(OrderFulfillmentService::class);
+            $order = $fulfillmentService->updateShippingStatus(
+                (int) $id,
+                $request->shipping_status,
+                $request->shipping_carrier,
+                $request->shipping_tracking_code,
+                'vendor',
+                (int) $request->user()->id
+            );
 
-        // Sinh mã vận đơn ngẫu nhiên nếu chưa có
-        if (empty($order->shipping_tracking_code)) {
-            $carrier = $request->shipping_carrier ?? 'GHTK';
-            $order->shipping_carrier = $carrier;
-            $order->shipping_tracking_code = $carrier . rand(100000000, 999999999);
-        } else if ($request->has('shipping_carrier')) {
-            $order->shipping_carrier = $request->shipping_carrier;
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Cập nhật trạng thái giao hàng thành công.',
+                'data' => $order,
+            ]);
+        } catch (\LogicException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        } catch (\Throwable $e) {
+            return response()->json(['message' => 'Không thể cập nhật trạng thái giao hàng.'], 404);
         }
+    }
 
-        $order->shipping_status = $request->shipping_status;
+    /**
+     * Buyer chủ động hủy đơn hàng / checkout session.
+     */
+    public function cancel(Request $request, $id)
+    {
+        $userId = (int) $request->user()->id;
+        $orderId = (int) $id;
 
-        // Nếu giao thành công -> đơn hàng chuyển sang completed
-        if ($request->shipping_status === 'delivered') {
-            $order->status = 'completed';
-            
-            // Tích lũy điểm thành viên: 1 điểm cho mỗi 10,000 VND spent
-            $earnedPoints = floor($order->total_amount / 10000);
-            if ($earnedPoints > 0) {
-                $user = $order->user;
-                if ($user) {
-                    $user->increment('points', $earnedPoints);
-                    
-                    // Tự động kiểm tra và thăng hạng thành viên
-                    $nextTier = \App\Models\MembershipTier::where('min_points', '<=', $user->points)
-                        ->orderBy('min_points', 'desc')
-                        ->first();
-                    if ($nextTier && (!$user->membership_tier_id || $nextTier->id !== $user->membership_tier_id)) {
-                        $user->membership_tier_id = $nextTier->id;
-                        $user->save();
-                    }
-                }
-            }
-        } else if ($request->shipping_status === 'failed') {
-            $order->status = 'cancelled';
+        try {
+            $lifecycleService = app(CheckoutSessionLifecycleService::class);
+            $cancelledOrders = $lifecycleService->cancelByBuyer($orderId, $userId);
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Hủy đơn hàng thành công.',
+                'data' => OrderResource::collection(collect($cancelledOrders)),
+            ]);
+        } catch (AuthorizationException $e) {
+            return response()->json(['message' => 'Bạn không có quyền thực hiện thao tác này'], 403);
+        } catch (\LogicException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        } catch (\Throwable $e) {
+            return response()->json(['message' => 'Đơn hàng không tồn tại hoặc không thể hủy'], 404);
         }
-
-        $order->save();
-
-        return response()->json([
-            'status' => 'success',
-            'message' => 'Cập nhật trạng thái giao hàng thành công.',
-            'data' => $order
-        ]);
     }
 }

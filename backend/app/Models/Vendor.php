@@ -102,6 +102,11 @@ class Vendor extends Model
         return $this->hasMany(StockTransfer::class);
     }
 
+    public function vendorEarningLedgers(): HasMany
+    {
+        return $this->hasMany(VendorEarningLedger::class);
+    }
+
     // ─── Helper Methods ───────────────────────────────────────────────────────
 
     public function isActive(): bool

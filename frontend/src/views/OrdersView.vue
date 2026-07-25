@@ -303,8 +303,12 @@ onMounted(() => {
       toast.add({ severity: 'success', summary: 'Thành công', detail: 'Thanh toán đơn hàng thành công!', life: 5000 })
     } else if (paymentStatus === 'failed') {
       toast.add({ severity: 'error', summary: 'Thất bại', detail: 'Thanh toán đơn hàng không thành công hoặc đã bị hủy.', life: 5000 })
+    } else if (paymentStatus === 'pending') {
+      toast.add({ severity: 'info', summary: 'Đang xử lý', detail: 'Đã nhận kết quả từ cổng thanh toán, đang chờ hệ thống xác nhận.', life: 5000 })
     } else if (paymentStatus === 'invalid_signature') {
       toast.add({ severity: 'warn', summary: 'Cảnh báo', detail: 'Chữ ký thanh toán không hợp lệ.', life: 5000 })
+    } else if (paymentStatus === 'invalid_transaction') {
+      toast.add({ severity: 'error', summary: 'Lỗi giao dịch', detail: 'Không thể đối chiếu thông tin giao dịch thanh toán.', life: 5000 })
     }
     // Xóa query parameter trên URL để tránh hiển thị lại khi reload trang
     router.replace({ query: {} })

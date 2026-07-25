@@ -3,6 +3,7 @@
 namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
+use App\Notifications\ResetPasswordQueued;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -10,7 +11,6 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
-use App\Notifications\ResetPasswordQueued;
 
 class User extends Authenticatable
 {
@@ -101,6 +101,19 @@ class User extends Authenticatable
     }
 
     /**
+     * Tất cả phiên thanh toán của người dùng này.
+     */
+    public function checkoutSessions(): HasMany
+    {
+        return $this->hasMany(CheckoutSession::class);
+    }
+
+    public function loyaltyPointLedgers(): HasMany
+    {
+        return $this->hasMany(LoyaltyPointLedger::class);
+    }
+
+    /**
      * Sổ địa chỉ.
      */
     public function addresses(): HasMany
@@ -145,7 +158,6 @@ class User extends Authenticatable
      * Gửi notification đặt lại mật khẩu qua Queue.
      *
      * @param  string  $token
-     * @return void
      */
     public function sendPasswordResetNotification($token): void
     {
@@ -157,6 +169,6 @@ class User extends Authenticatable
      */
     public function getAvatarUrlAttribute(): ?string
     {
-        return $this->avatar ? '/storage/' . $this->avatar : null;
+        return $this->avatar ? '/storage/'.$this->avatar : null;
     }
 }

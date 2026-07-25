@@ -54,11 +54,11 @@ class Book extends Model
     protected function casts(): array
     {
         return [
-            'price'          => 'integer',
-            'sale_price'     => 'integer',
-            'stock'          => 'integer',
-            'pages'          => 'integer',
-            'views'          => 'integer',
+            'price' => 'integer',
+            'sale_price' => 'integer',
+            'stock' => 'integer',
+            'pages' => 'integer',
+            'views' => 'integer',
             'gallery_images' => 'array',
         ];
     }
@@ -137,6 +137,22 @@ class Book extends Model
         return $this->hasOne(BookDrmSetting::class);
     }
 
+    /**
+     * Các bản ghi giữ chỗ tồn kho của sách này.
+     */
+    public function inventoryReservations(): HasMany
+    {
+        return $this->hasMany(InventoryReservation::class);
+    }
+
+    /**
+     * Tồn kho thực tế tại các kho của sách này.
+     */
+    public function warehouseStocks(): HasMany
+    {
+        return $this->hasMany(WarehouseStock::class);
+    }
+
     // ─── Helper Methods ───────────────────────────────────────────────────────
 
     public function isPublished(): bool
@@ -163,7 +179,7 @@ class Book extends Model
     {
         if (self::$activeFlashSaleBooks === null) {
             $now = now();
-            $activeSale = \App\Models\FlashSale::where('is_active', true)
+            $activeSale = FlashSale::where('is_active', true)
                 ->where('start_time', '<=', $now)
                 ->where('end_time', '>', $now)
                 ->first();
@@ -183,7 +199,8 @@ class Book extends Model
         $activeFlashSaleItem = self::getActiveFlashSaleItem($this->id);
         if ($activeFlashSaleItem) {
             $discountAmount = $this->price * ($activeFlashSaleItem->discount_percent / 100);
-            return max(0, (int)($this->price - $discountAmount));
+
+            return max(0, (int) ($this->price - $discountAmount));
         }
 
         return $value;

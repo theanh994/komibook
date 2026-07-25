@@ -1,23 +1,36 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Jobs;
 
-use App\Models\Book;
+use App\Models\CheckoutSession;
+use App\Models\CheckoutSessionOrder;
 use App\Models\Order;
-use App\Models\WarehouseStock;
+use App\Services\Inventory\InventoryReservationService;
+use App\Services\OrderSideEffectOutboxService;
 use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use LogicException;
+use RuntimeException;
 
-class ProcessOrder implements ShouldQueue
+class ProcessOrder implements ShouldBeUnique, ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public int $orderId;
+
+    public int $tries = 5;
+
+    public int $timeout = 60;
+
+    public int $uniqueFor = 600;
 
     /**
      * Create a new job instance.
@@ -25,6 +38,25 @@ class ProcessOrder implements ShouldQueue
     public function __construct(int $orderId)
     {
         $this->orderId = $orderId;
+        $this->queue = 'default';
+    }
+
+    /**
+     * Get backoff delays in seconds.
+     *
+     * @return array<int, int>
+     */
+    public function backoff(): array
+    {
+        return [5, 15, 30, 60];
+    }
+
+    /**
+     * Unique identifier for queue locking.
+     */
+    public function uniqueId(): string
+    {
+        return "process-order:{$this->orderId}";
     }
 
     /**
@@ -32,82 +64,56 @@ class ProcessOrder implements ShouldQueue
      */
     public function handle(): void
     {
-        DB::transaction(function () {
-            // Lấy order cùng với orderItems (bỏ qua Global Scope vendor để đảm bảo Job luôn lấy được đơn hàng)
-            $order = Order::withoutGlobalScopes()->with(['orderItems.book', 'user'])->findOrFail($this->orderId);
+        // 1. Resolve link & check legacy order
+        $link = CheckoutSessionOrder::where('order_id', $this->orderId)->first();
+        if (! $link) {
+            throw new RuntimeException("Legacy order {$this->orderId} without checkout session is not supported");
+        }
 
-            // Chuyển trạng thái sang processing
+        DB::transaction(function () use ($link) {
+            // 2. Lock CheckoutSession
+            $session = CheckoutSession::where('id', $link->checkout_session_id)->lockForUpdate()->firstOrFail();
+
+            // 3. Commit inventory reservations cho toàn bộ session
+            $reservationService = app(InventoryReservationService::class);
+            $reservationService->commitSession($session);
+
+            // 4. Lock & reload target order
+            $order = Order::withoutGlobalScopes()
+                ->with(['orderItems.book', 'user'])
+                ->where('id', $this->orderId)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            $outboxService = app(OrderSideEffectOutboxService::class);
+
+            // 5. Check order status for idempotency / validity
+            if ($order->status === 'processing') {
+                $outboxService->recordOutboxEffects($order);
+                DB::afterCommit(function () use ($outboxService, $order) {
+                    $outboxService->dispatchOutboxForOrder($order->id);
+                });
+
+                return;
+            }
+
+            if ($order->status !== 'confirmed') {
+                throw new LogicException("Order {$order->id} status is '{$order->status}', expected 'confirmed'");
+            }
+
+            // Transition confirmed -> processing
             $order->status = 'processing';
             $order->saveQuietly();
 
-            // Trừ tồn kho thực tế trong MySQL
-            foreach ($order->orderItems as $item) {
-                // Sử dụng decrement đảm bảo an toàn truy cập đồng thời (concurrency)
-                $book = Book::withoutGlobalScopes()->where('id', $item->book_id)->first();
-                if ($book) {
-                    $book->decrement('stock', $item->quantity);
+            // 6. Record durable outbox records atomically within transaction
+            $outboxService->recordOutboxEffects($order);
 
-                    // Trừ tồn kho chi tiết trong warehouse_stocks cho sách vật lý
-                    if ($book->type === 'physical') {
-                        $warehouseStock = WarehouseStock::where('book_id', $book->id)
-                            ->where('quantity', '>=', $item->quantity)
-                            ->first();
+            // 7. Dispatch outbox delivery jobs ONLY after transaction commits
+            DB::afterCommit(function () use ($outboxService, $order) {
+                $outboxService->dispatchOutboxForOrder($order->id);
+            });
 
-                        if ($warehouseStock) {
-                            $warehouseStock->decrement('quantity', $item->quantity);
-                        } else {
-                            // Trừ lũy tiến từ các kho chứa sách
-                            $remainingToDeduct = $item->quantity;
-                            $stocks = WarehouseStock::where('book_id', $book->id)
-                                ->where('quantity', '>', 0)
-                                ->orderBy('quantity', 'desc')
-                                ->get();
-
-                            foreach ($stocks as $stock) {
-                                if ($remainingToDeduct <= 0) break;
-                                $deduct = min($stock->quantity, $remainingToDeduct);
-                                $stock->decrement('quantity', $deduct);
-                                $remainingToDeduct -= $deduct;
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Tạo thông báo cơ sở dữ liệu cho User
-            try {
-                $isCod = $order->payment_method === 'cod';
-                $messageContent = $isCod
-                    ? "Đơn hàng {$order->order_code} đã được đặt thành công và đang được xử lý."
-                    : "Đơn hàng {$order->order_code} đã thanh toán thành công và đang được xử lý.";
-
-                \App\Models\UserNotification::create([
-                    'user_id' => $order->user_id,
-                    'title' => 'Đặt hàng thành công',
-                    'content' => $messageContent,
-                    'type' => 'order',
-                    'data' => [
-                        'order_id' => $order->id,
-                        'order_code' => $order->order_code,
-                        'icon' => 'shopping_bag',
-                        'colorClass' => 'bg-green-100 text-green-600'
-                    ]
-                ]);
-            } catch (\Exception $e) {
-                Log::error("Failed to create database notification: " . $e->getMessage());
-            }
-
-            // Gửi email xác nhận thành công cho Khách hàng
-            try {
-                if ($order->user && $order->user->email) {
-                    \Illuminate\Support\Facades\Mail::to($order->user->email)
-                        ->send(new \App\Mail\OrderSuccessMail($order));
-                }
-            } catch (\Exception $e) {
-                Log::error("Failed to send order success mail: " . $e->getMessage());
-            }
-            
-            Log::info("Job ProcessOrder completed: Order [{$order->order_code}] successfully processed.");
+            Log::info("Job ProcessOrder completed: Order [{$order->order_code}] successfully transitioned to processing with outbox recorded.");
         });
     }
 }
