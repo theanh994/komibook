@@ -139,7 +139,9 @@ return new class extends Migration
         Schema::create('inventory_return_restorations', function (Blueprint $table) {
             $table->id();
             $table->foreignId('return_request_item_id')->constrained('return_request_items')->restrictOnDelete();
-            $table->foreignId('inventory_reservation_allocation_id')->constrained('inventory_reservation_allocations')->restrictOnDelete();
+            $table->foreignId('inventory_reservation_allocation_id');
+            $table->foreign('inventory_reservation_allocation_id', 'inv_return_alloc_fk')
+                ->references('id')->on('inventory_reservation_allocations')->restrictOnDelete();
             $table->foreignId('warehouse_stock_id')->constrained('warehouse_stocks')->restrictOnDelete();
             $table->string('operation_key', 128)->unique();
             $table->unsignedInteger('quantity');
@@ -155,7 +157,9 @@ return new class extends Migration
         Schema::create('inventory_cancellation_restorations', function (Blueprint $table) {
             $table->id();
             $table->foreignId('order_item_id')->constrained('order_items')->restrictOnDelete();
-            $table->foreignId('inventory_reservation_allocation_id')->constrained('inventory_reservation_allocations')->restrictOnDelete();
+            $table->foreignId('inventory_reservation_allocation_id');
+            $table->foreign('inventory_reservation_allocation_id', 'inv_cancel_alloc_fk')
+                ->references('id')->on('inventory_reservation_allocations')->restrictOnDelete();
             $table->foreignId('warehouse_stock_id')->constrained('warehouse_stocks')->restrictOnDelete();
             $table->string('operation_key', 128)->unique();
             $table->unsignedInteger('quantity');
@@ -205,6 +209,13 @@ return new class extends Migration
         Schema::dropIfExists('return_request_items');
         Schema::dropIfExists('return_requests');
         Schema::dropIfExists('invoice_snapshots');
+
+        if (Schema::getConnection()->getDriverName() === 'mysql'
+            && ! Schema::hasIndex('orders', 'orders_vendor_id_foreign')) {
+            Schema::table('orders', function (Blueprint $table) {
+                $table->index('vendor_id', 'orders_vendor_id_foreign');
+            });
+        }
 
         Schema::table('orders', function (Blueprint $table) {
             $table->dropIndex(['vendor_id', 'refund_status']);

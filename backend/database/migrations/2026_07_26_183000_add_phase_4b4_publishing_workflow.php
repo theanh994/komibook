@@ -81,7 +81,7 @@ return new class extends Migration
             $table->timestamp('accepted_at');
             $table->string('operation_key', 128)->unique();
             $table->timestamps();
-            $table->unique(['royalty_agreement_id', 'author_id']);
+            $table->unique(['royalty_agreement_id', 'author_id'], 'royalty_acceptance_author_unique');
         });
 
         Schema::create('royalty_ledger_entries', function (Blueprint $table) {
