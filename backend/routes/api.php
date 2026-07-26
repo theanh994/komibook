@@ -267,10 +267,10 @@ Route::middleware(['auth:sanctum', 'role:admin'])->prefix('admin')->name('admin.
     Route::post('fee-schedules', [CommerceFeeScheduleController::class, 'store'])->name('fee-schedules.store');
     Route::post('fee-schedules/preview', [CommerceFeeScheduleController::class, 'preview'])->name('fee-schedules.preview');
 
-    Route::get('articles', [AdminArticleController::class, 'index'])->name('articles.index');
-    Route::post('articles', [AdminArticleController::class, 'store'])->name('articles.store');
-    Route::patch('articles/{article}', [AdminArticleController::class, 'update'])->name('articles.update');
-    Route::patch('articles/{article}/transition', [AdminArticleController::class, 'transition'])->name('articles.transition');
+    Route::get('articles', [AdminArticleController::class, 'index'])->name('cms.articles.index');
+    Route::post('articles', [AdminArticleController::class, 'store'])->name('cms.articles.store');
+    Route::patch('articles/{article}', [AdminArticleController::class, 'update'])->name('cms.articles.update');
+    Route::patch('articles/{article}/transition', [AdminArticleController::class, 'transition'])->name('cms.articles.transition');
 
     // Thống kê tổng quan
     Route::get('stats', [App\Http\Controllers\Api\Admin\DashboardController::class, 'stats'])->name('stats');
