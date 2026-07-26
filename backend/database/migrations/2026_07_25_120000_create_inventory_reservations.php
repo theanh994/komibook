@@ -31,11 +31,19 @@ return new class extends Migration
 
         Schema::create('inventory_reservation_allocations', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('inventory_reservation_id')->constrained('inventory_reservations')->onDelete('cascade');
-            $table->foreignId('warehouse_stock_id')->constrained('warehouse_stocks')->onDelete('restrict');
+            $table->foreignId('inventory_reservation_id');
+            $table->foreignId('warehouse_stock_id');
             $table->unsignedInteger('quantity');
             $table->timestamps();
 
+            $table->foreign('inventory_reservation_id', 'inv_res_alloc_reservation_fk')
+                ->references('id')
+                ->on('inventory_reservations')
+                ->cascadeOnDelete();
+            $table->foreign('warehouse_stock_id', 'inv_res_alloc_stock_fk')
+                ->references('id')
+                ->on('warehouse_stocks')
+                ->restrictOnDelete();
             $table->unique(['inventory_reservation_id', 'warehouse_stock_id'], 'inv_res_alloc_res_wh_unique');
             $table->index('warehouse_stock_id');
         });
