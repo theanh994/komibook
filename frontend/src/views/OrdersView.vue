@@ -137,6 +137,10 @@
                       Xem chi tiết
                       <span class="material-symbols-outlined text-[16px]">chevron_right</span>
                     </button>
+                    <button @click="$router.push(`/orders/invoice/${order.id}`)" class="px-3 py-1.5 rounded-xl border border-outline-variant/30 text-xs font-bold text-on-surface hover:bg-surface-container-high transition-all flex items-center gap-1 cursor-pointer">
+                      <span class="material-symbols-outlined text-[16px]">print</span>
+                      In hóa đơn
+                    </button>
                   </div>
                 </div>
               </div>
@@ -146,7 +150,7 @@
       </main>
     </div>
 
-    <!-- Order Detail Modal (Optional but good) -->
+    <!-- Order Detail Modal -->
     <Dialog v-model:visible="orderDetailVisible" :header="selectedOrder ? 'Chi tiết đơn hàng #' + (selectedOrder.order_code || selectedOrder.id) : 'Chi tiết đơn hàng'" :modal="true" class="!rounded-3xl !border-none !shadow-2xl" :style="{width: '600px'}">
       <div v-if="selectedOrder" class="space-y-xl py-md animate-fade-in">
          <div class="p-lg bg-surface-container-low rounded-2xl border border-outline-variant/10 space-y-md">
@@ -166,6 +170,12 @@
               <span class="text-base font-bold text-on-surface">Tổng cộng</span>
               <span class="text-xl font-black text-primary">{{ formatCurrency(selectedOrder.total_amount) }}</span>
             </div>
+            <div class="pt-md border-t border-outline-variant/10 flex justify-end">
+              <button @click="$router.push(`/orders/invoice/${selectedOrder.id}`)" class="px-4 py-2 bg-primary text-on-primary rounded-xl font-bold text-xs flex items-center gap-1.5 cursor-pointer border-none shadow-sm">
+                <span class="material-symbols-outlined text-sm">print</span>
+                In hóa đơn
+              </button>
+            </div>
          </div>
       </div>
     </Dialog>
@@ -179,6 +189,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from 'primevue/usetoast'
 import apiClient from '@/services/axios'
+import { readApiList } from '@/services/apiContract'
 
 import UserSidebar from '@/components/profile/UserSidebar.vue'
 import Dialog from 'primevue/dialog'
@@ -211,9 +222,9 @@ const fetchOrders = async () => {
   loading.value = true
   try {
     const res = await apiClient.get('/api/my-orders')
-    const fetched = res.data.data || res.data || []
+    const fetched = readApiList(res.data)
     orders.value = fetched.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-  } catch (error) {
+  } catch {
     toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Không thể tải đơn hàng', life: 3000 })
   } finally { loading.value = false }
 }

@@ -44,6 +44,17 @@ export const useAuthStore = defineStore('auth', {
       return response.data;
     },
 
+    async loginWithFacebook(facebookData) {
+      await apiClient.get('/sanctum/csrf-cookie')
+      const response = await apiClient.post('/api/auth/facebook-login', facebookData)
+
+      if (response.data.status === 'success') {
+        await this.fetchUser()
+      }
+
+      return response.data
+    },
+
     async sendPhoneOtp(phone) {
       const response = await apiClient.post('/api/auth/phone/send-otp', { phone })
       return response.data

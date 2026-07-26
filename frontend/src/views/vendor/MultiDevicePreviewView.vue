@@ -16,34 +16,36 @@ const activeChapter = ref({ title: 'Chương 1', content: 'Đang tải nội dun
 const currentDevice = ref('mobile') // 'desktop', 'tablet', 'mobile'
 const readerTheme = ref('light') // 'light', 'dark', 'sepia'
 const fontSize = ref(16) // font size in px
+const loading = ref(true)
+const error = ref(null)
 
 const fetchBookData = async () => {
+  loading.value = true
+  error.value = null
   try {
-    const bookRes = await apiClient.get(`/api/books`)
-    const b = bookRes.data?.data?.find(item => item.id == bookId)
-    if (b) {
+    const bookRes = await apiClient.get(`/api/vendor/books/${bookId}`)
+    if (bookRes.data?.data) {
       book.value = {
-        title: b.title,
-        author_name: b.author_name || 'Tác giả'
+        title: bookRes.data.data.title,
+        author_name: bookRes.data.data.author_name || bookRes.data.data.author || 'Tác giả'
       }
     }
 
     const res = await apiClient.get(`/api/vendor/books/${bookId}/chapters`)
-    if (res.data?.status === 'success' && res.data.data.length > 0) {
+    if (res.data?.status === 'success' && res.data.data && res.data.data.length > 0) {
       chapters.value = res.data.data
       activeChapter.value = res.data.data[0]
     } else {
-      activeChapter.value = {
-        title: 'Chương 1: Khởi đầu giấc mơ',
-        content: 'Đây là nội dung chương sách giả định dùng để xem trước giao diện đọc sách trên nhiều thiết bị khác nhau. Bạn có thể sử dụng Trình soạn thảo để thêm nội dung thực tế cho chương này.'
-      }
+      chapters.value = []
+      activeChapter.value = null
     }
   } catch (e) {
     console.warn('Không tải được thông tin xem trước', e)
-    activeChapter.value = {
-      title: 'Chương 1: Hành trình kỳ bí',
-      content: 'Bóng tối bắt đầu bao trùm lên ngôi làng nhỏ ở thung lũng... Đây là văn bản xem trước đa thiết bị mô phỏng giao diện đọc thực tế.'
-    }
+    error.value = e.response?.data?.message || 'Không thể kết nối API thông tin sách.'
+    chapters.value = []
+    activeChapter.value = null
+  } finally {
+    loading.value = false
   }
 }
 
@@ -94,69 +96,99 @@ onMounted(() => {
       <!-- Main Canvas -->
       <main class="flex-1 overflow-y-auto flex items-center justify-center p-8 bg-slate-200 relative">
         
-        <!-- Desktop Mockup Frame -->
-        <div 
-          v-if="currentDevice === 'desktop'" 
-          :class="[
-            'w-full max-w-4xl h-[650px] rounded-xl border border-slate-300 shadow-xl flex flex-col transition-all overflow-hidden',
-            readerTheme === 'light' ? 'bg-white text-slate-800' : readerTheme === 'dark' ? 'bg-slate-900 text-slate-100' : 'bg-orange-50/70 text-amber-950'
-          ]"
-        >
-          <!-- Browser header bar -->
-          <div class="bg-slate-100 border-b border-slate-200 px-4 py-2 flex items-center gap-2 shrink-0">
-            <span class="w-3 h-3 rounded-full bg-rose-400"></span>
-            <span class="w-3 h-3 rounded-full bg-amber-400"></span>
-            <span class="w-3 h-3 rounded-full bg-emerald-400"></span>
-            <div class="bg-white border border-slate-200 rounded text-[10px] px-4 py-0.5 text-slate-400 flex-grow text-center max-w-xs mx-auto">
-              https://komibook.com/reader/{{ bookId }}
+        <div v-if="loading" class="flex justify-center p-12">
+          <i class="pi pi-spin pi-spinner text-3xl text-indigo-600"></i>
+        </div>
+
+        <div v-else-if="error" class="bg-white rounded-2xl p-8 border border-slate-200 shadow-sm text-center max-w-md mx-auto space-y-4">
+          <div class="w-12 h-12 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mx-auto">
+            <i class="pi pi-exclamation-triangle text-xl"></i>
+          </div>
+          <h3 class="text-base font-bold text-slate-900">Không thể tải thông tin xem trước</h3>
+          <p class="text-xs text-slate-500 leading-relaxed">{{ error }}</p>
+          <Button label="Thử lại" icon="pi pi-refresh" class="p-button-primary bg-indigo-600 p-button-sm text-xs" @click="fetchBookData" />
+        </div>
+
+        <template v-else>
+          <!-- Desktop Mockup Frame -->
+          <div
+            v-if="currentDevice === 'desktop'"
+            :class="[
+              'w-full max-w-4xl h-[650px] rounded-xl border border-slate-300 shadow-xl flex flex-col transition-all overflow-hidden',
+              readerTheme === 'light' ? 'bg-white text-slate-800' : readerTheme === 'dark' ? 'bg-slate-900 text-slate-100' : 'bg-orange-50/70 text-amber-950'
+            ]"
+          >
+            <!-- Browser header bar -->
+            <div class="bg-slate-100 border-b border-slate-200 px-4 py-2 flex items-center gap-2 shrink-0">
+              <span class="w-3 h-3 rounded-full bg-rose-400"></span>
+              <span class="w-3 h-3 rounded-full bg-amber-400"></span>
+              <span class="w-3 h-3 rounded-full bg-emerald-400"></span>
+              <div class="bg-white border border-slate-200 rounded text-[10px] px-4 py-0.5 text-slate-400 flex-grow text-center max-w-xs mx-auto">
+                https://komibook.com/reader/{{ bookId }}
+              </div>
+            </div>
+            <!-- Reader body -->
+            <div class="flex-grow p-12 overflow-y-auto font-serif">
+              <template v-if="activeChapter">
+                <h1 class="text-3xl font-extrabold mb-6">{{ activeChapter.title }}</h1>
+                <p class="leading-relaxed whitespace-pre-line text-lg" :style="{ fontSize: fontSize + 'px' }">
+                  {{ activeChapter.content }}
+                </p>
+              </template>
+              <div v-else class="text-center py-12 text-slate-400 font-sans text-xs">
+                Chưa có dữ liệu chương sách nào.
+              </div>
             </div>
           </div>
-          <!-- Reader body -->
-          <div class="flex-grow p-12 overflow-y-auto font-serif">
-            <h1 class="text-3xl font-extrabold mb-6">{{ activeChapter.title }}</h1>
-            <p class="leading-relaxed whitespace-pre-line text-lg" :style="{ fontSize: fontSize + 'px' }">
-              {{ activeChapter.content }}
-            </p>
-          </div>
-        </div>
 
-        <!-- Tablet Mockup Frame -->
-        <div 
-          v-else-if="currentDevice === 'tablet'" 
-          :class="[
-            'w-[520px] h-[720px] rounded-[32px] border-8 border-slate-800 shadow-2xl flex flex-col transition-all overflow-hidden relative',
-            readerTheme === 'light' ? 'bg-white text-slate-800' : readerTheme === 'dark' ? 'bg-slate-900 text-slate-100' : 'bg-orange-50/70 text-amber-950'
-          ]"
-        >
-          <!-- Top camera hole -->
-          <div class="absolute top-2 left-1/2 -translate-x-1/2 w-3 h-3 rounded-full bg-slate-950 z-20"></div>
-          <!-- Reader body -->
-          <div class="flex-grow p-8 pt-10 overflow-y-auto font-serif">
-            <h1 class="text-2xl font-extrabold mb-4">{{ activeChapter.title }}</h1>
-            <p class="leading-relaxed whitespace-pre-line text-base" :style="{ fontSize: fontSize + 'px' }">
-              {{ activeChapter.content }}
-            </p>
+          <!-- Tablet Mockup Frame -->
+          <div
+            v-else-if="currentDevice === 'tablet'"
+            :class="[
+              'w-[520px] h-[720px] rounded-[32px] border-8 border-slate-800 shadow-2xl flex flex-col transition-all overflow-hidden relative',
+              readerTheme === 'light' ? 'bg-white text-slate-800' : readerTheme === 'dark' ? 'bg-slate-900 text-slate-100' : 'bg-orange-50/70 text-amber-950'
+            ]"
+          >
+            <!-- Top camera hole -->
+            <div class="absolute top-2 left-1/2 -translate-x-1/2 w-3 h-3 rounded-full bg-slate-950 z-20"></div>
+            <!-- Reader body -->
+            <div class="flex-grow p-8 pt-10 overflow-y-auto font-serif">
+              <template v-if="activeChapter">
+                <h1 class="text-2xl font-extrabold mb-4">{{ activeChapter.title }}</h1>
+                <p class="leading-relaxed whitespace-pre-line text-base" :style="{ fontSize: fontSize + 'px' }">
+                  {{ activeChapter.content }}
+                </p>
+              </template>
+              <div v-else class="text-center py-12 text-slate-400 font-sans text-xs">
+                Chưa có dữ liệu chương sách nào.
+              </div>
+            </div>
           </div>
-        </div>
 
-        <!-- Mobile Mockup Frame -->
-        <div 
-          v-else-if="currentDevice === 'mobile'" 
-          :class="[
-            'w-[340px] h-[600px] rounded-[40px] border-[10px] border-slate-900 shadow-2xl flex flex-col transition-all overflow-hidden relative',
-            readerTheme === 'light' ? 'bg-white text-slate-800' : readerTheme === 'dark' ? 'bg-slate-900 text-slate-100' : 'bg-orange-50/70 text-amber-950'
-          ]"
-        >
-          <!-- Notch -->
-          <div class="absolute top-0 left-1/2 -translate-x-1/2 w-28 h-4 bg-slate-900 rounded-b-xl z-20"></div>
-          <!-- Reader body -->
-          <div class="flex-grow p-6 pt-10 overflow-y-auto font-serif">
-            <h1 class="text-xl font-bold mb-3">{{ activeChapter.title }}</h1>
-            <p class="leading-relaxed whitespace-pre-line text-sm" :style="{ fontSize: (fontSize - 2) + 'px' }">
-              {{ activeChapter.content }}
-            </p>
+          <!-- Mobile Mockup Frame -->
+          <div
+            v-else-if="currentDevice === 'mobile'"
+            :class="[
+              'w-[340px] h-[600px] rounded-[40px] border-[10px] border-slate-900 shadow-2xl flex flex-col transition-all overflow-hidden relative',
+              readerTheme === 'light' ? 'bg-white text-slate-800' : readerTheme === 'dark' ? 'bg-slate-900 text-slate-100' : 'bg-orange-50/70 text-amber-950'
+            ]"
+          >
+            <!-- Notch -->
+            <div class="absolute top-0 left-1/2 -translate-x-1/2 w-28 h-4 bg-slate-900 rounded-b-xl z-20"></div>
+            <!-- Reader body -->
+            <div class="flex-grow p-6 pt-10 overflow-y-auto font-serif">
+              <template v-if="activeChapter">
+                <h1 class="text-xl font-bold mb-3">{{ activeChapter.title }}</h1>
+                <p class="leading-relaxed whitespace-pre-line text-sm" :style="{ fontSize: (fontSize - 2) + 'px' }">
+                  {{ activeChapter.content }}
+                </p>
+              </template>
+              <div v-else class="text-center py-12 text-slate-400 font-sans text-xs">
+                Chưa có dữ liệu chương sách nào.
+              </div>
+            </div>
           </div>
-        </div>
+        </template>
 
       </main>
 

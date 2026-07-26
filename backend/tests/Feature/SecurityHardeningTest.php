@@ -173,7 +173,7 @@ class SecurityHardeningTest extends TestCase
         $sendRes->assertJsonMissing(['otp']); // Không trả OTP trong HTTP response
 
         $storedOtp = Cache::get('test_otp_0912345678');
-        $this->assertEquals(6, strlen($storedOtp));
+        $this->assertMatchesRegularExpression('/^\d{8}$/', $storedOtp);
 
         // 2. Rate limit 60s cho lần gửi tiếp theo
         $rateRes = $this->postJson('/api/auth/phone/send-otp', [
@@ -184,7 +184,7 @@ class SecurityHardeningTest extends TestCase
         // 3. Verify OTP với mã sai -> Bị từ chối
         $failVerify = $this->postJson('/api/auth/phone/verify-otp', [
             'phone' => '0912345678',
-            'otp' => '000000',
+            'otp' => '00000000',
         ]);
         $failVerify->assertStatus(422);
 
@@ -214,7 +214,7 @@ class SecurityHardeningTest extends TestCase
         // 1. Thiếu SMS provider -> Throw RuntimeException
         Config::set('services.sms.provider', '');
         try {
-            $sender->send('0912345678', '123456');
+            $sender->send('0912345678', '12345678');
             $this->fail('Expected RuntimeException was not thrown.');
         } catch (RuntimeException $e) {
             $this->assertStringContainsString('Hệ thống chưa được cấu hình dịch vụ SMS Gateway provider', $e->getMessage());
@@ -223,7 +223,7 @@ class SecurityHardeningTest extends TestCase
         // 2. Cấu hình provider nhưng chưa có adapter -> Throw RuntimeException (Không return true khống)
         Config::set('services.sms.provider', 'unsupported_provider');
         try {
-            $sender->send('0912345678', '123456');
+            $sender->send('0912345678', '12345678');
             $this->fail('Expected RuntimeException was not thrown.');
         } catch (RuntimeException $e) {
             $this->assertStringContainsString('chưa được hỗ trợ adapter', $e->getMessage());
@@ -386,6 +386,11 @@ class SecurityHardeningTest extends TestCase
         $response->assertHeader('X-Content-Type-Options', 'nosniff');
         $response->assertHeader('X-Frame-Options', 'SAMEORIGIN');
         $response->assertHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+        $contentSecurityPolicy = $response->headers->get('Content-Security-Policy-Report-Only');
+        $this->assertStringContainsString('https://accounts.google.com', $contentSecurityPolicy);
+        $this->assertStringContainsString('https://connect.facebook.net', $contentSecurityPolicy);
+        $this->assertStringContainsString('https://graph.facebook.com', $contentSecurityPolicy);
+        $this->assertStringContainsString('https://www.facebook.com', $contentSecurityPolicy);
     }
 
     /**

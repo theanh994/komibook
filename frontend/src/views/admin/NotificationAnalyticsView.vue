@@ -1,13 +1,12 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
-import { useToast } from 'primevue/usetoast'
 import apiClient from '@/services/axios'
 
 const route = useRoute()
-const toast = useToast()
 
 const loading = ref(true)
+const error = ref(null)
 const campaign = ref(null)
 const analytics = ref(null)
 
@@ -20,13 +19,17 @@ const audienceLabels = {
 
 const fetchAnalytics = async () => {
   loading.value = true
+  error.value = null
   try {
     const id = route.params.id
     const res = await apiClient.get(`/api/admin/notifications/campaigns/${id}`)
-    campaign.value = res.data.campaign
-    analytics.value = res.data.analytics
+    campaign.value = res.data.campaign || null
+    analytics.value = res.data.analytics || null
   } catch (err) {
-    toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Không thể tải dữ liệu báo cáo.', life: 3000 })
+    console.error('Không tải được dữ liệu báo cáo thông báo', err)
+    campaign.value = null
+    analytics.value = null
+    error.value = err.response?.data?.message || 'Không thể kết nối API báo cáo chiến dịch.'
   } finally {
     loading.value = false
   }
@@ -74,6 +77,18 @@ onMounted(() => {
       <span class="text-sm text-slate-500">Đang phân tích dữ liệu chiến dịch...</span>
     </div>
 
+    <!-- Error State -->
+    <div v-else-if="error" class="bg-rose-50 border border-rose-200 rounded-2xl p-8 text-center space-y-4 my-6">
+      <i class="pi pi-exclamation-triangle text-4xl text-rose-500"></i>
+      <h3 class="text-lg font-bold text-rose-800">Không thể tải dữ liệu báo cáo</h3>
+      <p class="text-sm text-rose-600 max-w-md mx-auto">{{ error }}</p>
+      <div class="flex justify-center gap-3 pt-2">
+        <button @click="fetchAnalytics" class="px-4 py-2 bg-rose-600 text-white rounded-lg font-bold text-xs hover:bg-rose-700 flex items-center gap-1">
+          <i class="pi pi-refresh"></i> Thử lại
+        </button>
+      </div>
+    </div>
+
     <!-- Main Content -->
     <div v-else-if="campaign" class="space-y-8 animate-slide-up">
       <!-- Campaign Meta Info Card -->
@@ -81,14 +96,14 @@ onMounted(() => {
         <div class="space-y-2">
           <span class="inline-flex items-center gap-1.5 px-3 py-1 bg-indigo-50/70 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 rounded-full text-xs font-medium">
             <span class="w-1.5 h-1.5 bg-indigo-500 rounded-full"></span>
-            Gửi tới: {{ audienceLabels[campaign.target_audience] }}
+            Gửi tới: {{ audienceLabels[campaign.target_audience] || campaign.target_audience }}
           </span>
           <h2 class="text-xl font-bold text-slate-800 dark:text-zinc-100">{{ campaign.title }}</h2>
           <p class="text-sm text-slate-500 dark:text-zinc-400 max-w-2xl leading-relaxed">{{ campaign.message }}</p>
         </div>
         <div class="shrink-0 flex flex-col items-start md:items-end text-xs text-slate-400 gap-1 border-t md:border-t-0 border-slate-100 dark:border-zinc-800 pt-4 md:pt-0">
-          <div>Trạng thái: <span class="font-bold text-emerald-600 uppercase">Đã gửi</span></div>
-          <div>Ngày gửi: <span class="font-semibold text-slate-600 dark:text-zinc-300">{{ formatDate(campaign.created_at) }}</span></div>
+          <div>Trạng thái: <span class="font-bold text-emerald-600 uppercase">{{ campaign.status === 'sent' ? 'Đã gửi' : 'Nháp' }}</span></div>
+          <div>Ngày tạo: <span class="font-semibold text-slate-600 dark:text-zinc-300">{{ formatDate(campaign.created_at) }}</span></div>
         </div>
       </div>
 
@@ -110,9 +125,11 @@ onMounted(() => {
             <span class="text-xs uppercase tracking-wider font-semibold text-slate-400 dark:text-zinc-500">Tỷ lệ nhận</span>
             <span class="material-symbols-outlined text-[20px] text-emerald-500">done_all</span>
           </div>
-          <div class="text-3xl font-extrabold text-slate-800 dark:text-zinc-100 mt-3">{{ analytics?.delivery_rate || 98.4 }}%</div>
+          <div class="text-3xl font-extrabold text-slate-800 dark:text-zinc-100 mt-3">
+            {{ analytics?.delivery_rate != null ? analytics.delivery_rate + '%' : '—' }}
+          </div>
           <div class="w-full bg-slate-100 dark:bg-zinc-800 rounded-full h-1.5 mt-3 overflow-hidden">
-            <div class="bg-emerald-500 h-full rounded-full" :style="{ width: (analytics?.delivery_rate || 98.4) + '%' }"></div>
+            <div class="bg-emerald-500 h-full rounded-full" :style="{ width: (analytics?.delivery_rate || 0) + '%' }"></div>
           </div>
         </div>
 
@@ -141,14 +158,14 @@ onMounted(() => {
         </div>
       </div>
 
-      <!-- Charts & Breakdown Section -->
-      <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
-        <!-- Left: Hourly Activity bar chart (Custom SVG/CSS implementation) -->
+      <!-- Telemetry Breakdown Section -->
+      <div v-if="analytics && analytics.telemetry_available && (analytics.hourly_opens?.length > 0 || analytics.devices?.length > 0)" class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        <!-- Left: Hourly Activity bar chart -->
         <div class="lg:col-span-8 bg-white dark:bg-zinc-900 border border-slate-100 dark:border-zinc-800 rounded-2xl p-6 shadow-sm space-y-6">
           <div class="flex justify-between items-center">
             <div>
               <h3 class="text-md font-bold text-slate-800 dark:text-zinc-200">Tiến trình tương tác theo giờ</h3>
-              <p class="text-xs text-slate-400 mt-0.5">Biểu diễn số lượt mở và click vào liên kết trong 6 giờ đầu.</p>
+              <p class="text-xs text-slate-400 mt-0.5">Biểu diễn số lượt mở và click vào liên kết.</p>
             </div>
             <div class="flex items-center gap-4 text-xs font-semibold text-slate-500">
               <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 bg-indigo-500 rounded"></span> Lượt mở</span>
@@ -156,33 +173,25 @@ onMounted(() => {
             </div>
           </div>
 
-          <!-- Vertical Bars chart container -->
           <div class="h-64 flex items-end justify-around pt-6 border-b border-slate-100 dark:border-zinc-800 pb-1 px-4">
             <div
-              v-for="h in analytics?.hourly_opens"
+              v-for="h in analytics.hourly_opens"
               :key="h.time"
               class="flex flex-col items-center group w-full max-w-[48px]"
             >
-              <!-- Hover tooltip -->
               <div class="opacity-0 group-hover:opacity-100 absolute -translate-y-16 bg-slate-850 dark:bg-zinc-800 text-white text-[10px] py-1 px-2 rounded shadow-md pointer-events-none transition-all duration-200 text-center font-mono">
                 Mở: {{ h.opens }}<br/>Click: {{ h.clicks }}
               </div>
-
-              <!-- Double bars stack -->
               <div class="flex items-end gap-1.5 w-full justify-center">
-                <!-- Open bar -->
                 <div
                   class="w-3.5 bg-indigo-500 hover:bg-indigo-600 rounded-t transition-all duration-300"
                   :style="{ height: (h.opens * 3) + 'px' }"
                 ></div>
-                <!-- Click bar -->
                 <div
                   class="w-3.5 bg-amber-500 hover:bg-amber-600 rounded-t transition-all duration-300"
                   :style="{ height: (h.clicks * 3.5) + 'px' }"
                 ></div>
               </div>
-
-              <!-- Time axis label -->
               <span class="text-[10px] text-slate-400 mt-2 font-mono">{{ h.time }}</span>
             </div>
           </div>
@@ -190,44 +199,20 @@ onMounted(() => {
 
         <!-- Right: Device & Segment breakdown -->
         <div class="lg:col-span-4 space-y-6">
-          <!-- Device Breakdown -->
           <div class="bg-white dark:bg-zinc-900 border border-slate-100 dark:border-zinc-800 rounded-2xl p-6 shadow-sm space-y-4">
             <h3 class="text-sm font-bold text-slate-800 dark:text-zinc-200">Môi trường thiết bị</h3>
             <div class="space-y-3.5">
-              <div v-for="d in analytics?.devices" :key="d.device" class="space-y-1">
+              <div v-for="d in analytics.devices" :key="d.device" class="space-y-1">
                 <div class="flex justify-between text-xs font-semibold text-slate-600 dark:text-zinc-400">
                   <span class="flex items-center gap-1.5">
-                    <span class="material-symbols-outlined text-[16px]">
-                      {{ d.device.includes('iOS') ? 'phone_iphone' : d.device.includes('Android') ? 'phone_android' : 'desktop_windows' }}
-                    </span>
                     {{ d.device }}
                   </span>
                   <span class="font-mono text-slate-800 dark:text-zinc-200">{{ d.percentage }}%</span>
                 </div>
                 <div class="w-full bg-slate-50 dark:bg-zinc-800/80 rounded-full h-1.5 overflow-hidden">
                   <div
-                    class="h-full rounded-full"
-                    :class="d.device.includes('iOS') ? 'bg-indigo-600' : d.device.includes('Android') ? 'bg-indigo-400' : 'bg-zinc-400'"
+                    class="h-full rounded-full bg-indigo-600"
                     :style="{ width: d.percentage + '%' }"
-                  ></div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Target Segment Performance -->
-          <div class="bg-white dark:bg-zinc-900 border border-slate-100 dark:border-zinc-800 rounded-2xl p-6 shadow-sm space-y-4">
-            <h3 class="text-sm font-bold text-slate-800 dark:text-zinc-200">Hiệu quả theo phân khúc</h3>
-            <div class="space-y-3.5">
-              <div v-for="s in analytics?.segments" :key="s.segment" class="space-y-1">
-                <div class="flex justify-between text-xs font-semibold text-slate-600 dark:text-zinc-400">
-                  <span>{{ s.segment }}</span>
-                  <span class="font-mono text-slate-800 dark:text-zinc-200">{{ s.percentage }}%</span>
-                </div>
-                <div class="w-full bg-slate-50 dark:bg-zinc-800/80 rounded-full h-1.5 overflow-hidden">
-                  <div
-                    class="h-full rounded-full bg-gradient-to-r from-indigo-500 to-indigo-600"
-                    :style="{ width: s.percentage + '%' }"
                   ></div>
                 </div>
               </div>
@@ -235,6 +220,22 @@ onMounted(() => {
           </div>
         </div>
       </div>
+
+      <!-- Telemetry Unavailable Honest Banner -->
+      <div v-else class="bg-slate-50 dark:bg-zinc-800/50 border border-slate-200 dark:border-zinc-700/60 rounded-2xl p-8 text-center space-y-2">
+        <i class="pi pi-chart-bar text-3xl text-slate-400"></i>
+        <h3 class="text-sm font-bold text-slate-700 dark:text-zinc-300">Chưa có dữ liệu theo dõi chi tiết (Telemetry Unavailable)</h3>
+        <p class="text-xs text-slate-400 dark:text-zinc-400 max-w-lg mx-auto leading-relaxed">
+          Hệ thống hiện tại chỉ theo dõi chỉ số gửi thực tế. Phân tích tiến trình theo giờ, môi trường thiết bị và phân khúc chưa được thu thập cho chiến dịch này.
+        </p>
+      </div>
     </div>
   </div>
 </template>
+
+<style scoped>
+.animate-fade-in { animation: fadeIn 0.4s ease-out; }
+.animate-slide-up { animation: slideUp 0.4s ease-out; }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes slideUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+</style>

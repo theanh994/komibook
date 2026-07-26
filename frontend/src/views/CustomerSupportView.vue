@@ -17,6 +17,7 @@ const toast = useToast()
 const tickets = ref([])
 const loading = ref(true)
 const sending = ref(false)
+const error = ref(null)
 
 const newTicket = ref({
   subject: '',
@@ -41,17 +42,20 @@ const priorityOptions = [
 
 const fetchTickets = async () => {
   loading.value = true
+  error.value = null
   try {
     const res = await apiClient.get('/api/support/tickets')
     if (res.data?.status === 'success') {
-      tickets.value = res.data.data
+      tickets.value = res.data.data || []
+    } else if (Array.isArray(res.data)) {
+      tickets.value = res.data
+    } else {
+      tickets.value = []
     }
   } catch (e) {
     console.error('Không tải được danh sách hỗ trợ', e)
-    // Fallback Mock Data
-    tickets.value = [
-      { id: 1, subject: 'Lỗi tải sách PDF sau thanh toán', category: 'technical', priority: 'high', status: 'open', updated_at: '2026-07-13T10:00:00Z' },
-    ]
+    tickets.value = []
+    error.value = e.response?.data?.message || 'Không thể kết nối API danh sách yêu cầu.'
   } finally {
     loading.value = false
   }
@@ -84,12 +88,11 @@ const submitTicket = async () => {
 
     if (res.data?.status === 'success') {
       toast.add({ severity: 'success', summary: 'Thành công', detail: 'Gửi yêu cầu hỗ trợ thành công. Chúng tôi sẽ phản hồi sớm nhất.', life: 4000 })
-      // Reset form
       newTicket.value = { subject: '', category: 'technical', priority: 'medium', message: '' }
       attachment.value = null
       fetchTickets()
     }
-  } catch (e) {
+  } catch {
     toast.add({ severity: 'error', summary: 'Lỗi gửi yêu cầu', detail: 'Không thể gửi yêu cầu hỗ trợ.', life: 3000 })
   } finally {
     sending.value = false
@@ -161,6 +164,11 @@ onMounted(() => {
             <i class="pi pi-spin pi-spinner text-2xl text-slate-400"></i>
           </div>
 
+          <div v-else-if="error" class="bg-rose-50 border border-rose-200 rounded-xl p-4 text-center space-y-2">
+            <p class="text-xs text-rose-600 font-medium">{{ error }}</p>
+            <Button label="Thử lại" icon="pi pi-refresh" class="p-button-danger p-button-sm text-xs bg-rose-600 text-white" @click="fetchTickets" />
+          </div>
+
           <div v-else class="divide-y divide-slate-100 max-h-[400px] overflow-y-auto pr-2">
             <div 
               v-for="ticket in tickets" 
@@ -171,7 +179,7 @@ onMounted(() => {
               <div class="min-w-0 pr-2">
                 <h4 class="font-bold text-slate-700 text-xs truncate">{{ ticket.subject }}</h4>
                 <p class="text-[10px] text-slate-400 mt-1">
-                  Mã: #TK-890{{ ticket.id }} | Cập nhật: {{ ticket.updated_at?.split('T')[0] }}
+                  Mã: #TK-{{ ticket.id }} | Cập nhật: {{ ticket.updated_at?.split('T')[0] }}
                 </p>
               </div>
               <span :class="[

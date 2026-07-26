@@ -47,9 +47,11 @@
               </svg>
               <span class="text-sm font-semibold text-on-surface">Đăng ký với Google</span>
             </button>
-            <button type="button" @click="openPhoneLogin" class="w-full h-11 flex items-center justify-center gap-3 px-6 border border-outline-variant/60 rounded-xl bg-surface hover:bg-surface-container-low transition-all duration-200 cursor-pointer group shadow-sm active:scale-[0.98]">
-              <span class="material-symbols-outlined text-xl text-primary transition-transform group-hover:scale-110">phone_iphone</span>
-              <span class="text-sm font-semibold text-on-surface">Đăng ký bằng Số điện thoại</span>
+            <button type="button" @click="openFacebookLogin" class="w-full h-11 flex items-center justify-center gap-3 px-6 border border-outline-variant/60 rounded-xl bg-surface hover:bg-surface-container-low transition-all duration-200 cursor-pointer group shadow-sm active:scale-[0.98]">
+              <svg class="w-5 h-5 text-[#1877F2] transition-transform group-hover:scale-110" viewBox="0 0 24 24" aria-hidden="true">
+                <path fill="currentColor" d="M24 12.073C24 5.405 18.627 0 12 0S0 5.405 0 12.073C0 18.1 4.388 23.094 10.125 24v-8.437H7.078v-3.49h3.047V9.414c0-3.026 1.792-4.697 4.533-4.697 1.313 0 2.686.236 2.686.236v2.974h-1.513c-1.49 0-1.956.931-1.956 1.887v2.259h3.328l-.532 3.49h-2.796V24C19.612 23.094 24 18.1 24 12.073Z"/>
+              </svg>
+              <span class="text-sm font-semibold text-on-surface">Đăng ký với Facebook</span>
             </button>
           </div>
 
@@ -82,19 +84,9 @@
                   Email
                 </label>
                 <input                  v-model="form.email"
-                  class="w-full h-11 bg-surface-container-lowest border border-outline-variant/60 rounded-xl px-4 text-sm text-on-surface placeholder:text-outline/40 focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/5 transition-all duration-200"                  id="email"                  placeholder="name@example.com (Không bắt buộc nếu nhập SĐT)"                  type="email"
-                  autocomplete="off"
-                />
-              </div>
-
-              <!-- Phone Input -->
-              <div class="flex flex-col gap-1.5">
-                <label class="text-[13px] font-semibold text-on-surface-variant ml-0.5 flex items-center gap-2 uppercase tracking-wide" for="phone">
-                  <span class="material-symbols-outlined text-[18px] text-primary/80">phone</span>
-                  Số điện thoại
-                </label>
-                <input                  v-model="form.phone"
-                  class="w-full h-11 bg-surface-container-lowest border border-outline-variant/60 rounded-xl px-4 text-sm text-on-surface placeholder:text-outline/40 focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/5 transition-all duration-200"                  id="phone"                  placeholder="0987xxxxxx (Không bắt buộc nếu nhập Email)"                  type="tel"
+                  class="w-full h-11 bg-surface-container-lowest border border-outline-variant/60 rounded-xl px-4 text-sm text-on-surface placeholder:text-outline/40 focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/5 transition-all duration-200"                  id="email"                  placeholder="name@example.com"                  type="email"
+                  autocomplete="email"
+                  required
                 />
               </div>
 
@@ -229,15 +221,15 @@
     </main>
 
 
-    <!-- Google Complete Registration Dialog -->
-    <Dialog      v-model:visible="googleRegDialogVisible"      header="Hoàn tất đăng ký với Google"      :modal="true"      class="!max-w-xl !w-[90vw] !rounded-[24px] !bg-surface-container-lowest"
+    <!-- Social Account Complete Registration Dialog -->
+    <Dialog      v-model:visible="googleRegDialogVisible"      :header="`Hoàn tất đăng ký với ${socialProviderLabel}`"      :modal="true"      class="!max-w-xl !w-[90vw] !rounded-[24px] !bg-surface-container-lowest"
     >
       <form @submit.prevent="handleGoogleRegister" class="flex flex-col gap-5 py-4">
         <div class="bg-primary/5 p-4 rounded-xl border border-primary/10 flex items-center gap-3">
           <span class="material-symbols-outlined text-primary text-2xl">verified_user</span>
           <div>
-            <div class="text-xs font-bold text-primary uppercase tracking-wide">Tài khoản Google đã xác minh</div>
-            <div class="text-xs text-on-surface-variant mt-0.5">Email của bạn đã được xác minh qua Google. Vui lòng bổ sung thêm thông tin.</div>
+            <div class="text-xs font-bold text-primary uppercase tracking-wide">Tài khoản {{ socialProviderLabel }} đã xác minh</div>
+            <div class="text-xs text-on-surface-variant mt-0.5">KomiBook đã xác minh tài khoản với {{ socialProviderLabel }}. Vui lòng bổ sung thêm thông tin.</div>
           </div>
         </div>
 
@@ -249,8 +241,10 @@
               Email
             </label>
             <input              v-model="googleRegForm.email"
-              disabled
-              class="w-full h-11 bg-surface-container-lowest border border-outline-variant/60 rounded-xl px-4 text-sm text-on-surface-variant opacity-60 cursor-not-allowed"            />
+              required
+              type="email"
+              :disabled="socialEmailLocked"
+              class="w-full h-11 bg-surface-container-lowest border border-outline-variant/60 rounded-xl px-4 text-sm text-on-surface-variant disabled:opacity-60 disabled:cursor-not-allowed"            />
           </div>
 
           <!-- Name -->
@@ -266,20 +260,7 @@
           </div>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <!-- Phone -->
-          <div class="flex flex-col gap-1.5">
-            <label class="text-[13px] font-semibold text-on-surface-variant flex items-center gap-2 uppercase tracking-wide">
-              <span class="material-symbols-outlined text-[18px] text-primary/80">phone</span>
-              Số điện thoại
-            </label>
-            <input              v-model="googleRegForm.phone"
-              required
-              placeholder="09xxxxxxxx"
-              type="tel"
-              class="w-full h-11 bg-surface-container-lowest border border-outline-variant/60 rounded-xl px-4 text-sm text-on-surface placeholder:text-outline/40 focus:outline-none focus:border-primary transition-all duration-200"            />
-          </div>
-
+        <div class="grid grid-cols-1 gap-4">
           <!-- Gender -->
           <div class="flex flex-col gap-1.5">
             <label class="text-[13px] font-semibold text-on-surface-variant flex items-center gap-2 uppercase tracking-wide">
@@ -372,7 +353,7 @@
     <Dialog      v-model:visible="phoneDialogVisible"      header="Đăng nhập / Đăng ký bằng Số điện thoại"      :modal="true"      class="!max-w-md !w-[90vw] !rounded-[24px] !bg-surface-container-lowest"
     >
       <div class="flex flex-col gap-6 py-4">
-        <p class="text-xs text-on-surface-variant leading-relaxed">Nhập số điện thoại của bạn để nhận mã xác thực OTP gửi qua tin nhắn SMS giả lập:</p>
+        <p class="text-xs text-on-surface-variant leading-relaxed">Nhập số điện thoại của bạn để nhận mã xác thực OTP gửi qua SMS:</p>
         <div class="flex flex-col gap-4">
           <!-- Phone Input Section -->
           <div class="flex flex-col gap-1.5">
@@ -394,11 +375,9 @@
           <!-- OTP Verify Section -->
           <div v-if="otpSent" class="flex flex-col gap-2 animate-in fade-in slide-in-from-top-4 duration-300">
             <div class="flex justify-between items-center">
-              <label class="text-[12px] font-bold text-on-surface-variant uppercase tracking-wider">Mã xác thực OTP (6 chữ số)</label>
+              <label class="text-[12px] font-bold text-on-surface-variant uppercase tracking-wider">Mã xác thực OTP (8 chữ số)</label>
             </div>
-            <input              v-model="otpInput"              placeholder="Nhập 6 chữ số"              maxlength="6"
-              class="w-full h-11 bg-surface-container-lowest border border-outline-variant/60 rounded-xl px-4 text-center tracking-[12px] text-lg font-bold text-on-surface focus:outline-none focus:border-primary transition-all"
-            />
+            <OtpCodeInput v-model="otpInput" :length="8" :disabled="loading" />
             <button              type="button"
               @click="handleVerifyOtp"
               :disabled="loading"
@@ -557,14 +536,17 @@ import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from 'primevue/usetoast'
 import Dialog from 'primevue/dialog'
+import OtpCodeInput from '@/components/auth/OtpCodeInput.vue'
+import { requestFacebookLogin } from '@/services/facebookAuth'
 
 const googleRegDialogVisible = ref(false)
+const socialProviderLabel = ref('Google')
+const socialEmailLocked = ref(true)
 
 const googleRegForm = reactive({
   challenge_token: '',
   name: '',
   email: '',
-  phone: '',
   gender: 'male',
   birthday: '',
   desired_role: 'customer',
@@ -599,7 +581,6 @@ const showPassword = ref(false)
 const form = reactive({
   name: '',
   email: '',
-  phone: '',
   gender: 'male',
   birthday: '',
   password: '',
@@ -641,10 +622,11 @@ const handleGoogleCredentialResponse = async (response) => {
         router.push({ name: 'dashboard' })
       }, 500)
     } else if (res.status === 'needs_registration') {
+      socialProviderLabel.value = 'Google'
+      socialEmailLocked.value = true
       googleRegForm.challenge_token = res.data.challenge_token
       googleRegForm.email = res.data.email
       googleRegForm.name = res.data.name
-      googleRegForm.phone = ''
       googleRegForm.gender = 'male'
       googleRegForm.birthday = ''
       googleRegForm.desired_role = 'customer'
@@ -689,11 +671,49 @@ const openGoogleLogin = async () => {
   }
 }
 
-const openPhoneLogin = () => {
-  phoneDialogVisible.value = true
-  otpSent.value = false
-  phoneInput.value = ''
-  otpInput.value = ''
+const openFacebookLogin = async () => {
+  const appId = import.meta.env.VITE_FACEBOOK_APP_ID
+  const graphVersion = import.meta.env.VITE_FACEBOOK_GRAPH_VERSION
+
+  if (!appId || !graphVersion) {
+    toast.add({
+      severity: 'error',
+      summary: 'Cấu hình chưa sẵn sàng',
+      detail: 'Chưa cấu hình Facebook App ID hoặc Graph API version.',
+      life: 4000
+    })
+    return
+  }
+
+  loading.value = true
+  try {
+    const accessToken = await requestFacebookLogin(appId, graphVersion)
+    const res = await authStore.loginWithFacebook({ access_token: accessToken })
+
+    if (res.status === 'success') {
+      toast.add({ severity: 'success', summary: 'Thành công', detail: 'Đăng nhập Facebook thành công!', life: 3000 })
+      setTimeout(() => {
+        router.push({ name: 'dashboard' })
+      }, 500)
+    } else if (res.status === 'needs_registration') {
+      socialProviderLabel.value = 'Facebook'
+      socialEmailLocked.value = Boolean(res.data.email)
+      googleRegForm.challenge_token = res.data.challenge_token
+      googleRegForm.email = res.data.email || ''
+      googleRegForm.name = res.data.name || ''
+      googleRegForm.gender = 'male'
+      googleRegForm.birthday = ''
+      googleRegForm.desired_role = 'customer'
+      googleRegForm.password = ''
+      googleRegForm.password_confirmation = ''
+      googleRegDialogVisible.value = true
+    }
+  } catch (error) {
+    const errorMessage = error.response?.data?.message || error.message || 'Đăng nhập Facebook không thành công.'
+    toast.add({ severity: 'error', summary: 'Lỗi Facebook Login', detail: errorMessage, life: 4000 })
+  } finally {
+    loading.value = false
+  }
 }
 
 const handleSendOtp = async () => {
@@ -717,8 +737,8 @@ const handleSendOtp = async () => {
 
 const handleVerifyOtp = async () => {
   const cleanedPhone = phoneInput.value ? phoneInput.value.replace(/[^0-9]/g, '') : ''
-  if (!otpInput.value || !/^\d{6}$/.test(otpInput.value)) {
-    toast.add({ severity: 'warn', summary: 'Cảnh báo', detail: 'Vui lòng nhập đúng 6 chữ số mã OTP.', life: 3000 })
+  if (!otpInput.value || !/^\d{8}$/.test(otpInput.value)) {
+    toast.add({ severity: 'warn', summary: 'Cảnh báo', detail: 'Vui lòng nhập đúng 8 chữ số mã OTP.', life: 3000 })
     return
   }
   loading.value = true
@@ -782,7 +802,7 @@ const handleGoogleRegister = async () => {
   try {
     await authStore.register({ ...googleRegForm })
     googleRegDialogVisible.value = false
-    toast.add({ severity: 'success', summary: 'Thành công', detail: 'Tài khoản Google đã được đăng ký và liên kết thành công!', life: 3000 })
+    toast.add({ severity: 'success', summary: 'Thành công', detail: `Tài khoản ${socialProviderLabel.value} đã được đăng ký và liên kết thành công!`, life: 3000 })
     setTimeout(() => {
       router.push({ name: 'dashboard' })
     }, 500)
@@ -803,8 +823,8 @@ const handleGoogleRegister = async () => {
 
 
 const handleRegister = async () => {
-  if (!form.email && !form.phone) {
-    toast.add({ severity: 'warn', summary: 'Cảnh báo', detail: 'Vui lòng nhập Email hoặc Số điện thoại để đăng ký.', life: 3000 })
+  if (!form.email) {
+    toast.add({ severity: 'warn', summary: 'Cảnh báo', detail: 'Vui lòng nhập Email để đăng ký.', life: 3000 })
     return
   }
 

@@ -8,29 +8,21 @@ const transferId = route.params.id
 
 const transfer = ref(null)
 const loading = ref(true)
+const error = ref(null)
 
 const fetchTransferDetails = async () => {
   loading.value = true
+  error.value = null
   try {
     const res = await apiClient.get(`/api/vendor/inventory/transfers/${transferId}`)
-    if (res.data?.status === 'success') {
+    if (res.data?.status === 'success' && res.data.data) {
       transfer.value = res.data.data
+    } else {
+      error.value = 'Không tìm thấy phiếu điều chuyển kho.'
     }
   } catch (e) {
     console.error('Không tải được phiếu điều chuyển', e)
-    // Fallback Mock Print
-    transfer.value = {
-      transfer_code: 'TRF-20260713-A8BC',
-      from_warehouse: { name: 'Kho Trung Tâm (Quận 1)', address: '123 Lê Lợi, Phường Bến Nghé, Quận 1, TP.HCM' },
-      to_warehouse: { name: 'Kho Chi Nhánh Thủ Đức', address: '45 Võ Văn Ngân, Phường Linh Chiểu, Thủ Đức, TP.HCM' },
-      reason: 'Bổ sung số lượng sách tham khảo chuyên ngành và tiểu thuyết bán chạy cho chi nhánh Thủ Đức.',
-      created_at: '2026-07-13',
-      items: [
-        { id: 1, book: { title: 'Lược Sử Loài Người (Sapiens)' }, quantity: 50 },
-        { id: 2, book: { title: 'Lược Sử Thời Gian' }, quantity: 30 },
-        { id: 3, book: { title: 'Nhà Giả Kim' }, quantity: 100 },
-      ]
-    }
+    error.value = e.response?.data?.message || 'Không thể kết nối API phiếu điều chuyển kho.'
   } finally {
     loading.value = false
   }
@@ -48,8 +40,25 @@ onMounted(() => {
 
 <template>
   <div class="print-page min-h-screen bg-slate-100 py-10 px-4 flex justify-center">
-    <div v-if="loading" class="flex items-center justify-center p-12">
+    <div v-if="loading" class="flex flex-col items-center justify-center p-12 gap-3">
       <i class="pi pi-spin pi-spinner text-3xl text-slate-500"></i>
+      <p class="text-xs text-slate-500 font-semibold">Đang tải thông tin phiếu điều chuyển...</p>
+    </div>
+
+    <div v-else-if="error || !transfer" class="bg-white max-w-md w-full p-8 rounded-2xl border border-slate-200 shadow-md text-center my-auto space-y-4">
+      <div class="w-12 h-12 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mx-auto">
+        <i class="pi pi-exclamation-triangle text-xl"></i>
+      </div>
+      <h3 class="text-base font-bold text-slate-900">Không thể tải phiếu điều chuyển</h3>
+      <p class="text-xs text-slate-500 leading-relaxed">{{ error || 'Phiếu điều chuyển không tồn tại hoặc lỗi hệ thống.' }}</p>
+      <div class="pt-2 flex justify-center gap-3">
+        <button class="px-4 py-2 bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg hover:bg-slate-300 transition-colors border-none cursor-pointer" @click="window.close()">
+          Đóng tab
+        </button>
+        <button class="px-4 py-2 bg-indigo-600 text-white text-xs font-semibold rounded-lg hover:bg-indigo-700 transition-colors border-none cursor-pointer" @click="fetchTransferDetails">
+          Thử lại
+        </button>
+      </div>
     </div>
 
     <!-- Print Container -->
@@ -66,7 +75,7 @@ onMounted(() => {
         <div class="text-left md:text-right">
           <h2 class="text-2xl font-extrabold text-slate-900 mb-1">PHIẾU ĐIỀU CHUYỂN KHO</h2>
           <div class="text-xs text-slate-500 space-y-1">
-            <p>Số phiếu: <span class="font-bold text-slate-900 tracking-wider">{{ transfer.transfer_code }}</span></p>
+            <p>Số phiếu: <span class="font-bold text-slate-900 tracking-wider">{{ transfer.transfer_code || ('TRF-' + transfer.id) }}</span></p>
             <p>Ngày lập: <span class="text-slate-900 font-medium">{{ transfer.created_at?.split('T')[0] }}</span></p>
           </div>
         </div>
@@ -78,7 +87,7 @@ onMounted(() => {
           <h3 class="font-bold text-slate-900 uppercase mb-2 border-b border-slate-200 pb-1 text-xs">Từ kho (Xuất)</h3>
           <div class="space-y-1.5 text-xs text-slate-600">
             <p class="font-semibold text-slate-800">{{ transfer.from_warehouse?.name || 'Kho nguồn' }}</p>
-            <p>{{ transfer.from_warehouse?.address || 'Địa chỉ kho xuất' }}</p>
+            <p>{{ transfer.from_warehouse?.address || '—' }}</p>
           </div>
         </div>
 
@@ -86,7 +95,7 @@ onMounted(() => {
           <h3 class="font-bold text-slate-900 uppercase mb-2 border-b border-slate-200 pb-1 text-xs">Đến kho (Nhập)</h3>
           <div class="space-y-1.5 text-xs text-slate-600">
             <p class="font-semibold text-slate-800">{{ transfer.to_warehouse?.name || 'Kho đích' }}</p>
-            <p>{{ transfer.to_warehouse?.address || 'Địa chỉ kho nhập' }}</p>
+            <p>{{ transfer.to_warehouse?.address || '—' }}</p>
           </div>
         </div>
       </section>
@@ -96,7 +105,7 @@ onMounted(() => {
         <i class="pi pi-info-circle text-slate-500 text-base mt-0.5"></i>
         <div>
           <h4 class="font-bold text-slate-900 mb-1">Lý do điều chuyển</h4>
-          <p class="text-slate-600">{{ transfer.reason || 'Điều động sách phục vụ kinh doanh chi nhánh' }}</p>
+          <p class="text-slate-600">{{ transfer.reason || '—' }}</p>
         </div>
       </section>
 
@@ -150,10 +159,10 @@ onMounted(() => {
 
       <!-- Floating Print Controls (Hidden on print) -->
       <div class="no-print flex justify-end gap-3 border-t border-slate-100 pt-4 mt-auto">
-        <button class="px-4 py-2 border border-indigo-600 text-indigo-600 rounded text-xs font-semibold hover:bg-slate-50" @click="window.close()">
+        <button class="px-4 py-2 border border-indigo-600 text-indigo-600 rounded text-xs font-semibold hover:bg-slate-50 border-none cursor-pointer" @click="window.close()">
           Đóng tab
         </button>
-        <button class="px-5 py-2 bg-indigo-600 text-white rounded text-xs font-semibold hover:opacity-90 flex items-center gap-1.5" @click="window.print()">
+        <button class="px-5 py-2 bg-indigo-600 text-white rounded text-xs font-semibold hover:opacity-90 flex items-center gap-1.5 border-none cursor-pointer" @click="window.print()">
           <i class="pi pi-print"></i> In phiếu
         </button>
       </div>

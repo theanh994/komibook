@@ -24,6 +24,12 @@ export default defineConfig([
   js.configs.recommended,
   ...pluginVue.configs['flat/essential'],
 
+  {
+    rules: {
+      'no-unused-vars': ['error', { caughtErrors: 'none' }],
+    },
+  },
+
   ...pluginOxlint.buildFromOxlintConfigFile('.oxlintrc.json'),
 
   skipFormatting,

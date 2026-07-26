@@ -96,28 +96,31 @@
                        </div>
                     </div>
 
-                    <!-- Refined Progress Line -->
-                    <div v-if="item.book.type === 'ebook'" class="absolute bottom-0 left-0 right-0 h-1 bg-black/20 z-10 overflow-hidden">
-                       <div class="h-full bg-primary transition-all duration-500" :style="{ width: readingProgress + '%' }"></div>
+                    <!-- Refined Progress Line (Shown only when real progress data exists) -->
+                    <div v-if="item.book.type === 'ebook' && item.reading_progress != null" class="absolute bottom-0 left-0 right-0 h-1 bg-black/20 z-10 overflow-hidden">
+                       <div class="h-full bg-primary transition-all duration-500" :style="{ width: item.reading_progress + '%' }"></div>
                     </div>
 
                     <!-- Hover Quick Actions -->
                     <div class="absolute inset-0 bg-gradient-to-t from-primary/90 via-primary/40 to-transparent opacity-0 group-hover:opacity-100 transition-all duration-300 flex flex-col items-center justify-center p-4 gap-2.5 z-20">
-                      <button                        v-if="item.book.type === 'ebook'"
+                      <button
+                        v-if="item.book.type === 'ebook' && item.has_access && item.order_id"
                         @click="readEbook(item.order_id, item.book.id)"
                         class="w-full bg-white text-primary py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider shadow-md active:scale-95 transition-all flex items-center justify-center gap-2 border-none cursor-pointer"
                       >
                         <span class="material-symbols-outlined text-lg fill-1">auto_stories</span>
                         Đọc Ngay
                       </button>
-                      <button                        v-if="item.book.type === 'physical'"
+                      <button
+                        v-if="item.book.type === 'physical'"
                         @click="$router.push(`/tracking/${item.order_id}`)"
                         class="w-full bg-white text-on-surface py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider shadow-md active:scale-95 transition-all flex items-center justify-center gap-2 border-none cursor-pointer"
                       >
                         <span class="material-symbols-outlined text-lg">local_shipping</span>
                         Theo dõi
                       </button>
-                      <button                        @click="$router.push(`/book/${item.book.slug || item.book.id}`)"
+                      <button
+                        @click="$router.push(`/book/${item.book.slug || item.book.id}`)"
                         class="w-full bg-surface-container-lowest/10 backdrop-blur-xl text-white border border-white/30 py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider hover:bg-white/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
                       >
                         Thông tin
@@ -144,6 +147,7 @@ import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useWishlistStore } from '@/stores/wishlist'
 import apiClient from '@/services/axios'
+import { readApiList } from '@/services/apiContract'
 import UserSidebar from '@/components/profile/UserSidebar.vue'
 
 const router = useRouter()
@@ -153,7 +157,6 @@ const wishlistStore = useWishlistStore()
 const loading = ref(true)
 const libraryItems = ref([])
 const currentType = ref('all')
-const readingProgress = ref(45)
 
 const typeFilters = [
   { label: 'Tất cả', value: 'all' },
@@ -165,7 +168,7 @@ const fetchMyLibrary = async () => {
   loading.value = true
   try {
     const res = await apiClient.get('/api/my-library')
-    libraryItems.value = res.data.data || res.data || []
+    libraryItems.value = readApiList(res.data)
   } catch (error) {
     console.error('Failed to fetch my library:', error)
   } finally {
@@ -204,7 +207,9 @@ const toggleWishlist = async (bookId) => {
 }
 
 const readEbook = (orderId, bookId) => {
-  router.push(`/read/${orderId}/${bookId}`)
+  if (orderId && bookId) {
+    router.push({ name: 'ebook-reader', params: { orderId, bookId } })
+  }
 }
 </script>
 

@@ -63,8 +63,8 @@ class PhoneAuthController extends Controller
             ], 429);
         }
 
-        // Sinh OTP ngẫu nhiên mật mã (6 chữ số)
-        $otp = (string) random_int(100000, 999999);
+        // Sinh OTP ngẫu nhiên mật mã (8 chữ số).
+        $otp = (string) random_int(10000000, 99999999);
 
         // Gửi OTP qua dịch vụ OtpSender (Fail-closed ở production nếu thiếu provider, không ghi log)
         try {
@@ -113,10 +113,10 @@ class PhoneAuthController extends Controller
             ], 422);
         }
 
-        if (! preg_match('/^\d{6}$/', $otp)) {
+        if (! preg_match('/^\d{8}$/', $otp)) {
             return response()->json([
                 'status' => 'error',
-                'message' => 'Mã OTP phải có đúng 6 chữ số.',
+                'message' => 'Mã OTP phải có đúng 8 chữ số.',
             ], 422);
         }
 
@@ -165,6 +165,10 @@ class PhoneAuthController extends Controller
         $user = User::where('phone', $phone)->first();
 
         if ($user) {
+            $user->author()
+                ->whereNull('phone_verified_at')
+                ->update(['phone_verified_at' => now()]);
+
             Auth::login($user);
             if ($request->hasSession()) {
                 $request->session()->regenerate();

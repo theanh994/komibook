@@ -35,6 +35,7 @@
 </template>
 
 <script setup>
+defineOptions({ name: 'AppNavbar' })
 import { useAuthStore } from '@/stores/auth'
 import Button from 'primevue/button'
 

@@ -25,29 +25,37 @@ const toWarehouseId = ref(null)
 const transferReason = ref('')
 const transferItems = ref([])
 
+const error = ref(null)
+
 const fetchTransfers = async () => {
   loading.value = true
+  error.value = null
   try {
     const res = await apiClient.get('/api/vendor/inventory/transfers')
     if (res.data?.status === 'success') {
-      transfers.value = res.data.data
+      transfers.value = res.data.data || []
+    } else if (Array.isArray(res.data)) {
+      transfers.value = res.data
+    } else {
+      transfers.value = []
     }
 
     const whRes = await apiClient.get('/api/vendor/warehouses')
     if (whRes.data) {
-      warehouses.value = whRes.data
+      warehouses.value = Array.isArray(whRes.data) ? whRes.data : (whRes.data.data || [])
     }
 
-    const bookRes = await apiClient.get('/api/books')
-    if (bookRes.data?.data) {
-      books.value = bookRes.data.data.filter(b => b.type !== 'ebook')
-    }
+    const bookRes = await apiClient.get('/api/vendor/books', { params: { per_page: 100 } })
+    const rawBooks = Array.isArray(bookRes.data?.data)
+      ? bookRes.data.data
+      : (Array.isArray(bookRes.data?.data?.data) ? bookRes.data.data.data : (Array.isArray(bookRes.data) ? bookRes.data : []))
+    books.value = rawBooks.filter(b => b.type !== 'ebook')
   } catch (e) {
     console.error('Không tải được danh sách điều chuyển', e)
-    transfers.value = [
-      { id: 1, transfer_code: 'TRF-20260713-A8BC', from_warehouse: { name: 'Kho Hà Nội' }, to_warehouse: { name: 'Kho TP.HCM' }, reason: 'Điều động tồn kho bán chạy', status: 'received', created_at: '2026-07-10' },
-      { id: 2, transfer_code: 'TRF-20260713-K8B9', from_warehouse: { name: 'Kho Hà Nội' }, to_warehouse: { name: 'Kho TP.HCM' }, reason: 'Bù hàng hư hỏng', status: 'shipped', created_at: '2026-07-13' },
-    ]
+    error.value = e.response?.data?.message || 'Không thể kết nối API điều chuyển kho.'
+    transfers.value = []
+    warehouses.value = []
+    books.value = []
   } finally {
     loading.value = false
   }
@@ -112,7 +120,7 @@ const shipTransfer = async (id) => {
         selectedTransferDetails.value.status = 'shipped'
       }
     }
-  } catch (e) {
+  } catch {
     toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Không đủ số lượng trong kho xuất.', life: 3000 })
   }
 }
@@ -127,7 +135,7 @@ const receiveTransfer = async (id) => {
         selectedTransferDetails.value.status = 'received'
       }
     }
-  } catch (e) {
+  } catch {
     toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Không thể xác nhận nhập kho.', life: 3000 })
   }
 }
@@ -143,14 +151,8 @@ const viewDetails = async (trf) => {
       showDetailsDialog.value = true
     }
   } catch (e) {
-    selectedTransferDetails.value = {
-      ...trf,
-      items: [
-        { id: 1, book: { title: 'Đại Gia Gatsby' }, quantity: 15 },
-        { id: 2, book: { title: 'Chiến Lược Đại Dương Xanh' }, quantity: 20 },
-      ]
-    }
-    showDetailsDialog.value = true
+    console.error('Không tải được chi tiết phiếu điều chuyển', e)
+    toast.add({ severity: 'error', summary: 'Không thể tải chi tiết', detail: 'Lỗi kết nối khi xem phiếu điều chuyển.', life: 3000 })
   }
 }
 
@@ -178,8 +180,21 @@ onMounted(() => {
       </div>
     </div>
 
+    <div v-if="loading" class="flex justify-center p-12">
+      <i class="pi pi-spin pi-spinner text-3xl text-indigo-600"></i>
+    </div>
+
+    <div v-else-if="error" class="bg-white rounded-2xl p-8 border border-slate-200 shadow-sm text-center max-w-md mx-auto space-y-4 my-8">
+      <div class="w-12 h-12 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mx-auto">
+        <i class="pi pi-exclamation-triangle text-xl"></i>
+      </div>
+      <h3 class="text-base font-bold text-slate-900">Không thể tải dữ liệu điều chuyển kho</h3>
+      <p class="text-xs text-slate-500 leading-relaxed">{{ error }}</p>
+      <Button label="Thử lại" icon="pi pi-refresh" class="p-button-primary bg-indigo-600 p-button-sm" @click="fetchTransfers" />
+    </div>
+
     <!-- History list -->
-    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+    <div v-else class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
       <div class="p-4 border-b border-slate-100 bg-slate-50/50">
         <h3 class="font-bold text-slate-800 text-sm">Lịch sử phiếu điều chuyển</h3>
       </div>
@@ -220,7 +235,7 @@ onMounted(() => {
               </td>
             </tr>
             <tr v-if="transfers.length === 0">
-              <td colspan="7" class="p-8 text-center text-slate-400">Không tìm thấy phiếu điều chuyển nào.</td>
+              <td colspan="7" class="p-8 text-center text-slate-400">Chưa có đơn điều chuyển kho nào.</td>
             </tr>
           </tbody>
         </table>

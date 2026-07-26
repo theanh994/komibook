@@ -3,9 +3,8 @@
 namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Models\Vendor;
 use App\Models\Author;
-use App\Models\User;
+use App\Models\Vendor;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -26,8 +25,8 @@ class VendorApprovalController extends Controller
             'status' => 'success',
             'data' => [
                 'vendors' => $vendors,
-                'authors' => $authors
-            ]
+                'authors' => $authors,
+            ],
         ]);
     }
 
@@ -37,11 +36,11 @@ class VendorApprovalController extends Controller
     public function approveVendor($id)
     {
         $vendor = Vendor::findOrFail($id);
-        
+
         if ($vendor->status === 'active') {
             return response()->json([
                 'status' => 'error',
-                'message' => 'Nhà bán này đã được phê duyệt trước đó.'
+                'message' => 'Nhà bán này đã được phê duyệt trước đó.',
             ], 422);
         }
 
@@ -50,7 +49,7 @@ class VendorApprovalController extends Controller
 
         return response()->json([
             'status' => 'success',
-            'message' => 'Phê duyệt tài khoản nhà bán đối tác thành công.'
+            'message' => 'Phê duyệt tài khoản nhà bán đối tác thành công.',
         ]);
     }
 
@@ -64,13 +63,19 @@ class VendorApprovalController extends Controller
         if ($author->status === 'active') {
             return response()->json([
                 'status' => 'error',
-                'message' => 'Tác giả này đã được phê duyệt trước đó.'
+                'message' => 'Tác giả này đã được phê duyệt trước đó.',
+            ], 422);
+        }
+
+        if (! $author->phone_verified_at) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Tác giả phải xác minh số điện thoại trước khi được phê duyệt.',
             ], 422);
         }
 
         return DB::transaction(function () use ($author) {
             $author->status = 'active';
-            $author->phone_verified_at = now();
             $author->save();
 
             // Cập nhật vai trò người dùng thành 'vendor' để họ có quyền đăng bán sách cũ & ebook
@@ -80,11 +85,11 @@ class VendorApprovalController extends Controller
 
             // Tự động tạo hồ sơ Vendor cho tác giả nếu chưa có
             $vendor = Vendor::where('user_id', $user->id)->first();
-            if (!$vendor) {
+            if (! $vendor) {
                 Vendor::create([
                     'user_id' => $user->id,
-                    'shop_name' => $author->pen_name . ' (Tác giả)',
-                    'slug' => str_replace(' ', '-', strtolower($author->pen_name)) . '-' . rand(100, 999),
+                    'shop_name' => $author->pen_name.' (Tác giả)',
+                    'slug' => str_replace(' ', '-', strtolower($author->pen_name)).'-'.rand(100, 999),
                     'description' => $author->bio ?? 'Tác giả tự sáng tác trên nền tảng KomiBook.',
                     'status' => 'active',
                 ]);
@@ -95,7 +100,7 @@ class VendorApprovalController extends Controller
 
             return response()->json([
                 'status' => 'success',
-                'message' => 'Phê duyệt đối tác Tác giả thành công! Vai trò tài khoản đã chuyển thành đối tác và kích hoạt gian hàng.'
+                'message' => 'Phê duyệt đối tác Tác giả thành công! Vai trò tài khoản đã chuyển thành đối tác và kích hoạt gian hàng.',
             ]);
         });
     }
@@ -114,7 +119,7 @@ class VendorApprovalController extends Controller
             $vendor->status = 'rejected';
             $vendor->rejection_reason = $request->reason;
             $vendor->save();
-        } else if ($type === 'author') {
+        } elseif ($type === 'author') {
             $author = Author::findOrFail($id);
             $author->status = 'rejected';
             $author->rejection_reason = $request->reason;
@@ -122,13 +127,13 @@ class VendorApprovalController extends Controller
         } else {
             return response()->json([
                 'status' => 'error',
-                'message' => 'Loại đối tác không hợp lệ.'
+                'message' => 'Loại đối tác không hợp lệ.',
             ], 400);
         }
 
         return response()->json([
             'status' => 'success',
-            'message' => 'Đã từ chối đơn đăng ký đối tác thành công và lưu lý do.'
+            'message' => 'Đã từ chối đơn đăng ký đối tác thành công và lưu lý do.',
         ]);
     }
 }

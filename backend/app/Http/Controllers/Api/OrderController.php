@@ -3,9 +3,11 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Resources\CustomerOrderDetailResource;
 use App\Http\Resources\OrderResource;
 use App\Models\Order;
 use App\Services\CheckoutSessionLifecycleService;
+use App\Services\EbookAccessService;
 use App\Services\OrderFulfillmentService;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Http\Request;
@@ -21,14 +23,39 @@ class OrderController extends Controller
             ->orderBy('created_at', 'desc')
             ->get();
 
-        return OrderResource::collection($orders);
+        return OrderResource::collection($orders)->additional([
+            'status' => 'success',
+        ]);
+    }
+
+    public function myOrderDetail(Request $request, $orderId)
+    {
+        $order = Order::withoutGlobalScopes()
+            ->where('user_id', $request->user()->id)
+            ->where('id', $orderId)
+            ->with(['user', 'orderItems.book'])
+            ->first();
+
+        if (! $order) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Đơn hàng không tồn tại.',
+            ], 404);
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'data' => new CustomerOrderDetailResource($order),
+        ]);
     }
 
     public function myLibrary(Request $request)
     {
-        $userId = $request->user()->id;
+        $user = $request->user();
+        $ebookAccessService = app(EbookAccessService::class);
 
-        $orders = Order::where('user_id', $userId)
+        $orders = Order::withoutGlobalScopes()
+            ->where('user_id', $user->id)
             ->with(['orderItems.book'])
             ->orderBy('created_at', 'desc')
             ->get();
@@ -40,18 +67,25 @@ class OrderController extends Controller
             foreach ($order->orderItems as $item) {
                 if ($item->book && ! in_array($item->book_id, $seenBookIds)) {
                     $seenBookIds[] = $item->book_id;
+                    $book = $item->book;
+
+                    $validOrder = null;
+                    if ($book->type === 'ebook') {
+                        $validOrder = $ebookAccessService->getValidOrder($user, $book->id);
+                    }
+
                     $libraryItems[] = [
-                        'order_id' => $order->id,
-                        'status' => $order->order_status,
+                        'order_id' => $book->type === 'ebook' ? ($validOrder?->id) : $order->id,
+                        'status' => $order->status,
                         'purchased_at' => $order->created_at?->toISOString(),
+                        'has_access' => $book->type === 'ebook' ? ($validOrder !== null) : false,
                         'book' => [
-                            'id' => $item->book->id,
-                            'title' => $item->book->title,
-                            'slug' => $item->book->slug,
-                            'cover_image' => $item->book->cover_image,
-                            'author' => $item->book->author_name ?? 'KomiBook Author',
-                            'type' => $item->book->type ?? 'physical',
-                            'file_path' => $item->book->file_path,
+                            'id' => $book->id,
+                            'title' => $book->title,
+                            'slug' => $book->slug,
+                            'cover_image' => $book->cover_image,
+                            'author' => $book->author_name ?? $book->author ?? 'KomiBook Author',
+                            'type' => $book->type ?? 'physical',
                         ],
                     ];
                 }
@@ -66,24 +100,33 @@ class OrderController extends Controller
 
     public function generateEbookLink(Request $request, $order_id, $book_id)
     {
-        $order = Order::where('user_id', $request->user()->id)
-            ->where('id', $order_id)
-            ->firstOrFail();
+        $user = $request->user();
+        $ebookAccessService = app(EbookAccessService::class);
 
-        // Kiểm tra đơn hàng đã thanh toán hoặc hoàn thành
-        if (! $order->isPaid() && ! $order->isCompleted()) {
-            return response()->json(['message' => 'Đơn hàng chưa được thanh toán. Vui lòng thanh toán trước khi đọc.'], 403);
+        $validOrder = $ebookAccessService->getValidOrder($user, (int) $book_id);
+
+        if (! $validOrder || (int) $validOrder->id !== (int) $order_id) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Đơn hàng chưa được thanh toán hoặc không đủ quyền truy cập.',
+            ], 403);
         }
 
-        $orderItem = $order->orderItems()->where('book_id', $book_id)->firstOrFail();
+        $orderItem = $validOrder->orderItems()->where('book_id', $book_id)->first();
+        if (! $orderItem || ! $orderItem->book) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Sách không tồn tại trong đơn hàng.',
+            ], 404);
+        }
+
         $book = $orderItem->book;
 
-        if ($book->type !== 'ebook') {
-            return response()->json(['message' => 'Sách này không phải là e-book'], 400);
-        }
-
         if (empty($book->file_path)) {
-            return response()->json(['message' => 'Sách này chưa được cấu hình file E-book'], 404);
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Sách này chưa được cấu hình file E-book',
+            ], 404);
         }
 
         $filename = basename($book->file_path);
@@ -93,15 +136,20 @@ class OrderController extends Controller
             now()->addMinutes(10),
             [
                 'filename' => $filename,
-                'email' => $request->user()->email,
-                'name' => $request->user()->name,
+                'email' => $user->email,
+                'name' => $user->name,
             ],
             false // Generate signature for relative URL only
         );
 
         $url = rtrim(config('app.url'), '/').$relativeUrl;
 
-        return response()->json(['url' => $url]);
+        return response()->json([
+            'status' => 'success',
+            'data' => [
+                'url' => $url,
+            ],
+        ]);
     }
 
     public function streamEbook(Request $request, $filename)
@@ -158,9 +206,15 @@ class OrderController extends Controller
                 'data' => $order,
             ]);
         } catch (\LogicException $e) {
-            return response()->json(['message' => $e->getMessage()], 422);
+            return response()->json([
+                'status' => 'error',
+                'message' => $e->getMessage(),
+            ], 422);
         } catch (\Throwable $e) {
-            return response()->json(['message' => 'Không thể cập nhật trạng thái giao hàng.'], 404);
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Không thể cập nhật trạng thái giao hàng.',
+            ], 404);
         }
     }
 
@@ -182,11 +236,20 @@ class OrderController extends Controller
                 'data' => OrderResource::collection(collect($cancelledOrders)),
             ]);
         } catch (AuthorizationException $e) {
-            return response()->json(['message' => 'Bạn không có quyền thực hiện thao tác này'], 403);
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Bạn không có quyền thực hiện thao tác này',
+            ], 403);
         } catch (\LogicException $e) {
-            return response()->json(['message' => $e->getMessage()], 422);
+            return response()->json([
+                'status' => 'error',
+                'message' => $e->getMessage(),
+            ], 422);
         } catch (\Throwable $e) {
-            return response()->json(['message' => 'Đơn hàng không tồn tại hoặc không thể hủy'], 404);
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Đơn hàng không tồn tại hoặc không thể hủy',
+            ], 404);
         }
     }
 }

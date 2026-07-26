@@ -10,6 +10,7 @@ import InputText from 'primevue/inputtext'
 
 const toast = useToast()
 const loading = ref(true)
+const error = ref(null)
 
 const pendingVendors = ref([])
 const pendingAuthors = ref([])
@@ -20,21 +21,24 @@ const rejectReason = ref('')
 
 const fetchApprovals = async () => {
   loading.value = true
+  error.value = null
   try {
     const res = await apiClient.get('/api/admin/approvals/vendors')
     if (res.data?.status === 'success') {
       pendingVendors.value = res.data.data.vendors || []
       pendingAuthors.value = res.data.data.authors || []
+    } else if (res.data) {
+      pendingVendors.value = res.data.vendors || []
+      pendingAuthors.value = res.data.authors || []
+    } else {
+      pendingVendors.value = []
+      pendingAuthors.value = []
     }
   } catch (e) {
     console.error('Không tải được danh sách phê duyệt', e)
-    // Fallback Mock Data
-    pendingVendors.value = [
-      { id: 1, shop_name: 'Alpha Publishing House', description: 'Đơn vị phát hành sách kinh tế chuyên nghiệp.', user: { name: 'Nguyễn Văn A', email: 'contact@alpha.vn' }, created_at: '2026-07-13' },
-    ]
-    pendingAuthors.value = [
-      { id: 2, pen_name: 'Nguyễn Nhật Ánh', bio: 'Nhà văn viết truyện thiếu nhi nổi tiếng Việt Nam.', user: { name: 'Nguyễn Nhật Ánh', email: 'anhnn@gmail.com' }, bank_name: 'Vietcombank', bank_account_number: '007100123456', created_at: '2026-07-13' },
-    ]
+    pendingVendors.value = []
+    pendingAuthors.value = []
+    error.value = e.response?.data?.message || 'Không thể kết nối API kiểm duyệt đối tác.'
   } finally {
     loading.value = false
   }
@@ -127,8 +131,15 @@ onMounted(() => {
       <p class="text-slate-500 text-sm mt-1">Phê duyệt danh tính và tài khoản thụ hưởng của các Nhà bán sách cũ & Tác giả tự viết.</p>
     </div>
 
+    <!-- Error State -->
+    <div v-if="error" class="bg-rose-50 border border-rose-200 rounded-2xl p-6 text-center space-y-3 mb-8">
+      <h3 class="text-base font-bold text-rose-800">Không thể tải danh sách đối tác</h3>
+      <p class="text-xs text-rose-600">{{ error }}</p>
+      <Button label="Thử lại" icon="pi pi-refresh" class="p-button-danger p-button-sm text-xs bg-rose-600 text-white" @click="fetchApprovals" />
+    </div>
+
     <!-- Bento Stats Counter -->
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+    <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
       <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
         <div class="w-12 h-12 rounded-xl bg-indigo-50 text-indigo-700 flex items-center justify-center">
           <i class="pi pi-store text-xl"></i>
@@ -154,7 +165,7 @@ onMounted(() => {
       <i class="pi pi-spin pi-spinner text-3xl text-indigo-600"></i>
     </div>
 
-    <div v-else class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+    <div v-else-if="!error" class="grid grid-cols-1 lg:grid-cols-2 gap-8">
       <!-- Pending Vendors Column -->
       <div class="space-y-4">
         <h3 class="font-bold text-slate-800 text-base mb-2">Đăng ký Nhà bán sách cũ</h3>

@@ -20,6 +20,7 @@ const bookId = route.params.bookId
 const bookTitle = ref('Tác phẩm tự viết')
 const loading = ref(true)
 const saving = ref(false)
+const error = ref(null)
 
 const drmSettings = ref({
   copyright_number: '',
@@ -40,11 +41,11 @@ const licenseOptions = [
 
 const fetchDrm = async () => {
   loading.value = true
+  error.value = null
   try {
-    const bookRes = await apiClient.get(`/api/books`)
-    const b = bookRes.data?.data?.find(item => item.id == bookId)
-    if (b) {
-      bookTitle.value = b.title
+    const bookRes = await apiClient.get(`/api/vendor/books/${bookId}`)
+    if (bookRes.data?.data?.title) {
+      bookTitle.value = bookRes.data.data.title
     }
 
     const res = await apiClient.get(`/api/vendor/books/${bookId}/drm-settings`)
@@ -59,7 +60,7 @@ const fetchDrm = async () => {
     }
   } catch (e) {
     console.error('Không tải được cấu hình DRM', e)
-    toast.add({ severity: 'error', summary: 'Lỗi tải dữ liệu', detail: 'Không thể kết nối API cấu hình bản quyền.', life: 3000 })
+    error.value = e.response?.data?.message || 'Không thể kết nối API cấu hình bản quyền.'
   } finally {
     loading.value = false
   }
@@ -103,17 +104,26 @@ onMounted(() => {
       <div class="flex items-center gap-3">
         <Button icon="pi pi-arrow-left" class="p-button-text p-button-secondary p-button-sm" @click="router.push({ name: 'author-dashboard' })" />
         <div>
-          <h1 class="text-2xl md:text-3xl font-extrabold text-slate-900">Thiết lập bản quyền & DRM</h1>
-          <p class="text-slate-500 text-sm mt-1">Cấu hình các lớp bảo vệ tệp tin và quyền hạn đọc thử đối với tác phẩm: <strong class="text-indigo-600 font-bold">{{ bookTitle }}</strong></p>
+          <h1 class="text-2xl md:text-3xl font-extrabold text-slate-900">Bảo mật DRM & Bản quyền Digital</h1>
+          <p class="text-slate-500 text-sm mt-1">Cấu hình các biện pháp kỹ thuật chống vi phạm bản quyền đối với: <strong class="text-indigo-600 font-bold">{{ bookTitle }}</strong></p>
         </div>
       </div>
       <div>
-        <Button label="Lưu thiết lập" icon="pi pi-save" class="p-button-primary bg-indigo-600 hover:bg-indigo-700 text-white font-bold" :loading="saving" @click="saveDrm" />
+        <Button label="Lưu cấu hình" icon="pi pi-save" class="p-button-primary bg-indigo-600 hover:bg-indigo-700 text-white font-bold" :disabled="loading || error" :loading="saving" @click="saveDrm" />
       </div>
     </div>
 
     <div v-if="loading" class="flex justify-center p-12">
       <i class="pi pi-spin pi-spinner text-3xl text-indigo-600"></i>
+    </div>
+
+    <div v-else-if="error" class="bg-white rounded-2xl p-8 border border-slate-200 shadow-sm text-center max-w-md mx-auto space-y-4 my-8">
+      <div class="w-12 h-12 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mx-auto">
+        <i class="pi pi-exclamation-triangle text-xl"></i>
+      </div>
+      <h3 class="text-base font-bold text-slate-900">Không thể tải cấu hình bản quyền</h3>
+      <p class="text-xs text-slate-500 leading-relaxed">{{ error }}</p>
+      <Button label="Thử lại" icon="pi pi-refresh" class="p-button-primary bg-indigo-600 p-button-sm" @click="fetchDrm" />
     </div>
 
     <div v-else class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">

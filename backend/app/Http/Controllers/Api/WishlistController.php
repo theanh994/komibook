@@ -3,9 +3,9 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Resources\BookResource;
 use App\Models\Book;
 use Illuminate\Http\Request;
-use App\Http\Resources\BookResource;
 
 class WishlistController extends Controller
 {
@@ -15,7 +15,10 @@ class WishlistController extends Controller
     public function index(Request $request)
     {
         $books = $request->user()->wishlistBooks()->with(['category', 'vendor'])->latest('wishlists.created_at')->get();
-        return BookResource::collection($books);
+
+        return BookResource::collection($books)->additional([
+            'status' => 'success',
+        ]);
     }
 
     /**
@@ -30,15 +33,25 @@ class WishlistController extends Controller
 
         if ($exists) {
             $user->wishlistBooks()->detach($bookId);
+
             return response()->json([
+                'status' => 'success',
                 'message' => 'Đã xóa khỏi danh sách yêu thích',
-                'status' => 'removed'
+                'data' => [
+                    'state' => 'removed',
+                    'is_favorite' => false,
+                ],
             ]);
         } else {
             $user->wishlistBooks()->attach($bookId);
+
             return response()->json([
+                'status' => 'success',
                 'message' => 'Đã thêm vào danh sách yêu thích',
-                'status' => 'added'
+                'data' => [
+                    'state' => 'added',
+                    'is_favorite' => true,
+                ],
             ]);
         }
     }
@@ -49,6 +62,12 @@ class WishlistController extends Controller
     public function check(Request $request, $bookId)
     {
         $exists = $request->user()->wishlistBooks()->where('book_id', $bookId)->exists();
-        return response()->json(['is_favorite' => $exists]);
+
+        return response()->json([
+            'status' => 'success',
+            'data' => [
+                'is_favorite' => $exists,
+            ],
+        ]);
     }
 }

@@ -79,7 +79,7 @@ const openNewItem = () => {
 const saveItem = async () => {
   submitted.value = true
 
-  let bookIds = []
+  let bookIds
 
   if (addMethod.value === 'manual') {
     if (!currentItem.value.book_ids || currentItem.value.book_ids.length === 0) {

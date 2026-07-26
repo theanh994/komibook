@@ -75,6 +75,7 @@ import { useCartStore } from '@/stores/cart'
 import { useWishlistStore } from '@/stores/wishlist'
 import { useToast } from 'primevue/usetoast'
 import apiClient from '@/services/axios'
+import { readApiList } from '@/services/apiContract'
 import UserSidebar from '@/components/profile/UserSidebar.vue'
  
 const authStore = useAuthStore()
@@ -89,8 +90,8 @@ const fetchWishlist = async () => {
   loading.value = true
   try {
     const res = await apiClient.get('/api/wishlist')
-    wishlist.value = res.data.data || res.data || []
-  } catch (error) {
+    wishlist.value = readApiList(res.data)
+  } catch {
     toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Không thể tải danh sách yêu thích', life: 3000 })
   } finally {
     loading.value = false
@@ -102,7 +103,7 @@ const toggleWishlist = async (bookId) => {
     await wishlistStore.toggleWishlist(bookId)
     wishlist.value = wishlist.value.filter(b => b.id !== bookId)
     toast.add({ severity: 'success', summary: 'Thành công', detail: 'Đã xóa khỏi danh sách yêu thích', life: 2000 })
-  } catch (error) {
+  } catch {
     toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Có lỗi xảy ra', life: 3000 })
   }
 }

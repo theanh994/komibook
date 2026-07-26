@@ -33,6 +33,7 @@ class User extends Authenticatable
         'gender',
         'birthday',
         'google_id',
+        'facebook_id',
     ];
 
     /**

@@ -23,13 +23,13 @@
           </div>
           
           <div v-if="order" class="flex flex-wrap items-center gap-4 pt-2">
-            <div class="px-5 py-2.5 bg-surface-container-high rounded-2xl border border-outline-variant/10 shadow-sm">
-               <span class="text-xs font-bold text-on-surface select-all">#{{ order.order_code || order.id }}</span>
-            </div>
-            <span :class="['px-5 py-2 rounded-2xl text-[10px] font-bold uppercase tracking-widest shadow-lg flex items-center gap-2 border border-white/10', getStatusStyle(order.status)]">
-              <span class="w-2 h-2 rounded-full bg-current animate-pulse"></span>
-              {{ getStatusText(order.status) }}
-            </span>
+             <div class="px-5 py-2.5 bg-surface-container-high rounded-2xl border border-outline-variant/10 shadow-sm">
+                <span class="text-xs font-bold text-on-surface select-all">#{{ order.order_code || order.id }}</span>
+             </div>
+            <span :class="['px-5 py-2 rounded-2xl text-[10px] font-bold uppercase tracking-widest shadow-lg flex items-center gap-2 border border-white/10', getStatusStyle(order)]">
+               <span class="w-2 h-2 rounded-full bg-current animate-pulse"></span>
+              {{ getStatusText(order) }}
+             </span>
           </div>
         </div>
         
@@ -38,38 +38,56 @@
             <span class="material-symbols-outlined text-[20px]">arrow_back</span>
             Danh sách đơn
           </button>
-          <button class="flex-1 lg:flex-none px-8 py-4 rounded-2xl bg-primary text-on-primary font-bold text-xs uppercase tracking-widest hover:opacity-90 transition-all flex items-center justify-center gap-3 shadow-2xl shadow-primary/20 border-none cursor-pointer">
-            <span class="material-symbols-outlined text-[20px]">support_agent</span>
-            Trợ giúp
-          </button>
         </div>
       </div>
 
-      <!-- Loading State (MD3) -->
+      <!-- Loading State -->
       <div v-if="loading" class="py-32 flex flex-col items-center gap-8 animate-fade-in">
         <div class="relative w-20 h-20">
           <div class="absolute inset-0 border-8 border-primary/10 rounded-full"></div>
           <div class="absolute inset-0 border-8 border-t-primary rounded-full animate-spin"></div>
         </div>
-        <p class="text-[11px] font-bold text-outline uppercase tracking-[0.3em] animate-pulse">Đang kết nối đơn vị vận chuyển...</p>
+        <p class="text-[11px] font-bold text-outline uppercase tracking-[0.3em] animate-pulse">Đang tải thông tin vận chuyển...</p>
       </div>
 
-      <div v-else-if="order" class="grid grid-cols-1 lg:grid-cols-3 gap-xl animate-fade-in delay-100">
+      <!-- Error State -->
+      <div v-else-if="error" class="py-24 flex flex-col items-center text-center gap-6 bg-surface-container-lowest rounded-[48px] border border-outline-variant/10 shadow-2xl animate-fade-in p-8">
+        <div class="w-20 h-20 bg-rose-50 rounded-full flex items-center justify-center text-rose-500">
+           <span class="material-symbols-outlined text-[48px]">error</span>
+        </div>
+        <div class="space-y-2">
+          <h2 class="text-2xl font-bold text-on-surface">Không thể tải thông tin hành trình</h2>
+          <p class="text-on-surface-variant text-sm max-w-md mx-auto">{{ error }}</p>
+        </div>
+        <div class="flex flex-col sm:flex-row gap-4 justify-center pt-2">
+          <button @click="fetchOrder" class="px-8 py-4 rounded-2xl bg-rose-600 text-white font-bold text-xs uppercase tracking-widest border-none cursor-pointer">
+            Thử lại
+          </button>
+          <button @click="$router.push('/orders')" class="px-8 py-4 rounded-2xl border border-outline-variant/30 bg-surface-container-low text-on-surface font-bold text-xs uppercase tracking-widest cursor-pointer">
+            Về danh sách đơn hàng
+          </button>
+        </div>
+      </div>
+
+      <div v-else-if="order" class="grid grid-cols-1 lg:grid-cols-3 gap-xl animate-fade-in">
         
         <!-- Left Column: Interactive Stepper & History -->
         <div class="lg:col-span-2 space-y-xl">
           
           <!-- Modern Stepper Card -->
           <div class="bg-surface-container-lowest/60 backdrop-blur-xl rounded-[48px] p-8 md:p-14 border border-outline-variant/10 shadow-2xl relative overflow-hidden">
-            <!-- Decorative gradient -->
             <div class="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full -mr-32 -mt-32 blur-3xl"></div>
             
             <h2 class="text-2xl font-bold text-on-surface mb-14 tracking-tight">
               Dự kiến giao hàng: <span class="text-primary italic">{{ estimatedDelivery }}</span>
             </h2>
+
+            <div v-if="journeyException" class="mb-10 rounded-2xl border border-rose-200 bg-rose-50 p-5 text-sm font-semibold text-rose-700">
+              {{ journeyException }}
+            </div>
             
             <!-- Horizontal Stepper (Desktop) -->
-            <div class="hidden md:flex justify-between items-start relative w-full px-8 pb-10">
+            <div v-if="!journeyException" class="hidden md:flex justify-between items-start relative w-full px-8 pb-10">
               <!-- Background Line -->
               <div class="absolute left-16 right-16 top-7 h-2 bg-surface-container-high rounded-full overflow-hidden">
                 <div class="h-full bg-primary transition-all duration-1000 ease-out" :style="{ width: progressWidth }"></div>
@@ -98,7 +116,7 @@
             </div>
 
             <!-- Vertical Stepper (Mobile) -->
-            <div class="md:hidden space-y-12 relative pl-12 pb-6">
+            <div v-if="!journeyException" class="md:hidden space-y-12 relative pl-12 pb-6">
                <div class="absolute left-6 top-3 bottom-3 w-1.5 bg-surface-container-high rounded-full overflow-hidden">
                   <div class="w-full bg-primary rounded-full transition-all duration-1000 ease-out" :style="{ height: progressWidth }"></div>
                </div>
@@ -125,7 +143,7 @@
           <!-- Timeline History Card -->
           <div class="bg-surface-container-lowest/60 backdrop-blur-xl rounded-[48px] p-8 md:p-14 border border-outline-variant/10 shadow-2xl">
             <div class="flex items-center justify-between mb-12">
-               <h3 class="text-2xl font-bold text-on-surface tracking-tight">Lịch sử hành trình</h3>
+               <h3 class="text-2xl font-bold text-on-surface tracking-tight">Lịch sử đơn hàng</h3>
                <div class="px-4 py-2 bg-primary/5 rounded-xl border border-primary/10">
                   <span class="text-[10px] font-bold text-primary uppercase tracking-widest">Thời gian thực</span>
                </div>
@@ -136,7 +154,7 @@
               <div class="absolute left-[15px] top-3 bottom-3 w-px bg-outline-variant/20"></div>
               
               <!-- Timeline Events -->
-              <div v-for="(event, index) in trackingEvents" :key="index" class="relative animate-slide-up" :style="{ animationDelay: (index * 100 + 300) + 'ms' }">
+              <div v-for="(event, index) in trackingEvents" :key="index" class="relative animate-slide-up">
                 <!-- Dot Decor -->
                 <div 
                   class="absolute -left-[45px] top-1.5 w-7 h-7 rounded-full border-4 border-surface-container-lowest flex items-center justify-center transition-all duration-500"
@@ -149,7 +167,7 @@
                   <div class="space-y-2">
                     <p class="text-base font-bold text-on-surface group-hover:text-primary transition-colors" :class="{ 'text-primary': index === 0 }">{{ event.status }}</p>
                     <div class="flex items-center gap-2 text-on-surface-variant/60 font-medium text-sm">
-                      <span class="material-symbols-outlined text-[18px]">location_on</span>
+                      <span class="material-symbols-outlined text-[18px]">info</span>
                       {{ event.location }}
                     </div>
                   </div>
@@ -158,6 +176,9 @@
                     <p class="text-[10px] font-bold text-outline opacity-60">{{ event.time }}</p>
                   </div>
                 </div>
+              </div>
+              <div v-if="trackingEvents.length === 0" class="rounded-3xl border border-outline-variant/10 bg-surface-container-low/30 p-8 text-center text-sm text-on-surface-variant">
+                Chưa có lịch sử hành trình từ đơn vị vận chuyển.
               </div>
             </div>
           </div>
@@ -177,11 +198,11 @@
                 <p class="text-[10px] font-bold text-outline uppercase tracking-[0.2em] mb-3">Người nhận</p>
                 <div class="flex items-center gap-4">
                    <div class="w-12 h-12 bg-primary-container rounded-2xl flex items-center justify-center text-on-primary-container font-bold text-lg">
-                      {{ order.user?.name?.charAt(0) || 'K' }}
+                      {{ (order.user?.name || 'C')?.charAt(0) }}
                    </div>
                    <div>
-                      <p class="text-sm font-bold text-on-surface">{{ order.user?.name || 'Khách hàng Komibook' }}</p>
-                      <p class="text-xs text-on-surface-variant font-medium mt-0.5">{{ order.user?.phone || 'Chưa cập nhật SĐT' }}</p>
+                      <p class="text-sm font-bold text-on-surface">{{ order.user?.name || '—' }}</p>
+                      <p class="text-xs text-on-surface-variant font-medium mt-0.5">{{ order.user?.phone || 'Chưa cập nhật' }}</p>
                    </div>
                 </div>
               </div>
@@ -190,24 +211,27 @@
 
               <div>
                 <p class="text-[10px] font-bold text-outline uppercase tracking-[0.2em] mb-3">Địa chỉ giao hàng</p>
-                <p class="text-sm font-medium text-on-surface leading-relaxed">{{ order.shipping_address }}</p>
+                <p class="text-sm font-medium text-on-surface leading-relaxed">{{ order.shipping_address || '—' }}</p>
               </div>
 
               <div class="h-px bg-outline-variant/10"></div>
 
               <div class="p-5 bg-surface-container-high/50 rounded-3xl border border-outline-variant/10 relative overflow-hidden group">
-                <div class="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
-                   <span class="material-symbols-outlined text-6xl">verified</span>
-                </div>
                 <p class="text-[10px] font-bold text-outline uppercase tracking-[0.2em] mb-3">Đơn vị vận chuyển</p>
-                <p class="text-base font-bold text-primary italic">{{ order.shipping_carrier || 'Komi Express' }}</p>
-                <p class="text-[10px] text-on-surface-variant font-bold mt-2 uppercase tracking-widest">MVĐ: {{ order.shipping_tracking_code || ('VN-' + order.id + '-EXP') }}</p>
+                <p class="text-base font-bold text-primary italic">{{ order.shipping_carrier || 'Chưa cập nhật' }}</p>
+                <p class="text-[10px] text-on-surface-variant font-bold mt-2 uppercase tracking-widest">
+                  Mã vận đơn: {{ order.shipping_tracking_code || '—' }}
+                </p>
               </div>
             </div>
 
-            <button class="w-full mt-4 px-8 py-4.5 rounded-2xl bg-on-surface text-surface font-bold text-xs uppercase tracking-[0.2em] hover:bg-on-surface/90 transition-all border-none cursor-pointer flex items-center justify-center gap-3 shadow-2xl active:scale-95">
+            <button
+              disabled
+              title="Chưa có thông tin liên hệ tài xế cho đơn hàng này."
+              class="w-full mt-4 px-8 py-4.5 rounded-2xl bg-outline-variant/30 text-on-surface-variant font-bold text-xs uppercase tracking-[0.2em] border-none cursor-not-allowed opacity-60 flex items-center justify-center gap-3"
+            >
               <span class="material-symbols-outlined text-[20px]">call</span>
-              Liên hệ tài xế
+              Liên hệ tài xế (Chưa hỗ trợ)
             </button>
           </div>
 
@@ -225,7 +249,7 @@
                 <div class="min-w-0 space-y-1">
                   <p class="text-sm font-bold text-on-surface truncate leading-tight group-hover:text-primary transition-colors">{{ item.book?.title }}</p>
                   <div class="flex items-center gap-3">
-                     <span class="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">Qty: {{ item.quantity }}</span>
+                     <span class="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">SL: {{ item.quantity }}</span>
                      <div class="w-1 h-1 rounded-full bg-outline-variant/30"></div>
                      <span class="text-[11px] font-bold text-primary">{{ formatCurrency(item.price) }}</span>
                   </div>
@@ -236,38 +260,31 @@
             <div class="mt-10 pt-8 border-t border-outline-variant/10 flex justify-between items-end">
                <div>
                   <p class="text-[10px] font-bold text-outline uppercase tracking-widest mb-1">Tổng giá trị</p>
-                  <p class="text-2xl font-bold text-on-surface tracking-tighter">{{ formatCurrency(order.total_amount) }}</p>
+                  <p class="text-2xl font-bold text-on-surface tracking-tighter">{{ formatCurrency(order.grand_total || order.total_amount) }}</p>
                </div>
-               <span class="text-[10px] font-bold text-emerald-600 uppercase tracking-widest px-3 py-1 bg-emerald-50 rounded-lg border border-emerald-100">Freeship</span>
+               <span v-if="order.shipping_fee === 0 || order.is_freeship" class="text-[10px] font-bold text-emerald-600 uppercase tracking-widest px-3 py-1 bg-emerald-50 rounded-lg border border-emerald-100">Freeship</span>
             </div>
           </div>
         </div>
       </div>
       
       <!-- Footer Support -->
-      <div class="mt-20 text-center animate-fade-in delay-500">
-         <p class="text-[11px] font-bold text-outline uppercase tracking-[0.3em] opacity-40">KomiBook Delivery Intelligence System v2.0</p>
+      <div class="mt-20 text-center animate-fade-in">
+         <p class="text-[11px] font-bold text-outline uppercase tracking-[0.3em] opacity-40">KomiBook Order Tracking System</p>
       </div>
     </div>
-
-    <!-- PrimeVue Toast for notifications -->
-    <Toast />
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted, computed } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
-import { useToast } from 'primevue/usetoast'
+import { useRoute } from 'vue-router'
 import apiClient from '@/services/axios'
-import Toast from 'primevue/toast'
 
 const route = useRoute()
-const router = useRouter()
-const toast = useToast()
-
 const order = ref(null)
 const loading = ref(true)
+const error = ref(null)
 
 const trackingSteps = [
   { label: 'Đã đặt hàng', icon: 'check_circle' },
@@ -281,12 +298,20 @@ const currentStepIndex = computed(() => {
   if (!order.value) return 0
   const sStatus = order.value.shipping_status
   const status = order.value.status
+  if (status === 'cancelled' || sStatus === 'failed') return 0
   if (status === 'completed' || sStatus === 'delivered') return 4
   if (sStatus === 'delivering') return 3
-  if (sStatus === 'pending_pickup') return 2
+  if (sStatus === 'picked_up') return 2
+  if (sStatus === 'pending_pickup') return 1
   if (status === 'processing') return 1
   if (status === 'pending') return 0
   return 0
+})
+
+const journeyException = computed(() => {
+  if (order.value?.status === 'cancelled') return 'Đơn hàng đã bị hủy; hành trình giao hàng không tiếp tục.'
+  if (order.value?.shipping_status === 'failed') return 'Việc giao hàng đã thất bại. Vui lòng liên hệ bộ phận hỗ trợ.'
+  return null
 })
 
 const progressWidth = computed(() => {
@@ -295,104 +320,46 @@ const progressWidth = computed(() => {
 })
 
 const estimatedDelivery = computed(() => {
-  if (!order.value) return 'Đang tính toán...'
-  const date = new Date(order.value.created_at)
-  date.setDate(date.getDate() + 4)
+  if (!order.value || !order.value.estimated_delivery_at) {
+    return 'Chưa có dự kiến giao hàng'
+  }
+  const date = new Date(order.value.estimated_delivery_at)
   return new Intl.DateTimeFormat('vi-VN', {
     weekday: 'long', day: '2-digit', month: 'long'
   }).format(date)
 })
 
-const trackingEvents = ref([])
+const trackingEvents = computed(() => [])
 
 const fetchOrder = async () => {
   loading.value = true
+  error.value = null
+  const orderId = route.params.orderId
+  if (!orderId) {
+    error.value = 'Mã đơn hàng không hợp lệ.'
+    loading.value = false
+    return
+  }
+
   try {
-    const res = await apiClient.get('/api/my-orders')
-    const orders = res.data.data || res.data || []
-    const found = orders.find(o => o.id == route.params.orderId)
-    
-    if (found) {
-      order.value = found
-      generateTrackingHistory(found)
+    const res = await apiClient.get(`/api/my-orders/${orderId}`)
+    if (res.data?.status === 'success' && res.data?.data) {
+      order.value = res.data.data
     } else {
-      toast.add({ severity: 'warn', summary: 'Không tìm thấy', detail: 'Đơn hàng không tồn tại', life: 3000 })
-      router.push('/orders')
+      order.value = null
+      error.value = res.data?.message || 'Không tìm thấy thông tin đơn hàng.'
     }
-  } catch (error) {
-    toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Không thể kết nối máy chủ', life: 3000 })
+  } catch (err) {
+    console.error('Lỗi tải thông tin vận chuyển:', err)
+    order.value = null
+    error.value = err.response?.data?.message || 'Không thể kết nối máy chủ để tải thông tin đơn hàng.'
   } finally {
     loading.value = false
   }
 }
 
-const generateTrackingHistory = (orderData) => {
-  const baseDate = new Date(orderData.created_at)
-  const events = []
-  
-  // Always have "Ordered"
-  events.push({ 
-    status: 'Đặt hàng thành công', 
-    location: 'Hệ thống Komibook', 
-    date: formatDateShort(baseDate), 
-    time: formatTime(baseDate) 
-  })
-
-  // Processing
-  if (orderData.status !== 'pending') {
-    const procDate = new Date(baseDate)
-    procDate.setHours(procDate.getHours() + 2)
-    events.unshift({ 
-      status: 'Đơn hàng đã được xác nhận và đang đóng gói', 
-      location: 'Kho tổng Komibook Hà Nội', 
-      date: formatDateShort(procDate), 
-      time: formatTime(procDate) 
-    })
-  }
-
-  // Shipping (Mocked for visual impact if processing+)
-  if (orderData.status === 'processing' || orderData.status === 'completed') {
-    const shipDate = new Date(baseDate)
-    shipDate.setHours(shipDate.getHours() + 12)
-    events.unshift({ 
-      status: 'Đã giao cho đơn vị vận chuyển', 
-      location: 'Bưu cục trung chuyển Cầu Giấy', 
-      date: formatDateShort(shipDate), 
-      time: formatTime(shipDate) 
-    })
-  }
-
-  // Completed
-  if (orderData.status === 'completed') {
-    const deliveryDate = new Date(baseDate)
-    deliveryDate.setDate(deliveryDate.getDate() + 2)
-    events.unshift({ 
-      status: 'Giao hàng thành công', 
-      location: orderData.shipping_address, 
-      date: formatDateShort(deliveryDate), 
-      time: '10:45 AM' 
-    })
-    events.unshift({ 
-      status: 'Tài xế đang trên đường giao đến bạn', 
-      location: 'Khu vực người nhận', 
-      date: formatDateShort(deliveryDate), 
-      time: '08:15 AM' 
-    })
-  }
-
-  trackingEvents.value = events
-}
-
 const formatCurrency = (value) => {
   return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(value || 0)
-}
-
-const formatDateShort = (date) => {
-  return new Intl.DateTimeFormat('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(date)
-}
-
-const formatTime = (date) => {
-  return new Intl.DateTimeFormat('vi-VN', { hour: '2-digit', minute: '2-digit' }).format(date)
 }
 
 const getCoverUrl = (path) => {
@@ -403,17 +370,26 @@ const getCoverUrl = (path) => {
   return `/storage/${path}`
 }
 
-const getStatusText = (status) => {
-  const map = { pending: 'Chờ xử lý', processing: 'Đang vận chuyển', completed: 'Đã nhận hàng', cancelled: 'Đã hủy' }
+const getStatusText = (orderData) => {
+  if (orderData.shipping_status === 'failed') return 'Giao hàng thất bại'
+  if (orderData.shipping_status === 'delivered') return 'Đã giao hàng'
+  if (orderData.shipping_status === 'delivering') return 'Đang giao hàng'
+  if (orderData.shipping_status === 'picked_up') return 'Đơn vị vận chuyển đã nhận'
+  if (orderData.shipping_status === 'pending_pickup') return 'Chờ đơn vị vận chuyển nhận'
+  const status = orderData.status
+  const map = { pending: 'Chờ xử lý', processing: 'Đang xử lý', completed: 'Đã hoàn thành', cancelled: 'Đã hủy' }
   return map[status] || status
 }
 
-const getStatusStyle = (status) => {
+const getStatusStyle = (orderData) => {
+  if (orderData.shipping_status === 'failed') return 'bg-rose-500 text-white shadow-rose-500/20'
+  if (orderData.shipping_status === 'delivered') return 'bg-emerald-500 text-white shadow-emerald-500/20'
+  const status = orderData.status
   const map = {
     pending: 'bg-amber-500 text-white shadow-amber-500/20',
     processing: 'bg-primary text-on-primary shadow-primary/20',
     completed: 'bg-emerald-500 text-white shadow-emerald-500/20',
-    cancelled: 'bg-error text-on-error shadow-error/20'
+    cancelled: 'bg-rose-500 text-white shadow-rose-500/20'
   }
   return map[status] || 'bg-outline text-white'
 }
@@ -424,9 +400,6 @@ onMounted(() => {
 </script>
 
 <style scoped>
-
-
-
 @keyframes fade-in {
   from { opacity: 0; transform: translateY(30px); }
   to { opacity: 1; transform: translateY(0); }
@@ -439,31 +412,16 @@ onMounted(() => {
 
 .animate-fade-in {
   animation: fade-in 1s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-  opacity: 0;
 }
 
 .animate-slide-up {
   animation: slide-up 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-  opacity: 0;
 }
-
-.delay-100 { animation-delay: 0.1s; }
-.delay-500 { animation-delay: 0.5s; }
 
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
 .fill-1 {
   font-variation-settings: 'FILL' 1;
-}
-
-/* Custom Progress Animation */
-@keyframes progress-loading {
-  0% { transform: translateX(-100%); }
-  100% { transform: translateX(100%); }
-}
-
-.animate-progress-loading {
-  animation: progress-loading 2s infinite linear;
 }
 </style>

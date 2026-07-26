@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import apiClient from '@/services/axios'
+import { readApiData, readApiList } from '@/services/apiContract'
 import { useAuthStore } from './auth'
 
 export const useWishlistStore = defineStore('wishlist', () => {
@@ -16,7 +17,7 @@ export const useWishlistStore = defineStore('wishlist', () => {
     loading.value = true
     try {
       const res = await apiClient.get('/api/wishlist')
-      const items = res.data.data || res.data || []
+      const items = readApiList(res.data)
       wishlistIds.value = new Set(items.map(b => b.id))
     } catch (error) {
       console.error('Error fetching wishlist ids:', error)
@@ -26,15 +27,16 @@ export const useWishlistStore = defineStore('wishlist', () => {
   }
 
   const toggleWishlist = async (bookId) => {
-    if (!authStore.isAuthenticated) return { status: 'unauthorized' }
+    if (!authStore.isAuthenticated) return { state: 'unauthorized' }
     try {
       const res = await apiClient.post(`/api/wishlist/${bookId}/toggle`)
-      if (res.data.status === 'added') {
+      const result = readApiData(res.data)
+      if (result.state === 'added') {
         wishlistIds.value.add(bookId)
       } else {
         wishlistIds.value.delete(bookId)
       }
-      return res.data
+      return result
     } catch (error) {
       console.error('Error toggling wishlist:', error)
       throw error

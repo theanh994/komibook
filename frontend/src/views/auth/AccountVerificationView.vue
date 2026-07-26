@@ -1,79 +1,112 @@
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { computed, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useToast } from 'primevue/usetoast'
 import Button from 'primevue/button'
 import Toast from 'primevue/toast'
 import { useAuthStore } from '@/stores/auth'
+import OtpCodeInput from '@/components/auth/OtpCodeInput.vue'
 
 const router = useRouter()
 const toast = useToast()
 const authStore = useAuthStore()
 
-const otpDigits = ref(['', '', '', '', '', ''])
-const inputRefs = ref([])
-const timer = ref(59)
+const otpInput = ref('')
+const otpSent = ref(false)
+const loading = ref(false)
+const timer = ref(0)
 let intervalId = null
 
+const phone = computed(() => authStore.user?.phone || '')
+const maskedPhone = computed(() => {
+  if (!phone.value) return 'chưa cập nhật'
+  return `${phone.value.slice(0, 3)}••••${phone.value.slice(-3)}`
+})
+
 const startTimer = () => {
-  timer.value = 59
+  timer.value = 60
   clearInterval(intervalId)
   intervalId = setInterval(() => {
-    if (timer.value > 0) {
-      timer.value--
-    } else {
+    timer.value -= 1
+    if (timer.value <= 0) {
+      timer.value = 0
       clearInterval(intervalId)
     }
   }, 1000)
 }
 
-const handleInput = (index, event) => {
-  const val = event.target.value
-  // Allow only digits
-  if (!/^\d*$/.test(val)) {
-    otpDigits.value[index] = ''
-    return
-  }
-  otpDigits.value[index] = val.slice(-1)
-
-  // Move to next input if typing a digit
-  if (val && index < 5) {
-    const nextInput = document.getElementById(`otp-${index + 1}`)
-    nextInput?.focus()
-  }
-}
-
-const handleKeyDown = (index, event) => {
-  if (event.key === 'Backspace' && !otpDigits.value[index] && index > 0) {
-    otpDigits.value[index - 1] = ''
-    const prevInput = document.getElementById(`otp-${index - 1}`)
-    prevInput?.focus()
-  }
-}
-
-const resendOtp = () => {
-  startTimer()
-  toast.add({ severity: 'success', summary: 'Đã gửi lại mã', detail: 'Mã xác thực OTP mới đã được gửi.', life: 3000 })
-}
-
-const verifyOtp = () => {
-  const code = otpDigits.value.join('')
-  if (code.length < 6) {
-    toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Vui lòng nhập đủ 6 chữ số.', life: 3000 })
+const sendOtp = async () => {
+  if (!phone.value) {
+    toast.add({
+      severity: 'error',
+      summary: 'Chưa có số điện thoại',
+      detail: 'Vui lòng cập nhật số điện thoại trong hồ sơ trước khi xác minh.',
+      life: 4000
+    })
     return
   }
 
-  // Simulate OTP Verification Success
-  toast.add({ severity: 'success', summary: 'Xác thực thành công', detail: 'Số điện thoại của bạn đã được xác minh.', life: 3000 })
-  setTimeout(() => {
-    // Redirect back to profile or author dashboard
-    router.push({ name: 'author-register' })
-  }, 1500)
+  loading.value = true
+  try {
+    await authStore.sendPhoneOtp(phone.value)
+    otpInput.value = ''
+    otpSent.value = true
+    startTimer()
+    toast.add({
+      severity: 'success',
+      summary: 'Đã gửi mã',
+      detail: 'Mã OTP 8 chữ số đã được gửi qua SMS.',
+      life: 3000
+    })
+  } catch (error) {
+    toast.add({
+      severity: 'error',
+      summary: 'Không thể gửi mã',
+      detail: error.response?.data?.message || 'Vui lòng thử lại sau.',
+      life: 4000
+    })
+  } finally {
+    loading.value = false
+  }
 }
 
-onMounted(() => {
-  startTimer()
-})
+const verifyOtp = async () => {
+  if (!/^\d{8}$/.test(otpInput.value)) {
+    toast.add({
+      severity: 'warn',
+      summary: 'Mã chưa đầy đủ',
+      detail: 'Vui lòng nhập đúng 8 chữ số.',
+      life: 3000
+    })
+    return
+  }
+
+  loading.value = true
+  try {
+    const response = await authStore.verifyPhoneOtp(phone.value, otpInput.value)
+    if (response.status !== 'success') {
+      throw new Error('OTP verification did not confirm the current account.')
+    }
+
+    toast.add({
+      severity: 'success',
+      summary: 'Xác thực thành công',
+      detail: 'Số điện thoại của bạn đã được xác minh.',
+      life: 3000
+    })
+    await router.push({ name: 'author-register' })
+  } catch (error) {
+    otpInput.value = ''
+    toast.add({
+      severity: 'error',
+      summary: 'Xác thực thất bại',
+      detail: error.response?.data?.message || 'Mã OTP không chính xác hoặc đã hết hạn.',
+      life: 4000
+    })
+  } finally {
+    loading.value = false
+  }
+}
 
 onUnmounted(() => {
   clearInterval(intervalId)
@@ -81,66 +114,69 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="otp-verification min-h-screen bg-slate-50 flex items-center justify-center py-12 px-4">
+  <div class="min-h-screen bg-slate-50 flex items-center justify-center py-12 px-4">
     <Toast />
-    
-    <div class="bg-white w-full max-w-[460px] rounded-2xl shadow-md p-8 border border-slate-200 flex flex-col items-center text-center">
-      <!-- Icon -->
+
+    <div class="bg-white w-full max-w-[520px] rounded-2xl shadow-md p-8 border border-slate-200 flex flex-col items-center text-center">
       <div class="w-16 h-16 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center mb-6">
         <i class="pi pi-verified text-3xl"></i>
       </div>
 
-      <!-- Header -->
       <h1 class="text-2xl font-bold text-slate-800 mb-2">Xác minh tài khoản</h1>
       <p class="text-sm text-slate-500 mb-8 max-w-sm">
-        Vui lòng nhập mã gồm 6 chữ số đã được gửi đến số điện thoại của bạn
+        Mã OTP gồm 8 chữ số sẽ được gửi tới số điện thoại {{ maskedPhone }}.
       </p>
 
-      <!-- Code inputs -->
-      <div class="flex gap-2 justify-center w-full mb-8" dir="ltr">
-        <input 
-          v-for="(digit, idx) in otpDigits" 
-          :key="idx"
-          :id="`otp-${idx}`"
-          v-model="otpDigits[idx]"
-          type="text" 
-          inputmode="numeric"
-          pattern="[0-9]*"
-          maxlength="1" 
-          class="w-12 h-14 text-center text-xl font-bold border border-slate-300 rounded-lg focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors shadow-sm"
-          @input="handleInput(idx, $event)"
-          @keydown="handleKeyDown(idx, $event)"
+      <template v-if="phone">
+        <Button
+          v-if="!otpSent"
+          label="Gửi mã OTP"
+          :loading="loading"
+          class="w-full p-button-primary bg-indigo-600 text-white h-12 rounded-lg font-bold shadow-sm mb-6"
+          @click="sendOtp"
         />
+
+        <template v-else>
+          <OtpCodeInput v-model="otpInput" :length="8" :disabled="loading" />
+          <Button
+            label="Xác minh"
+            :loading="loading"
+            :disabled="otpInput.length !== 8"
+            class="w-full p-button-primary bg-indigo-600 text-white h-12 rounded-lg font-bold shadow-sm my-6"
+            @click="verifyOtp"
+          />
+
+          <div class="text-sm text-slate-600 flex flex-wrap items-center justify-center gap-2 mb-6">
+            <span>Bạn chưa nhận được mã?</span>
+            <button
+              type="button"
+              class="text-indigo-600 font-semibold hover:underline bg-transparent border-none p-0 cursor-pointer disabled:text-slate-400 disabled:no-underline disabled:cursor-not-allowed"
+              :disabled="timer > 0 || loading"
+              @click="sendOtp"
+            >
+              Gửi lại
+            </button>
+            <span v-if="timer > 0" class="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded font-mono">
+              00:{{ timer < 10 ? `0${timer}` : timer }}
+            </span>
+          </div>
+        </template>
+      </template>
+
+      <div v-else class="mb-6 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+        Tài khoản chưa có số điện thoại để xác minh.
       </div>
 
-      <!-- Button -->
-      <Button label="Xác minh" class="w-full p-button-primary bg-indigo-600 hover:bg-indigo-700 text-white h-12 rounded-lg font-bold shadow-sm mb-6" @click="verifyOtp" />
-
-      <!-- Resend & Timer -->
-      <div class="text-sm text-slate-600 flex items-center justify-center gap-2 mb-6">
-        <span>Bạn chưa nhận được mã?</span>
-        <button 
-          class="text-indigo-600 font-semibold hover:underline bg-transparent border-none p-0 cursor-pointer disabled:text-slate-400 disabled:no-underline"
-          :disabled="timer > 0"
-          @click="resendOtp"
-        >
-          Gửi lại
-        </button>
-        <span v-if="timer > 0" class="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded font-mono">00:{{ timer < 10 ? '0' + timer : timer }}</span>
-      </div>
-
-      <!-- Back Link -->
       <div class="w-full pt-4 border-t border-slate-100 mt-2">
-        <button class="inline-flex items-center gap-1 text-slate-400 hover:text-slate-600 text-sm font-semibold transition-colors bg-transparent border-none cursor-pointer" @click="router.push({ name: 'author-register' })">
-          <i class="pi pi-arrow-left text-xs"></i> Quay lại
+        <button
+          type="button"
+          class="inline-flex items-center gap-1 text-slate-400 hover:text-slate-600 text-sm font-semibold transition-colors bg-transparent border-none cursor-pointer"
+          @click="router.push({ name: 'author-register' })"
+        >
+          <i class="pi pi-arrow-left text-xs"></i>
+          Quay lại
         </button>
       </div>
     </div>
   </div>
 </template>
-
-<style scoped>
-.otp-verification {
-  font-family: 'Inter', sans-serif;
-}
-</style>

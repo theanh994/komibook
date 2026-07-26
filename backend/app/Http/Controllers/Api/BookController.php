@@ -5,8 +5,10 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\BookResource;
 use App\Models\Book;
-use App\Models\OrderItem;
+use App\Models\Series;
+use App\Services\EbookAccessService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class BookController extends Controller
 {
@@ -20,7 +22,7 @@ class BookController extends Controller
             ->join('order_items', 'books.id', '=', 'order_items.book_id')
             ->join('orders', 'order_items.order_id', '=', 'orders.id')
             ->where('orders.status', 'completed')
-            ->select('books.*', \Illuminate\Support\Facades\DB::raw('SUM(order_items.quantity) as total_sold'))
+            ->select('books.*', DB::raw('SUM(order_items.quantity) as total_sold'))
             ->groupBy('books.id')
             ->orderBy('total_sold', 'desc')
             ->limit(8)
@@ -29,7 +31,7 @@ class BookController extends Controller
 
         return response()->json([
             'status' => 'success',
-            'data'   => BookResource::collection($books),
+            'data' => BookResource::collection($books),
         ]);
     }
 
@@ -43,14 +45,14 @@ class BookController extends Controller
             ->select('books.*')
             ->where('books.status', 'published')
             ->with(['vendor', 'category', 'categories', 'series']); // Eager loading
-            
+
         // 2. Lọc theo category_id nếu có params
         if ($request->has('category_id') && $request->category_id !== '') {
-            $query->where(function($q) use ($request) {
+            $query->where(function ($q) use ($request) {
                 $q->where('books.category_id', $request->category_id)
-                  ->orWhereHas('categories', function($subq) use ($request) {
-                      $subq->where('categories.id', $request->category_id);
-                  });
+                    ->orWhereHas('categories', function ($subq) use ($request) {
+                        $subq->where('categories.id', $request->category_id);
+                    });
             });
         }
 
@@ -59,25 +61,25 @@ class BookController extends Controller
             $search = $request->search;
             $query->where(function ($q) use ($search) {
                 $q->where('books.title', 'LIKE', "%{$search}%")
-                  ->orWhere('books.author', 'LIKE', "%{$search}%");
+                    ->orWhere('books.author', 'LIKE', "%{$search}%");
             });
         }
 
         // 2c. Lọc theo khoảng giá
         if ($request->filled('min_price')) {
-            $query->where(function($q) use ($request) {
+            $query->where(function ($q) use ($request) {
                 $q->where('books.sale_price', '>=', $request->min_price)
-                  ->orWhere(function($subq) use ($request) {
-                      $subq->whereNull('books.sale_price')->where('books.price', '>=', $request->min_price);
-                  });
+                    ->orWhere(function ($subq) use ($request) {
+                        $subq->whereNull('books.sale_price')->where('books.price', '>=', $request->min_price);
+                    });
             });
         }
         if ($request->filled('max_price')) {
-            $query->where(function($q) use ($request) {
+            $query->where(function ($q) use ($request) {
                 $q->where('books.sale_price', '<=', $request->max_price)
-                  ->orWhere(function($subq) use ($request) {
-                      $subq->whereNull('books.sale_price')->where('books.price', '<=', $request->max_price);
-                  });
+                    ->orWhere(function ($subq) use ($request) {
+                        $subq->whereNull('books.sale_price')->where('books.price', '<=', $request->max_price);
+                    });
             });
         }
 
@@ -98,7 +100,7 @@ class BookController extends Controller
             case 'popular':
                 $query->leftJoin('order_items', 'books.id', '=', 'order_items.book_id')
                     ->leftJoin('orders', 'order_items.order_id', '=', 'orders.id')
-                    ->select('books.*', \Illuminate\Support\Facades\DB::raw('COALESCE(SUM(CASE WHEN orders.status = "completed" THEN order_items.quantity ELSE 0 END), 0) as total_sold'))
+                    ->select('books.*', DB::raw('COALESCE(SUM(CASE WHEN orders.status = "completed" THEN order_items.quantity ELSE 0 END), 0) as total_sold'))
                     ->groupBy('books.id')
                     ->orderBy('total_sold', 'desc');
                 break;
@@ -110,8 +112,9 @@ class BookController extends Controller
 
         if ($request->boolean('all')) {
             $books = $query->get();
+
             return BookResource::collection($books)->additional([
-                'status'  => 'success',
+                'status' => 'success',
                 'message' => 'Lấy danh sách sách thành công.',
             ]);
         }
@@ -120,7 +123,7 @@ class BookController extends Controller
         $books = $query->paginate($request->integer('per_page', 12));
 
         return BookResource::collection($books)->additional([
-            'status'  => 'success',
+            'status' => 'success',
             'message' => 'Lấy danh sách sách thành công.',
         ]);
     }
@@ -145,9 +148,9 @@ class BookController extends Controller
         $book->increment('views');
 
         return response()->json([
-            'status'  => 'success',
+            'status' => 'success',
             'message' => 'Lấy chi tiết sách thành công.',
-            'data'    => new BookResource($book),
+            'data' => new BookResource($book),
         ]);
     }
 
@@ -156,10 +159,11 @@ class BookController extends Controller
      */
     public function allSeries()
     {
-        $series = \App\Models\Series::orderBy('title', 'asc')->get(['id', 'title']);
+        $series = Series::orderBy('title', 'asc')->get(['id', 'title']);
+
         return response()->json([
             'status' => 'success',
-            'data'   => $series,
+            'data' => $series,
         ]);
     }
 
@@ -170,10 +174,10 @@ class BookController extends Controller
     {
         $book = Book::withoutGlobalScopes()->findOrFail($bookId);
 
-        if (!$book->series_id) {
+        if (! $book->series_id) {
             return response()->json([
                 'status' => 'success',
-                'data'   => [],
+                'data' => [],
             ]);
         }
 
@@ -188,7 +192,7 @@ class BookController extends Controller
 
         return response()->json([
             'status' => 'success',
-            'data'   => BookResource::collection($seriesBooks),
+            'data' => BookResource::collection($seriesBooks),
         ]);
     }
 
@@ -213,12 +217,12 @@ class BookController extends Controller
             ->where('id', '!=', $book->id)
             ->where('status', 'published');
 
-        if (!empty($catIds)) {
+        if (! empty($catIds)) {
             $query->where(function ($q) use ($catIds) {
                 $q->whereIn('category_id', $catIds)
-                  ->orWhereHas('categories', function ($cq) use ($catIds) {
-                      $cq->whereIn('categories.id', $catIds);
-                  });
+                    ->orWhereHas('categories', function ($cq) use ($catIds) {
+                        $cq->whereIn('categories.id', $catIds);
+                    });
             });
         }
 
@@ -242,7 +246,7 @@ class BookController extends Controller
 
         return response()->json([
             'status' => 'success',
-            'data'   => BookResource::collection($relatedBooks),
+            'data' => BookResource::collection($relatedBooks),
         ]);
     }
 
@@ -263,7 +267,7 @@ class BookController extends Controller
 
         return response()->json([
             'status' => 'success',
-            'data'   => BookResource::collection($authorBooks),
+            'data' => BookResource::collection($authorBooks),
         ]);
     }
 
@@ -273,32 +277,12 @@ class BookController extends Controller
      */
     public function checkOwnership(Request $request, $bookId)
     {
-        $userId = $request->user()->id;
-
-        $orderItem = OrderItem::where('book_id', $bookId)
-            ->whereHas('order', function ($q) use ($userId) {
-                $q->withoutGlobalScopes()
-                  ->where('user_id', $userId)
-                  ->whereIn('status', ['pending', 'processing', 'shipped', 'completed']);
-            })
-            ->first();
-
-        if ($orderItem) {
-            return response()->json([
-                'status' => 'success',
-                'data'   => [
-                    'owned'    => true,
-                    'order_id' => $orderItem->order_id,
-                    'book_id'  => (int) $bookId,
-                ],
-            ]);
-        }
+        $ebookAccessService = app(EbookAccessService::class);
+        $ownershipData = $ebookAccessService->getOwnershipData($request->user(), (int) $bookId);
 
         return response()->json([
             'status' => 'success',
-            'data'   => [
-                'owned' => false,
-            ],
+            'data' => $ownershipData,
         ]);
     }
 
@@ -323,7 +307,7 @@ class BookController extends Controller
         return response()->json([
             'status' => 'success',
             'message' => 'Cảm ơn bạn đã đánh giá!',
-            'data' => clone $review->load('user')
+            'data' => clone $review->load('user'),
         ]);
     }
 }

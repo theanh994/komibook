@@ -20,6 +20,7 @@ const ticket = ref(null)
 const messages = ref([])
 const loading = ref(true)
 const sending = ref(false)
+const error = ref(null)
 
 const replyText = ref('')
 const attachment = ref(null)
@@ -30,27 +31,24 @@ const isAdminRoute = computed(() => {
 
 const fetchTicketDetails = async () => {
   loading.value = true
+  error.value = null
   try {
     const res = await apiClient.get(`/api/support/tickets/${ticketId}`)
     if (res.data?.status === 'success') {
       ticket.value = res.data.data
       messages.value = res.data.data.messages || []
+    } else if (res.data) {
+      ticket.value = res.data
+      messages.value = res.data.messages || []
+    } else {
+      ticket.value = null
+      messages.value = []
     }
   } catch (e) {
     console.error('Không tải được chi tiết ticket', e)
-    // Fallback Mock Data
-    ticket.value = {
-      id: ticketId,
-      subject: 'Lỗi tải sách PDF sau thanh toán',
-      category: 'technical',
-      priority: 'high',
-      status: 'open',
-      user: { name: 'Elena Rostova' },
-      assigned_admin_id: null,
-    }
-    messages.value = [
-      { id: 1, sender: { name: 'Elena Rostova', role: 'user' }, message: 'Chào ban hỗ trợ, tôi vừa thanh toán mua cuốn "Bóng Tối Sau Lưng" bản Ebook nhưng khi bấm nút tải về thì gặp thông báo lỗi 500.', created_at: '2026-07-13T10:00:00Z' },
-    ]
+    ticket.value = null
+    messages.value = []
+    error.value = e.response?.data?.message || 'Không thể kết nối API chi tiết ticket.'
   } finally {
     loading.value = false
   }
@@ -114,7 +112,7 @@ const updateStatus = async (status) => {
     const res = await apiClient.patch(`/api/admin/support/tickets/${ticketId}/status`, { status })
     if (res.data?.status === 'success') {
       toast.add({ severity: 'success', summary: 'Thành công', detail: 'Đã cập nhật trạng thái ticket.', life: 2000 })
-      ticket.value.status = status
+      if (ticket.value) ticket.value.status = status
     }
   } catch {
     toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Không thể cập nhật trạng thái.', life: 3000 })
@@ -128,8 +126,10 @@ const assignToMe = async () => {
     })
     if (res.data?.status === 'success') {
       toast.add({ severity: 'success', summary: 'Thành công', detail: 'Đã nhận xử lý ticket này.', life: 2000 })
-      ticket.value.assigned_admin_id = authStore.user?.id
-      ticket.value.status = 'pending'
+      if (ticket.value) {
+        ticket.value.assigned_admin_id = authStore.user?.id
+        ticket.value.status = 'pending'
+      }
     }
   } catch {
     toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Không thể nhận xử lý.', life: 3000 })
@@ -158,16 +158,29 @@ onMounted(() => {
       <div class="flex items-center gap-3">
         <Button icon="pi pi-arrow-left" class="p-button-text p-button-secondary p-button-sm" @click="goBack" />
         <div v-if="ticket">
-          <h1 class="text-xl md:text-2xl font-extrabold text-slate-900">Chi tiết yêu cầu #TK-890{{ ticket.id }}</h1>
+          <h1 class="text-xl md:text-2xl font-extrabold text-slate-900">Chi tiết yêu cầu #TK-{{ ticket.id }}</h1>
           <p class="text-slate-500 text-xs mt-1">Chủ đề: <strong class="text-slate-700">{{ ticket.subject }}</strong></p>
         </div>
       </div>
     </div>
 
+    <!-- Loading State -->
     <div v-if="loading" class="flex justify-center p-12 flex-grow items-center">
       <i class="pi pi-spin pi-spinner text-3xl text-indigo-600"></i>
     </div>
 
+    <!-- Error State -->
+    <div v-else-if="error" class="bg-rose-50 border border-rose-200 rounded-2xl p-8 text-center space-y-4 my-6">
+      <i class="pi pi-exclamation-triangle text-4xl text-rose-500"></i>
+      <h3 class="text-lg font-bold text-rose-800">Không thể tải chi tiết ticket</h3>
+      <p class="text-sm text-rose-600 max-w-md mx-auto">{{ error }}</p>
+      <div class="flex justify-center gap-3 pt-2">
+        <Button label="Quay lại" icon="pi pi-arrow-left" class="p-button-outlined p-button-secondary p-button-sm text-xs" @click="goBack" />
+        <Button label="Thử lại" icon="pi pi-refresh" class="p-button-danger p-button-sm text-xs bg-rose-600 text-white" @click="fetchTicketDetails" />
+      </div>
+    </div>
+
+    <!-- Main Content -->
     <div v-else-if="ticket" class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start flex-grow min-h-0">
       <!-- Conversation thread -->
       <div class="lg:col-span-8 flex flex-col bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden h-[600px]">
@@ -180,7 +193,7 @@ onMounted(() => {
           >
             <!-- Avatar mockup -->
             <div class="w-8 h-8 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center font-bold text-xs shrink-0">
-              {{ msg.sender?.name?.slice(0,2) }}
+              {{ msg.sender?.name?.slice(0,2) || '??' }}
             </div>
             
             <div :class="[
@@ -197,6 +210,10 @@ onMounted(() => {
                 </button>
               </div>
             </div>
+          </div>
+
+          <div v-if="messages.length === 0" class="text-center py-12 text-slate-400 text-xs">
+            Chưa có tin nhắn phản hồi nào trong hội thoại này.
           </div>
         </div>
 
@@ -228,7 +245,7 @@ onMounted(() => {
         <div class="space-y-4 text-xs">
           <div class="flex justify-between">
             <span class="text-slate-400">Khách hàng:</span>
-            <strong class="text-slate-700 font-bold">{{ ticket.user?.name }}</strong>
+            <strong class="text-slate-700 font-bold">{{ ticket.user?.name || '—' }}</strong>
           </div>
 
           <div class="flex justify-between">

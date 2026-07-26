@@ -2,6 +2,9 @@
 
 namespace App\Providers;
 
+use App\Services\FacebookTokenVerifier;
+use App\Services\FacebookTokenVerifierInterface;
+use App\Services\FakeFacebookTokenVerifier;
 use App\Services\FakeGoogleTokenVerifier;
 use App\Services\GoogleTokenVerifier;
 use App\Services\GoogleTokenVerifierInterface;
@@ -23,6 +26,14 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
+        $this->app->bind(FacebookTokenVerifierInterface::class, function () {
+            if (app()->environment('testing')) {
+                return new FakeFacebookTokenVerifier;
+            }
+
+            return new FacebookTokenVerifier;
+        });
+
         $this->app->bind(GoogleTokenVerifierInterface::class, function () {
             if (app()->environment('testing')) {
                 return new FakeGoogleTokenVerifier;

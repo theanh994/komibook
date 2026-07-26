@@ -461,7 +461,6 @@ import apiClient from '@/services/axios'
 
 import InputText from 'primevue/inputtext'
 import InputNumber from 'primevue/inputnumber'
-import Textarea from 'primevue/textarea'
 import Editor from 'primevue/editor'
 import Select from 'primevue/select'
 import MultiSelect from 'primevue/multiselect'
@@ -682,29 +681,9 @@ const fetchBookDetail = async (id) => {
   }
 }
 
-const onCoverSelect = (e) => {
-  const file = e.files?.[0] || null
-  if (file) {
-    coverFile.value = file
-    coverPreviewUrl.value = URL.createObjectURL(file)
-  }
-}
-
 const clearCoverImage = () => {
   coverFile.value = null
   coverPreviewUrl.value = ''
-}
-
-const onEbookSelect = (e) => {
-  ebookFile.value = e.files?.[0] || null
-}
-
-const onGallerySelect = (e) => {
-  const files = Array.from(e.files || [])
-  galleryFiles.value.push(...files)
-  files.forEach(file => {
-    galleryPreviewUrls.value.push(URL.createObjectURL(file))
-  })
 }
 
 const removeNewGalleryImage = (idx) => {

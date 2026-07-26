@@ -132,11 +132,6 @@ const getCoverUrl = (path) => {
   return `/storage/${path}`
 }
 
-const formatPrice = (val) => {
-  if (!val && val !== 0) return '—'
-  return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(val)
-}
-
 onMounted(() => {
   fetchSeries()
 })

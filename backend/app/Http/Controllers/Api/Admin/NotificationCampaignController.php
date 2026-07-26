@@ -3,14 +3,14 @@
 namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Models\NotificationCampaign;
-use App\Models\UserNotification;
-use App\Models\User;
 use App\Mail\CampaignNotificationMail;
+use App\Models\NotificationCampaign;
+use App\Models\User;
+use App\Models\UserNotification;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 
 class NotificationCampaignController extends Controller
 {
@@ -23,9 +23,9 @@ class NotificationCampaignController extends Controller
 
         if ($request->has('search')) {
             $search = $request->input('search');
-            $query->where(function($q) use ($search) {
+            $query->where(function ($q) use ($search) {
                 $q->where('title', 'like', "%{$search}%")
-                  ->orWhere('message', 'like', "%{$search}%");
+                    ->orWhere('message', 'like', "%{$search}%");
             });
         }
 
@@ -52,16 +52,31 @@ class NotificationCampaignController extends Controller
             'status' => 'required|in:draft,scheduled,sent',
         ]);
 
+        if ($validated['target_audience'] === 'fiction_enthusiasts' && $validated['status'] === 'sent') {
+            return response()->json([
+                'message' => 'Phân loại khán giả fiction_enthusiasts chưa được hỗ trợ.',
+            ], 422);
+        }
+
+        $shouldSend = $validated['status'] === 'sent';
+        if ($shouldSend) {
+            $validated['status'] = 'draft';
+        }
+
         $campaign = NotificationCampaign::create($validated);
 
-        if ($campaign->status === 'sent') {
-            $this->dispatchCampaign($campaign);
+        if ($shouldSend) {
+            try {
+                $this->dispatchCampaign($campaign);
+            } catch (\Throwable) {
+                return response()->json(['message' => 'Không thể gửi chiến dịch thông báo.'], 422);
+            }
         }
 
         return response()->json([
             'message' => 'Chiến dịch đã được tạo thành công.',
-            'campaign' => $campaign
-        ], 210);
+            'campaign' => $campaign->fresh(),
+        ], 201);
     }
 
     /**
@@ -71,51 +86,29 @@ class NotificationCampaignController extends Controller
     {
         $campaign = NotificationCampaign::findOrFail($id);
 
-        // Generate analytics breakdown for SENT campaigns
         $analytics = null;
         if ($campaign->status === 'sent') {
-            $sent = $campaign->sent_count > 0 ? $campaign->sent_count : 120;
-            $opened = $campaign->opened_count > 0 ? $campaign->opened_count : round($sent * 0.42);
-            $clicked = $campaign->click_count > 0 ? $campaign->click_count : round($opened * 0.28);
+            $sent = (int) $campaign->sent_count;
+            $opened = (int) $campaign->opened_count;
+            $clicked = (int) $campaign->click_count;
 
-            // Seed database fields if they are 0
-            if ($campaign->sent_count === 0) {
-                $campaign->update([
-                    'sent_count' => $sent,
-                    'opened_count' => $opened,
-                    'click_count' => $clicked,
-                ]);
-            }
+            $openRate = $sent > 0 ? round(($opened / $sent) * 100, 1) : 0.0;
+            $clickRate = $sent > 0 ? round(($clicked / $sent) * 100, 1) : 0.0;
 
-            // Realistically mock the trends and device distribution
             $analytics = [
-                'delivery_rate' => 98.4,
-                'open_rate' => round(($opened / $sent) * 100, 1),
-                'click_rate' => round(($clicked / $sent) * 100, 1),
-                'hourly_opens' => [
-                    ['time' => '09:00', 'opens' => round($opened * 0.15), 'clicks' => round($clicked * 0.12)],
-                    ['time' => '10:00', 'opens' => round($opened * 0.25), 'clicks' => round($clicked * 0.22)],
-                    ['time' => '11:00', 'opens' => round($opened * 0.20), 'clicks' => round($clicked * 0.18)],
-                    ['time' => '12:00', 'opens' => round($opened * 0.12), 'clicks' => round($clicked * 0.10)],
-                    ['time' => '13:00', 'opens' => round($opened * 0.08), 'clicks' => round($clicked * 0.05)],
-                    ['time' => '14:00', 'opens' => round($opened * 0.20), 'clicks' => round($clicked * 0.33)],
-                ],
-                'devices' => [
-                    ['device' => 'iOS Device', 'percentage' => 45],
-                    ['device' => 'Android Device', 'percentage' => 38],
-                    ['device' => 'Desktop / Web', 'percentage' => 17],
-                ],
-                'segments' => [
-                    ['segment' => 'Active Readers', 'percentage' => 35],
-                    ['segment' => 'Fiction Enthusiasts', 'percentage' => 40],
-                    ['segment' => 'Lapsed Users', 'percentage' => 25],
-                ],
+                'delivery_rate' => null,
+                'open_rate' => $openRate,
+                'click_rate' => $clickRate,
+                'telemetry_available' => false,
+                'hourly_opens' => [],
+                'devices' => [],
+                'segments' => [],
             ];
         }
 
         return response()->json([
             'campaign' => $campaign,
-            'analytics' => $analytics
+            'analytics' => $analytics,
         ]);
     }
 
@@ -139,15 +132,30 @@ class NotificationCampaignController extends Controller
             'status' => 'required|in:draft,scheduled,sent',
         ]);
 
+        if ($validated['target_audience'] === 'fiction_enthusiasts' && $validated['status'] === 'sent') {
+            return response()->json([
+                'message' => 'Phân loại khán giả fiction_enthusiasts chưa được hỗ trợ.',
+            ], 422);
+        }
+
+        $shouldSend = $validated['status'] === 'sent';
+        if ($shouldSend) {
+            $validated['status'] = 'draft';
+        }
+
         $campaign->update($validated);
 
-        if ($campaign->status === 'sent') {
-            $this->dispatchCampaign($campaign);
+        if ($shouldSend) {
+            try {
+                $this->dispatchCampaign($campaign);
+            } catch (\Throwable) {
+                return response()->json(['message' => 'Không thể gửi chiến dịch thông báo.'], 422);
+            }
         }
 
         return response()->json([
             'message' => 'Chiến dịch đã được cập nhật thành công.',
-            'campaign' => $campaign
+            'campaign' => $campaign->fresh(),
         ]);
     }
 
@@ -173,12 +181,21 @@ class NotificationCampaignController extends Controller
             return response()->json(['message' => 'Chiến dịch này đã được gửi trước đó.'], 422);
         }
 
-        $campaign->update(['status' => 'sent']);
-        $this->dispatchCampaign($campaign);
+        if ($campaign->target_audience === 'fiction_enthusiasts') {
+            return response()->json([
+                'message' => 'Phân loại khán giả fiction_enthusiasts chưa được hỗ trợ.',
+            ], 422);
+        }
+
+        try {
+            $this->dispatchCampaign($campaign);
+        } catch (\Throwable) {
+            return response()->json(['message' => 'Không thể gửi chiến dịch thông báo.'], 422);
+        }
 
         return response()->json([
             'message' => 'Chiến dịch đã bắt đầu gửi.',
-            'campaign' => $campaign
+            'campaign' => $campaign->fresh(),
         ]);
     }
 
@@ -187,33 +204,25 @@ class NotificationCampaignController extends Controller
      */
     protected function dispatchCampaign(NotificationCampaign $campaign)
     {
-        // 1. Fetch targeted users
+        if ($campaign->target_audience === 'fiction_enthusiasts') {
+            throw new \InvalidArgumentException('Phân loại khán giả fiction_enthusiasts chưa được hỗ trợ.');
+        }
+
         $usersQuery = User::where('role', 'customer');
 
         if ($campaign->target_audience === 'active_readers') {
-            // Users with at least 1 order
             $usersQuery->whereHas('orders');
-        } elseif ($campaign->target_audience === 'fiction_enthusiasts') {
-            // We can approximate or just take all for this demo
         } elseif ($campaign->target_audience === 'lapsed_users') {
-            // Lapsed users (no orders in last 30 days)
-            $usersQuery->whereDoesntHave('orders', function($q) {
+            $usersQuery->whereDoesntHave('orders', function ($q) {
                 $q->where('created_at', '>=', now()->subDays(30));
             });
         }
 
         $users = $usersQuery->get();
-
-        // Fallback: If query yields 0 users, send to all customer users
-        if ($users->isEmpty()) {
-            $users = User::where('role', 'customer')->get();
-        }
-
         $sentCount = 0;
-        
-        DB::transaction(function() use ($users, $campaign, &$sentCount) {
+
+        DB::transaction(function () use ($users, $campaign, &$sentCount) {
             foreach ($users as $user) {
-                // Create user notification database record
                 UserNotification::create([
                     'user_id' => $user->id,
                     'title' => $campaign->title,
@@ -223,37 +232,32 @@ class NotificationCampaignController extends Controller
                         'campaign_id' => $campaign->id,
                         'image_url' => $campaign->image_url,
                         'icon' => 'campaign',
-                        'colorClass' => 'bg-indigo-100 text-indigo-600'
-                    ]
+                        'colorClass' => 'bg-indigo-100 text-indigo-600',
+                    ],
                 ]);
                 $sentCount++;
             }
+
+            $campaign->update([
+                'status' => 'sent',
+                'sent_count' => $sentCount,
+            ]);
         });
 
-        // 2. Send email to users via Queue to prevent HTTP request blocking
         foreach ($users as $user) {
             try {
                 if ($user->email) {
                     Mail::to($user->email)->queue(new CampaignNotificationMail(
-                        $user, 
-                        $campaign->title, 
-                        $campaign->message, 
+                        $user,
+                        $campaign->title,
+                        $campaign->message,
                         $campaign->image_url
                     ));
                 }
             } catch (\Exception $e) {
-                Log::error("Failed to send campaign email to {$user->email}: " . $e->getMessage());
+                Log::error("Failed to send campaign email to {$user->email}:".$e->getMessage());
             }
         }
 
-        // 3. Update stats
-        $openedCount = round($sentCount * 0.42);
-        $clickCount = round($openedCount * 0.28);
-
-        $campaign->update([
-            'sent_count' => $sentCount,
-            'opened_count' => $openedCount,
-            'click_count' => $clickCount,
-        ]);
     }
 }

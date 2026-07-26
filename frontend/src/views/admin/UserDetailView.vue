@@ -1,33 +1,24 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { useToast } from 'primevue/usetoast'
 import apiClient from '@/services/axios'
 
 const route = useRoute()
 const router = useRouter()
-const toast = useToast()
 const userId = computed(() => route.params.id)
 const loading = ref(true)
+const error = ref(null)
 
-const user = ref({
-  id: null,
-  name: 'Nguyễn Văn A',
-  email: 'nguyenvana@email.com',
-  phone: '0901 234 567',
-  role: 'customer',
-  created_at: '2023-01-15T08:30:00Z',
-  last_login: '2023-10-28T14:20:00Z',
-  avatar: null,
-})
+const user = ref(null)
 
 const membershipStats = computed(() => {
+  if (!user.value) return { tier: '—', totalOrders: 0, totalSpent: 0, totalBooks: '—', reviews: '—' }
   return {
-    tier: user.value.membership_tier?.name || 'Thành viên Bạc',
+    tier: user.value.membership_tier?.name || 'Chưa xếp hạng',
     totalOrders: user.value.total_orders || 0,
     totalSpent: user.value.total_spent || 0,
-    totalBooks: 0,
-    reviews: 0,
+    totalBooks: '—',
+    reviews: '—',
   }
 })
 
@@ -40,7 +31,7 @@ const getInitials = (name) => {
   return (parts[0]?.[0] || '') + (parts[parts.length - 1]?.[0] || '')
 }
 
-const formatVND = (val) => new Intl.NumberFormat('vi-VN').format(val) + ' ₫'
+const formatVND = (val) => new Intl.NumberFormat('vi-VN').format(val || 0) + ' ₫'
 
 const formatDate = (iso) => {
   if (!iso) return '—'
@@ -52,13 +43,21 @@ const getStatusLabel = (s) => s === 'completed' ? 'Hoàn thành' : 'Chờ xử l
 
 const fetchUser = async () => {
   loading.value = true
+  error.value = null
   try {
     const res = await apiClient.get(`/api/admin/users/${userId.value || route.params.id}`)
     if (res.data?.data) {
-      user.value = { ...user.value, ...res.data.data }
+      user.value = res.data.data
+      recentOrders.value = res.data.data.orders || []
+    } else if (res.data) {
+      user.value = res.data
+    } else {
+      user.value = null
     }
-  } catch {
-    // Keep mock data if user not found
+  } catch (err) {
+    console.error('Không tải được thông tin người dùng', err)
+    user.value = null
+    error.value = err.response?.data?.message || 'Không thể kết nối API thông tin người dùng.'
   } finally {
     loading.value = false
   }
@@ -77,9 +76,9 @@ onMounted(fetchUser)
           Quản lý Users
         </button>
         <span class="material-symbols-outlined text-[16px]">chevron_right</span>
-        <span class="text-on-surface font-medium">{{ user.name }}</span>
+        <span class="text-on-surface font-medium">{{ user?.name || 'Chi tiết người dùng' }}</span>
       </div>
-      <div class="flex items-center gap-sm">
+      <div v-if="user" class="flex items-center gap-sm">
         <button class="px-4 py-2 border border-red-300 text-red-600 rounded-lg font-label-md text-label-md hover:bg-red-50 transition-colors flex items-center gap-sm">
           <span class="material-symbols-outlined text-[18px]">block</span> Tạm khóa
         </button>
@@ -89,8 +88,29 @@ onMounted(fetchUser)
       </div>
     </div>
 
+    <!-- Loading State -->
+    <div v-if="loading" class="p-24 flex justify-center items-center flex-col gap-3">
+      <i class="pi pi-spin pi-spinner text-4xl text-indigo-600"></i>
+      <span class="text-sm text-slate-500">Đang tải thông tin người dùng...</span>
+    </div>
+
+    <!-- Error State -->
+    <div v-else-if="error" class="bg-rose-50 border border-rose-200 rounded-2xl p-8 text-center space-y-4 my-6">
+      <i class="pi pi-exclamation-triangle text-4xl text-rose-500"></i>
+      <h3 class="text-lg font-bold text-rose-800">Không thể tải hồ sơ người dùng</h3>
+      <p class="text-sm text-rose-600 max-w-md mx-auto">{{ error }}</p>
+      <div class="flex justify-center gap-3 pt-2">
+        <button @click="router.push({ name: 'admin-users' })" class="px-4 py-2 border border-slate-300 text-slate-700 rounded-lg font-bold text-xs hover:bg-slate-100">
+          Quay lại danh sách
+        </button>
+        <button @click="fetchUser" class="px-4 py-2 bg-rose-600 text-white rounded-lg font-bold text-xs hover:bg-rose-700 flex items-center gap-1">
+          <i class="pi pi-refresh"></i> Thử lại
+        </button>
+      </div>
+    </div>
+
     <!-- Main Grid -->
-    <div class="grid grid-cols-1 lg:grid-cols-12 gap-lg animate-slide-up">
+    <div v-else-if="user" class="grid grid-cols-1 lg:grid-cols-12 gap-lg animate-slide-up">
       <!-- Left: Profile Card -->
       <div class="lg:col-span-4 space-y-lg">
         <div class="bg-surface-container-lowest rounded-xl shadow-soft border border-outline-variant/30 overflow-hidden">
@@ -147,8 +167,8 @@ onMounted(fetchUser)
                 <span class="text-[12px] font-medium" :class="item.progress === 100 ? 'text-green-600' : 'text-primary'">{{ item.progress }}%</span>
               </div>
             </div>
-            <div v-if="readingHistory.length === 0" class="px-lg py-xl text-center text-on-surface-variant">
-              Không có dữ liệu
+            <div v-if="readingHistory.length === 0" class="px-lg py-xl text-center text-on-surface-variant text-xs">
+              Chưa có dữ liệu theo dõi đọc sách
             </div>
           </div>
         </div>
@@ -187,7 +207,6 @@ onMounted(fetchUser)
               <span class="material-symbols-outlined text-primary text-[20px]">receipt_long</span>
               Lịch sử đơn hàng
             </h3>
-            <button class="text-primary hover:underline font-label-md text-label-md text-[13px]">Xem tất cả</button>
           </div>
           <div class="overflow-x-auto">
             <table class="w-full text-left border-collapse">
@@ -203,42 +222,18 @@ onMounted(fetchUser)
               <tbody class="divide-y divide-outline-variant/20">
                 <tr v-for="order in recentOrders" :key="order.id" class="hover:bg-surface-variant/30 transition-colors">
                   <td class="py-3 px-lg font-medium text-primary text-sm">#{{ order.id }}</td>
-                  <td class="py-3 px-lg text-sm text-on-surface-variant">{{ order.date }}</td>
-                  <td class="py-3 px-lg text-sm text-on-surface">{{ order.book }}</td>
-                  <td class="py-3 px-lg text-sm text-right font-medium text-on-surface">{{ formatVND(order.amount) }}</td>
+                  <td class="py-3 px-lg text-sm text-on-surface-variant">{{ formatDate(order.created_at || order.date) }}</td>
+                  <td class="py-3 px-lg text-sm text-on-surface">{{ order.book || order.order_code || '—' }}</td>
+                  <td class="py-3 px-lg text-sm text-right font-medium text-on-surface">{{ formatVND(order.grand_total || order.amount) }}</td>
                   <td class="py-3 px-lg">
                     <span :class="getStatusStyle(order.status)" class="inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium">{{ getStatusLabel(order.status) }}</span>
                   </td>
                 </tr>
                 <tr v-if="recentOrders.length === 0">
-                  <td colspan="5" class="py-xl px-lg text-center text-on-surface-variant">Không có đơn hàng nào.</td>
+                  <td colspan="5" class="py-xl px-lg text-center text-on-surface-variant text-xs">Không có đơn hàng nào.</td>
                 </tr>
               </tbody>
             </table>
-          </div>
-        </div>
-
-        <!-- Quick Actions -->
-        <div class="bg-surface-container-lowest rounded-xl shadow-soft border border-outline-variant/30 overflow-hidden">
-          <div class="px-lg py-md border-b border-outline-variant/30 bg-surface">
-            <h3 class="font-headline-md text-headline-md text-on-surface flex items-center gap-sm">
-              <span class="material-symbols-outlined text-primary text-[20px]">bolt</span>
-              Hành động nhanh
-            </h3>
-          </div>
-          <div class="p-lg grid grid-cols-1 md:grid-cols-3 gap-md">
-            <button class="p-md rounded-lg border border-outline-variant/30 bg-surface hover:bg-surface-variant transition-colors text-center group">
-              <span class="material-symbols-outlined text-primary text-[28px] group-hover:scale-110 transition-transform block mx-auto mb-2">workspace_premium</span>
-              <span class="font-label-md text-label-md text-on-surface block">Nâng hạng VIP</span>
-            </button>
-            <button class="p-md rounded-lg border border-outline-variant/30 bg-surface hover:bg-surface-variant transition-colors text-center group">
-              <span class="material-symbols-outlined text-primary text-[28px] group-hover:scale-110 transition-transform block mx-auto mb-2">redeem</span>
-              <span class="font-label-md text-label-md text-on-surface block">Tặng voucher</span>
-            </button>
-            <button class="p-md rounded-lg border border-outline-variant/30 bg-surface hover:bg-surface-variant transition-colors text-center group">
-              <span class="material-symbols-outlined text-primary text-[28px] group-hover:scale-110 transition-transform block mx-auto mb-2">lock_reset</span>
-              <span class="font-label-md text-label-md text-on-surface block">Reset mật khẩu</span>
-            </button>
           </div>
         </div>
       </div>

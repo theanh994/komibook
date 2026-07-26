@@ -8,7 +8,6 @@ import Button from 'primevue/button'
 import Toast from 'primevue/toast'
 import InputText from 'primevue/inputtext'
 import Textarea from 'primevue/textarea'
-import ProgressBar from 'primevue/progressbar'
 
 const route = useRoute()
 const router = useRouter()
@@ -29,36 +28,33 @@ const loading = ref(true)
 const saving = ref(false)
 const wordCount = ref(0)
 const charCount = ref(0)
+const error = ref(null)
 
 const fetchChapters = async () => {
   loading.value = true
+  error.value = null
   try {
-    const bookRes = await apiClient.get(`/api/books`)
-    // Find our book
-    const b = bookRes.data?.data?.find(item => item.id == bookId)
-    if (b) {
-      bookTitle.value = b.title
+    const bookRes = await apiClient.get(`/api/vendor/books/${bookId}`)
+    if (bookRes.data?.data?.title) {
+      bookTitle.value = bookRes.data.data.title
     }
 
     const res = await apiClient.get(`/api/vendor/books/${bookId}/chapters`)
     if (res.data?.status === 'success') {
-      chapters.value = res.data.data
+      chapters.value = res.data.data || []
       if (chapters.value.length > 0) {
         selectChapter(0)
       } else {
-        // Create first chapter template
-        createNewChapter()
+        activeChapterIndex.value = -1
+        activeChapter.value = { title: '', content: '', price: 0, is_preview: false }
       }
     }
   } catch (e) {
     console.error('Không tải được danh sách chương', e)
-    toast.add({ severity: 'error', summary: 'Lỗi tải dữ liệu', detail: 'Không thể kết nối API chương sách.', life: 3000 })
-    // Fallback Mock Chapters
-    chapters.value = [
-      { id: 101, title: 'Chương 1: Khởi đầu mới', content: 'Nội dung chương 1...', is_preview: true, price: 0 },
-      { id: 102, title: 'Chương 2: Sóng gió nổi lên', content: 'Nội dung chương 2...', is_preview: false, price: 5000 },
-    ]
-    selectChapter(0)
+    error.value = e.response?.data?.message || 'Không thể kết nối API chương sách.'
+    chapters.value = []
+    activeChapterIndex.value = -1
+    activeChapter.value = { title: '', content: '', price: 0, is_preview: false }
   } finally {
     loading.value = false
   }
@@ -135,7 +131,8 @@ const deleteChapter = async () => {
     if (chapters.value.length > 0) {
       selectChapter(0)
     } else {
-      createNewChapter()
+      activeChapterIndex.value = -1
+      activeChapter.value = { title: '', content: '', price: 0, is_preview: false }
     }
     return
   }
@@ -149,9 +146,10 @@ const deleteChapter = async () => {
     if (chapters.value.length > 0) {
       selectChapter(0)
     } else {
-      createNewChapter()
+      activeChapterIndex.value = -1
+      activeChapter.value = { title: '', content: '', price: 0, is_preview: false }
     }
-  } catch (e) {
+  } catch {
     toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Không thể xóa chương.', life: 3000 })
   }
 }
@@ -185,13 +183,30 @@ onMounted(() => {
         </div>
         <div class="flex gap-2">
           <Button label="Xem thử thiết bị" icon="pi pi-eye" class="p-button-outlined p-button-sm text-xs" @click="router.push({ name: 'author-device-preview', params: { bookId } })" />
-          <Button label="Lưu chương" icon="pi pi-save" class="p-button-primary bg-indigo-600 text-white p-button-sm text-xs" :loading="saving" @click="saveChapter" />
+          <Button label="Lưu chương" icon="pi pi-save" class="p-button-primary bg-indigo-600 text-white p-button-sm text-xs" :loading="saving" :disabled="loading || !!error" @click="saveChapter" />
         </div>
       </div>
     </header>
 
+    <!-- Loading State -->
+    <div v-if="loading" class="flex-1 flex items-center justify-center p-12">
+      <i class="pi pi-spin pi-spinner text-3xl text-indigo-600"></i>
+    </div>
+
+    <!-- Error State -->
+    <div v-else-if="error" class="flex-1 flex items-center justify-center p-8 bg-slate-50">
+      <div class="bg-white rounded-2xl p-8 border border-slate-200 shadow-sm text-center max-w-md w-full space-y-4">
+        <div class="w-12 h-12 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mx-auto">
+          <i class="pi pi-exclamation-triangle text-xl"></i>
+        </div>
+        <h3 class="text-base font-bold text-slate-900">Không thể tải dữ liệu chương sách</h3>
+        <p class="text-xs text-slate-500 leading-relaxed">{{ error }}</p>
+        <Button label="Thử lại" icon="pi pi-refresh" class="p-button-primary bg-indigo-600 p-button-sm text-xs" @click="fetchChapters" />
+      </div>
+    </div>
+
     <!-- Workspace -->
-    <div class="flex flex-1 overflow-hidden">
+    <div v-else class="flex flex-1 overflow-hidden">
       <!-- Chapters sidebar -->
       <aside class="w-64 bg-white border-r border-slate-200 flex flex-col shrink-0">
         <div class="p-4 border-b border-slate-100 flex justify-between items-center">
@@ -199,12 +214,13 @@ onMounted(() => {
           <Button icon="pi pi-plus" class="p-button-text p-button-sm" @click="createNewChapter" />
         </div>
 
-        <div v-if="loading" class="p-4">
-          <ProgressBar mode="indeterminate" style="height: 4px" />
-        </div>
-
-        <div v-else class="flex-1 overflow-y-auto">
+        <div class="flex-1 overflow-y-auto">
+          <div v-if="chapters.length === 0" class="p-4 text-xs text-slate-400 text-center space-y-2">
+            <p>Chưa có chương sách nào.</p>
+            <Button label="Tạo chương đầu tiên" icon="pi pi-plus" class="p-button-outlined p-button-sm text-xs" @click="createNewChapter" />
+          </div>
           <div 
+            v-else
             v-for="(ch, idx) in chapters" 
             :key="idx"
             :class="[

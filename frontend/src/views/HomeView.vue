@@ -377,6 +377,7 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import apiClient from '@/services/axios'
+import { readApiList } from '@/services/apiContract'
 import { useCartStore } from '@/stores/cart'
 import { useToast } from 'primevue/usetoast'
 import Skeleton from 'primevue/skeleton'
@@ -411,7 +412,7 @@ const fetchBooks = async () => {
   try {
     const params = { per_page: 15 }
     const response = await apiClient.get('/api/books', { params })
-    books.value = (response.data.data || response.data).slice(0, 15)
+    books.value = readApiList(response.data).slice(0, 15)
   } catch (error) {
     console.error('Lỗi tải sách:', error)
   } finally {
@@ -422,9 +423,9 @@ const fetchBooks = async () => {
 const fetchFlashSales = async () => {
   try {
     const res = await apiClient.get('/api/flash-sales')
-    if (!res.data || !res.data.data) return
+    const flashSales = readApiList(res.data)
     const now = new Date()
-    const active = res.data.data.find(fs => {
+    const active = flashSales.find(fs => {
       const start = new Date(fs.start_time)
       const end = new Date(fs.end_time)
       return (start <= now && end > now)
@@ -465,7 +466,7 @@ const fetchTopSellingBooks = async () => {
   loadingTopSelling.value = true
   try {
     const response = await apiClient.get('/api/books/top-selling')
-    topSellingBooks.value = response.data.data.slice(0, 5)
+    topSellingBooks.value = readApiList(response.data).slice(0, 5)
   } catch (error) {
     console.error('Lỗi tải sách bán chạy:', error)
   } finally {
@@ -541,14 +542,14 @@ const getCoverUrl = (path) => {
 const toggleWishlist = async (bookId) => {
   try {
     const res = await wishlistStore.toggleWishlist(bookId)
-    if (res.status === 'added') {
+    if (res.state === 'added') {
       toast.add({ severity: 'success', summary: 'Đã lưu', detail: 'Đã thêm vào danh sách yêu thích', life: 2000 })
-    } else if (res.status === 'removed') {
+    } else if (res.state === 'removed') {
       toast.add({ severity: 'info', summary: 'Đã bỏ', detail: 'Đã xóa khỏi danh sách yêu thích', life: 2000 })
-    } else if (res.status === 'unauthorized') {
+    } else if (res.state === 'unauthorized') {
       toast.add({ severity: 'warn', summary: 'Thông báo', detail: 'Vui lòng đăng nhập để lưu yêu thích', life: 3000 })
     }
-  } catch (error) {
+  } catch {
     toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Có lỗi xảy ra', life: 3000 })
   }
 }

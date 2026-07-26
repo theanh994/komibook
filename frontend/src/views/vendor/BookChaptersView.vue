@@ -6,7 +6,6 @@ import apiClient from '@/services/axios'
 
 import Button from 'primevue/button'
 import Toast from 'primevue/toast'
-import InputText from 'primevue/inputtext'
 import ToggleSwitch from 'primevue/toggleswitch'
 
 const route = useRoute()
@@ -18,28 +17,24 @@ const bookTitle = ref('Tác phẩm tự viết')
 const chapters = ref([])
 const loading = ref(true)
 const saving = ref(false)
+const error = ref(null)
 
 const fetchChapters = async () => {
   loading.value = true
+  error.value = null
   try {
-    const bookRes = await apiClient.get(`/api/books`)
-    const b = bookRes.data?.data?.find(item => item.id == bookId)
-    if (b) {
-      bookTitle.value = b.title
+    const bookRes = await apiClient.get(`/api/vendor/books/${bookId}`)
+    if (bookRes.data?.data?.title) {
+      bookTitle.value = bookRes.data.data.title
     }
 
     const res = await apiClient.get(`/api/vendor/books/${bookId}/chapters`)
     if (res.data?.status === 'success') {
-      chapters.value = res.data.data
+      chapters.value = res.data.data || []
     }
   } catch (e) {
     console.error('Không tải được danh sách chương', e)
-    // Fallback Mock Chapters
-    chapters.value = [
-      { id: 101, title: 'Chương 1: Khởi đầu mới', chapter_number: 1, is_preview: true, price: 0 },
-      { id: 102, title: 'Chương 2: Sóng gió nổi lên', chapter_number: 2, is_preview: false, price: 5000 },
-      { id: 103, title: 'Chương 3: Đi tìm sự thật', chapter_number: 3, is_preview: false, price: 5000 },
-    ]
+    error.value = e.response?.data?.message || 'Không thể kết nối đến hệ thống để lấy danh sách chương.'
   } finally {
     loading.value = false
   }
@@ -48,7 +43,6 @@ const fetchChapters = async () => {
 const saveConfigs = async () => {
   saving.value = true
   try {
-    // Loop and update each chapter configurations
     for (const ch of chapters.value) {
       await apiClient.put(`/api/vendor/books/${bookId}/chapters/${ch.id}`, {
         title: ch.title,
@@ -58,7 +52,7 @@ const saveConfigs = async () => {
       })
     }
     toast.add({ severity: 'success', summary: 'Thành công', detail: 'Đã cập nhật giá bán và cấu hình đọc thử cho toàn bộ chương.', life: 3000 })
-  } catch (e) {
+  } catch {
     toast.add({ severity: 'error', summary: 'Lỗi cập nhật', detail: 'Có lỗi xảy ra khi lưu thiết lập.', life: 3000 })
   } finally {
     saving.value = false
@@ -83,12 +77,21 @@ onMounted(() => {
         </div>
       </div>
       <div>
-        <Button label="Lưu cấu hình" icon="pi pi-save" class="p-button-primary bg-indigo-600 hover:bg-indigo-700 text-white font-bold" :loading="saving" @click="saveConfigs" />
+        <Button label="Lưu cấu hình" icon="pi pi-save" class="p-button-primary bg-indigo-600 hover:bg-indigo-700 text-white font-bold" :disabled="loading || error || chapters.length === 0" :loading="saving" @click="saveConfigs" />
       </div>
     </div>
 
     <div v-if="loading" class="flex justify-center p-12">
       <i class="pi pi-spin pi-spinner text-3xl text-indigo-600"></i>
+    </div>
+
+    <div v-else-if="error" class="bg-white rounded-2xl p-8 border border-slate-200 shadow-sm text-center max-w-md mx-auto space-y-4 my-8">
+      <div class="w-12 h-12 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mx-auto">
+        <i class="pi pi-exclamation-triangle text-xl"></i>
+      </div>
+      <h3 class="text-base font-bold text-slate-900">Không thể tải dữ liệu chương sách</h3>
+      <p class="text-xs text-slate-500 leading-relaxed">{{ error }}</p>
+      <Button label="Thử lại" icon="pi pi-refresh" class="p-button-primary bg-indigo-600 p-button-sm" @click="fetchChapters" />
     </div>
 
     <div v-else class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
@@ -103,7 +106,7 @@ onMounted(() => {
             </tr>
           </thead>
           <tbody class="divide-y divide-slate-150">
-            <tr v-for="(ch, idx) in chapters" :key="ch.id" class="hover:bg-slate-50/50">
+            <tr v-for="ch in chapters" :key="ch.id" class="hover:bg-slate-50/50">
               <td class="p-4 font-semibold text-slate-500">{{ ch.chapter_number }}</td>
               <td class="p-4">
                 <input type="text" v-model="ch.title" class="w-full px-2 py-1 bg-transparent border-b border-transparent focus:border-indigo-600 text-slate-800 font-medium text-sm outline-none" />

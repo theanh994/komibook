@@ -204,7 +204,6 @@ import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useCartStore } from '@/stores/cart'
-import Button from 'primevue/button'
 import Menu from 'primevue/menu'
 import apiClient from '@/services/axios'
 
@@ -340,10 +339,6 @@ onMounted(() => {
     setInterval(fetchUnreadCount, 60000)
   }
 })
-
-const goToDashboard = () => {
-  router.push({ name: 'dashboard' })
-}
 
 const getAvatarUrl = (avatar) => {
   if (!avatar) return ''

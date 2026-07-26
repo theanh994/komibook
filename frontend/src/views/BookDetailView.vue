@@ -823,7 +823,7 @@ const fetchRelatedCategoryBooks = async (bookId) => {
 
 const checkEbookOwnership = async (bookId) => {
   try {
-    const res = await apiClient.get(`/api/books/${bookId}/ownership`)
+    const res = await apiClient.get(`/api/books/${bookId}/check-ownership`)
     ownershipData.value = res.data.data || { owned: false }
   } catch (error) {
     console.warn('Không thể kiểm tra quyền sở hữu ebook:', error)
@@ -840,8 +840,8 @@ const fetchAuthorBooks = async (bookId) => {
 }
 
 const goToReader = () => {
-  if (book.value?.id) {
-    router.push({ name: 'ebook-reader', params: { id: book.value.id } })
+  if (book.value?.id && ownershipData.value?.order_id) {
+    router.push({ name: 'ebook-reader', params: { orderId: ownershipData.value.order_id, bookId: book.value.id } })
   }
 }
 
@@ -900,10 +900,10 @@ const toggleWishlist = async () => {
   if (!book.value) return
   try {
     const res = await wishlistStore.toggleWishlist(book.value.id)
-    if (res.status === 'added') {
+    if (res.state === 'added') {
       book.value.wishlists_count = (book.value.wishlists_count || 0) + 1
       toast.add({ severity: 'success', summary: 'Đã lưu', detail: 'Đã thêm vào danh sách yêu thích', life: 2000 })
-    } else if (res.status === 'removed') {
+    } else if (res.state === 'removed') {
       book.value.wishlists_count = Math.max(0, (book.value.wishlists_count || 1) - 1)
       toast.add({ severity: 'info', summary: 'Đã bỏ', detail: 'Đã xóa khỏi danh sách yêu thích', life: 2000 })
     } else if (res.status === 'unauthorized') {

@@ -526,17 +526,17 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { useToast } from 'primevue/usetoast'
 import Toast from 'primevue/toast'
 import Drawer from 'primevue/drawer'
 import Dialog from 'primevue/dialog'
 import apiClient from '@/services/axios'
+import { readApiData } from '@/services/apiContract'
 import VuePdfEmbed from 'vue-pdf-embed'
 
 const route = useRoute()
-const router = useRouter()
 const toast = useToast()
 
 const activeTab = ref('reader')
@@ -598,7 +598,7 @@ const onDrag = (e) => {
   currentDragX.value = e.clientX
 }
 
-const endDrag = (e) => {
+const endDrag = () => {
   if (!isDragging.value) return
   isDragging.value = false
   const diff = currentDragX.value - dragStartX.value
@@ -686,13 +686,6 @@ const bookStats = computed(() => [
   { label: 'Bản quyền', value: book.value?.publisher || 'Komibook', icon: 'verified' }
 ])
 
-const extraMetadata = computed(() => [
-  { label: 'Nhà xuất bản', value: book.value?.publisher || 'NXB Trẻ', icon: 'business' },
-  { label: 'Năm xuất bản', value: book.value?.publication_year || '2023', icon: 'calendar_today' },
-  { label: 'ISBN', value: book.value?.isbn || '978-604-1-2345-6', icon: 'barcode' },
-  { label: 'Bộ sách', value: book.value?.series?.name || 'Không thuộc bộ', icon: 'collections_bookmark' }
-])
-
 watch(currentTheme, (newTheme) => localStorage.setItem('readerTheme', newTheme))
 
 const toggleTheme = () => {
@@ -768,7 +761,7 @@ const fetchEbookData = async () => {
       })
     ])
 
-    pdfUrl.value = urlRes.data.url
+    pdfUrl.value = readApiData(urlRes.data).url
     console.log('[Reader] PDF URL received:', pdfUrl.value)
     
     book.value = bookRes.data.data || bookRes.data
@@ -788,7 +781,7 @@ const fetchEbookData = async () => {
         try {
           const urlObj = new URL(pdfUrl.value)
           pdfUrl.value = urlObj.pathname + urlObj.search
-        } catch (e) {
+        } catch {
           // Bỏ qua
         }
       }

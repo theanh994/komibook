@@ -9,6 +9,7 @@ use App\Http\Resources\UserResource;
 use App\Models\Author;
 use App\Models\User;
 use App\Models\Vendor;
+use App\Services\FacebookTokenVerifierInterface;
 use App\Services\GoogleTokenVerifierInterface;
 use Illuminate\Auth\Events\PasswordReset;
 use Illuminate\Http\JsonResponse;
@@ -34,33 +35,49 @@ class AuthController extends Controller
     {
         $email = $request->email;
         $googleId = null;
+        $facebookId = null;
 
-        // Bảo mật AUTH-01: Không cho phép client gửi google_id trực tiếp mà không qua challenge_token
-        if ($request->filled('google_id') && ! $request->filled('challenge_token')) {
+        // Không cho phép client tự khai báo mã định danh của nhà cung cấp mạng xã hội.
+        if (
+            ($request->filled('google_id') || $request->filled('facebook_id'))
+            && ! $request->filled('challenge_token')
+        ) {
             return response()->json([
                 'status' => 'error',
-                'message' => 'Không thể tự khai báo google_id trực tiếp. Vui lòng xác thực qua Google.',
+                'message' => 'Không thể tự khai báo mã tài khoản mạng xã hội. Vui lòng xác thực qua nhà cung cấp.',
             ], 422);
         }
 
-        // Nếu có challenge_token từ Google authentication
+        // Challenge dùng một lần, được tạo sau khi backend xác minh Google/Facebook.
         if ($request->filled('challenge_token')) {
             $googleData = Cache::pull('google_challenge_'.$request->challenge_token);
-            if (! $googleData) {
+            $facebookData = $googleData
+                ? null
+                : Cache::pull('facebook_challenge_'.$request->challenge_token);
+
+            if (! $googleData && ! $facebookData) {
                 return response()->json([
                     'status' => 'error',
-                    'message' => 'Mã xác thực Google (challenge_token) không hợp lệ hoặc đã hết hạn.',
+                    'message' => 'Mã xác thực mạng xã hội không hợp lệ hoặc đã hết hạn.',
                 ], 422);
             }
 
-            $email = $googleData['email'];
-            $googleId = $googleData['google_id'];
+            if ($googleData) {
+                $email = $googleData['email'];
+                $googleId = $googleData['google_id'];
+            } else {
+                $email = $facebookData['email'] ?: $request->email;
+                $facebookId = $facebookData['facebook_id'];
+            }
         }
 
-        // Thực hiện trong Database Transaction và kiểm tra lại duy nhất email/google_id
-        $user = DB::transaction(function () use ($request, $email, $googleId) {
+        // Thực hiện trong transaction và kiểm tra lại các khóa duy nhất.
+        $user = DB::transaction(function () use ($request, $email, $googleId, $facebookId) {
             if ($googleId && User::where('google_id', $googleId)->exists()) {
                 throw new \InvalidArgumentException('Tài khoản Google này đã được liên kết với người dùng khác.');
+            }
+            if ($facebookId && User::where('facebook_id', $facebookId)->exists()) {
+                throw new \InvalidArgumentException('Tài khoản Facebook này đã được liên kết với người dùng khác.');
             }
             if ($email && User::where('email', $email)->exists()) {
                 throw new \InvalidArgumentException('Email này đã được đăng ký trên hệ thống.');
@@ -74,6 +91,7 @@ class AuthController extends Controller
                 'gender' => $request->gender,
                 'birthday' => $request->birthday,
                 'google_id' => $googleId,
+                'facebook_id' => $facebookId,
                 'role' => 'customer',
             ]);
 
@@ -331,6 +349,88 @@ class AuthController extends Controller
         return response()->json([
             'status' => 'needs_registration',
             'message' => 'Tài khoản Google chưa liên kết. Vui lòng hoàn tất thông tin đăng ký.',
+            'data' => [
+                'challenge_token' => $challengeToken,
+                'email' => $email,
+                'name' => $name,
+            ],
+        ]);
+    }
+
+    /**
+     * Đăng nhập hoặc bắt đầu đăng ký bằng Facebook.
+     *
+     * Access token được kiểm tra lại ở backend bằng debug_token và phải thuộc
+     * đúng Meta App trước khi hệ thống tin bất kỳ thông tin hồ sơ nào.
+     */
+    public function facebookLogin(Request $request, FacebookTokenVerifierInterface $verifier): JsonResponse
+    {
+        $request->validate([
+            'access_token' => ['required', 'string'],
+        ], [
+            'access_token.required' => 'Yêu cầu token xác minh Facebook.',
+        ]);
+
+        if (
+            empty(config('services.facebook.app_id'))
+            || empty(config('services.facebook.app_secret'))
+            || empty(config('services.facebook.graph_version'))
+        ) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Hệ thống chưa được cấu hình Facebook Login.',
+            ], 500);
+        }
+
+        try {
+            $profile = $verifier->verify($request->string('access_token')->toString());
+        } catch (\InvalidArgumentException $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => $e->getMessage(),
+            ], 422);
+        }
+
+        $facebookId = $profile['id'];
+        $email = $profile['email'];
+        $name = $profile['name'];
+
+        $user = User::where('facebook_id', $facebookId)
+            ->when($email, fn ($query) => $query->orWhere('email', $email))
+            ->first();
+
+        if ($user) {
+            if (empty($user->facebook_id)) {
+                $user->facebook_id = $facebookId;
+                $user->save();
+            }
+
+            Auth::login($user);
+            if ($request->hasSession()) {
+                $request->session()->regenerate();
+            }
+
+            $user->load(['vendor', 'membershipTier', 'author', 'favoriteCategories']);
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Đăng nhập Facebook thành công.',
+                'data' => [
+                    'user' => new UserResource($user),
+                ],
+            ]);
+        }
+
+        $challengeToken = (string) Str::uuid();
+        Cache::put('facebook_challenge_'.$challengeToken, [
+            'facebook_id' => $facebookId,
+            'email' => $email,
+            'name' => $name,
+        ], now()->addMinutes(10));
+
+        return response()->json([
+            'status' => 'needs_registration',
+            'message' => 'Tài khoản Facebook chưa liên kết. Vui lòng hoàn tất thông tin đăng ký.',
             'data' => [
                 'challenge_token' => $challengeToken,
                 'email' => $email,

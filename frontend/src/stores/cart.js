@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
 import apiClient from '@/services/axios'
+import { readApiList } from '@/services/apiContract'
 
 export const useCartStore = defineStore('cart', () => {
   const items = ref([])
@@ -100,7 +101,7 @@ export const useCartStore = defineStore('cart', () => {
     }
 
     const response = await apiClient.post('/api/checkout', payload)
-    return response.data
+    return readApiList(response.data)
   }
 
   return {

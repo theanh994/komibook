@@ -4,39 +4,40 @@ import { useRouter } from 'vue-router'
 import apiClient from '@/services/axios'
 
 import Button from 'primevue/button'
-import Select from 'primevue/select'
 
 const router = useRouter()
 const tickets = ref([])
 const loading = ref(true)
+const error = ref(null)
 
 const stats = ref({
-  open: 12,
-  pending: 5,
-  resolved: 48,
+  open: 0,
+  pending: 0,
+  resolved: 0,
 })
 
 const fetchTickets = async () => {
   loading.value = true
+  error.value = null
   try {
     const res = await apiClient.get('/api/admin/support/tickets')
     if (res.data?.status === 'success') {
-      tickets.value = res.data.data
-      
-      // Calculate real stats
-      const openCount = tickets.value.filter(t => t.status === 'open').length
-      const pendingCount = tickets.value.filter(t => t.status === 'pending').length
-      const resolvedCount = tickets.value.filter(t => t.status === 'resolved').length
-      stats.value = { open: openCount, pending: pendingCount, resolved: resolvedCount }
+      tickets.value = res.data.data || []
+    } else if (Array.isArray(res.data)) {
+      tickets.value = res.data
+    } else {
+      tickets.value = []
     }
+
+    const openCount = tickets.value.filter(t => t.status === 'open').length
+    const pendingCount = tickets.value.filter(t => t.status === 'pending').length
+    const resolvedCount = tickets.value.filter(t => t.status === 'resolved').length
+    stats.value = { open: openCount, pending: pendingCount, resolved: resolvedCount }
   } catch (e) {
     console.error('Không tải được danh sách ticket admin', e)
-    // Fallback Mock Tickets
-    tickets.value = [
-      { id: 1, user: { name: 'Elena Rostova' }, subject: 'Lỗi tải sách PDF sau thanh toán', category: 'Technical', priority: 'high', status: 'open', updated_at: '2026-07-13T10:00:00Z' },
-      { id: 2, user: { name: 'Marcus Johnson' }, subject: 'Trùng giao dịch thẻ ngân hàng', category: 'Billing', priority: 'high', status: 'pending', updated_at: '2026-07-12T15:30:00Z' },
-      { id: 3, user: { name: 'David Chen' }, subject: 'Góp ý giao diện xem sách cũ', category: 'Feedback', priority: 'low', status: 'resolved', updated_at: '2026-07-10T08:00:00Z' },
-    ]
+    tickets.value = []
+    stats.value = { open: 0, pending: 0, resolved: 0 }
+    error.value = e.response?.data?.message || 'Không thể kết nối API danh sách ticket.'
   } finally {
     loading.value = false
   }
@@ -72,8 +73,15 @@ onMounted(() => {
       </div>
     </div>
 
+    <!-- Error State -->
+    <div v-if="error" class="bg-rose-50 border border-rose-200 rounded-2xl p-6 text-center space-y-3 mb-8">
+      <h3 class="text-base font-bold text-rose-800">Không thể tải danh sách ticket</h3>
+      <p class="text-xs text-rose-600">{{ error }}</p>
+      <Button label="Thử lại" icon="pi pi-refresh" class="p-button-danger p-button-sm text-xs bg-rose-600 text-white" @click="fetchTickets" />
+    </div>
+
     <!-- Stats Bento Grid -->
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+    <div v-else class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
       <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between">
         <div>
           <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider block">Yêu cầu mở</span>
@@ -95,7 +103,7 @@ onMounted(() => {
           <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider block">Đã giải quyết</span>
           <h2 class="text-3xl font-black text-emerald-600 mt-2">{{ stats.resolved }}</h2>
         </div>
-        <p class="text-slate-400 text-xs mt-4">Đánh giá CSAT trung bình: 4.8/5</p>
+        <p class="text-slate-400 text-xs mt-4">Đã hoàn thành phản hồi</p>
       </div>
     </div>
 
@@ -125,7 +133,7 @@ onMounted(() => {
           </thead>
           <tbody class="divide-y divide-slate-150">
             <tr v-for="ticket in tickets" :key="ticket.id" class="hover:bg-slate-50/30">
-              <td class="p-4 font-mono font-semibold text-slate-700">#TK-890{{ ticket.id }}</td>
+              <td class="p-4 font-mono font-semibold text-slate-700">#TK-{{ ticket.id }}</td>
               <td class="p-4 text-slate-800 font-semibold">{{ ticket.user?.name || 'Khách vãng lai' }}</td>
               <td class="p-4 text-slate-700 truncate max-w-xs">{{ ticket.subject }}</td>
               <td class="p-4 text-slate-600 capitalize">{{ ticket.category }}</td>
@@ -144,7 +152,7 @@ onMounted(() => {
                 <Button label="Hội thoại" icon="pi pi-comments" class="p-button-text p-button-sm p-1 text-xs" @click="router.push({ name: 'admin-support-ticket-detail', params: { id: ticket.id } })" />
               </td>
             </tr>
-            <tr v-if="tickets.length === 0">
+            <tr v-if="tickets.length === 0 && !error">
               <td colspan="8" class="p-8 text-center text-slate-400">Không tìm thấy yêu cầu hỗ trợ nào.</td>
             </tr>
           </tbody>

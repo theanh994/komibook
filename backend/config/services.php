@@ -41,6 +41,12 @@ return [
         'client_id' => env('GOOGLE_CLIENT_ID'),
     ],
 
+    'facebook' => [
+        'app_id' => env('FACEBOOK_APP_ID'),
+        'app_secret' => env('FACEBOOK_APP_SECRET'),
+        'graph_version' => env('FACEBOOK_GRAPH_VERSION'),
+    ],
+
     'sms' => [
         'provider' => env('SMS_PROVIDER'),
     ],

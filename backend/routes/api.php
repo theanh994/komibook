@@ -42,6 +42,7 @@ Route::prefix('auth')->name('auth.')->group(function () {
     Route::post('/register', [AuthController::class, 'register'])->name('register');
     Route::post('/login', [AuthController::class, 'login'])->name('login')->middleware('throttle:login');
     Route::post('/google-login', [AuthController::class, 'googleLogin'])->name('google-login');
+    Route::post('/facebook-login', [AuthController::class, 'facebookLogin'])->name('facebook-login');
     Route::post('/phone/send-otp', [PhoneAuthController::class, 'sendOtp'])->name('phone.send-otp');
     Route::post('/phone/verify-otp', [PhoneAuthController::class, 'verifyOtp'])->name('phone.verify-otp');
     Route::post('/forgot-password', [AuthController::class, 'forgotPassword'])->name('forgot-password')->middleware('throttle:forgot-password');
@@ -89,6 +90,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/books/{id}/check-ownership', [BookController::class, 'checkOwnership']);
     Route::post('/coupons/apply', [CouponController::class, 'apply']);
     Route::get('/my-orders', [OrderController::class, 'myOrders']);
+    Route::get('/my-orders/{order}', [OrderController::class, 'myOrderDetail']);
     Route::post('/orders/{order}/cancel', [OrderController::class, 'cancel']);
     Route::get('/my-library', [OrderController::class, 'myLibrary']);
     Route::get('/orders/{order}/ebooks/{book}/generate-link', [OrderController::class, 'generateEbookLink']);

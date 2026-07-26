@@ -3,7 +3,6 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import Avatar from 'primevue/avatar'
-import Button from 'primevue/button'
 import Menu from 'primevue/menu'
 
 const router = useRouter()

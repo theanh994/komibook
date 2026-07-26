@@ -29,7 +29,10 @@ app.use(ToastService)
 app.use(ConfirmationService)
 app.directive('tooltip', Tooltip)
 
+// PrimeVue's public component names intentionally match its documentation.
+// eslint-disable-next-line vue/multi-word-component-names, vue/no-reserved-component-names
 app.component('Dialog', Dialog)
+// eslint-disable-next-line vue/multi-word-component-names
 app.component('Toast', Toast)
 
 app.mount('#app')

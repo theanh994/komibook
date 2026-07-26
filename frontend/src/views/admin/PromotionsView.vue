@@ -219,11 +219,6 @@ const deleteFlashSale = async () => {
 }
 
 // ─── Formatters ───
-const formatCurrency = (value) => {
-  if (value === null || value === undefined) return '—'
-  return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(value)
-}
-
 const formatDate = (date) => {
   if (!date) return '—'
   return new Date(date).toLocaleString('vi-VN', {

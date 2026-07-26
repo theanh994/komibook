@@ -322,6 +322,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import apiClient from '@/services/axios'
+import { readApiList, readApiPagination } from '@/services/apiContract'
 import { useCartStore } from '@/stores/cart'
 import { useToast } from 'primevue/usetoast'
 import Skeleton from 'primevue/skeleton'
@@ -377,7 +378,7 @@ const fetchCategories = async () => {
   loadingCategories.value = true
   try {
     const res = await apiClient.get('/api/categories')
-    categories.value = res.data.data || res.data
+    categories.value = readApiList(res.data)
   } catch (e) { console.error('Lỗi tải danh mục:', e) }
   finally { loadingCategories.value = false }
 }
@@ -396,8 +397,8 @@ const fetchBooks = async () => {
       ...(sortBy.value !== 'newest' && { sort: sortBy.value }),
     }
     const res = await apiClient.get('/api/books', { params })
-    books.value = res.data.data || res.data
-    totalRecords.value = res.data.meta?.total || 0
+    books.value = readApiList(res.data)
+    totalRecords.value = readApiPagination(res.data).total
   } catch (e) { console.error('Lỗi tải sách:', e) }
   finally { loadingBooks.value = false }
 }
@@ -468,14 +469,14 @@ const buyNow = (book) => {
 const toggleWishlist = async (bookId) => {
   try {
     const res = await wishlistStore.toggleWishlist(bookId)
-    if (res.status === 'added') {
+    if (res.state === 'added') {
       toast.add({ severity: 'success', summary: 'Đã lưu', detail: 'Đã thêm vào danh sách yêu thích', life: 2000 })
-    } else if (res.status === 'removed') {
+    } else if (res.state === 'removed') {
       toast.add({ severity: 'info', summary: 'Đã bỏ', detail: 'Đã xóa khỏi danh sách yêu thích', life: 2000 })
-    } else if (res.status === 'unauthorized') {
+    } else if (res.state === 'unauthorized') {
       toast.add({ severity: 'warn', summary: 'Thông báo', detail: 'Vui lòng đăng nhập để lưu yêu thích', life: 3000 })
     }
-  } catch (error) {
+  } catch {
     toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Có lỗi xảy ra', life: 3000 })
   }
 }

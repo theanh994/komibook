@@ -4,22 +4,64 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\BookAnnotation;
+use App\Services\EbookAccessService;
 use Illuminate\Http\Request;
 
 class BookAnnotationController extends Controller
 {
     public function index(Request $request)
     {
-        $userId = $request->user()->id;
-        $query = BookAnnotation::where('user_id', $userId)->with('book');
+        $user = $request->user();
+        $ebookAccessService = app(EbookAccessService::class);
 
-        if ($request->has('book_id')) {
-            $query->where('book_id', $request->book_id);
+        if ($request->filled('book_id')) {
+            $bookId = (int) $request->book_id;
+            $order = $ebookAccessService->getValidOrder($user, $bookId);
+
+            if (! $order) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Bạn không có quyền truy cập ebook này.',
+                ], 403);
+            }
+
+            $annotations = BookAnnotation::where('user_id', $user->id)
+                ->where('book_id', $bookId)
+                ->with('book')
+                ->latest()
+                ->get()
+                ->map(function ($item) use ($order) {
+                    $item->order_id = $order->id;
+
+                    return $item;
+                });
+
+            return response()->json([
+                'status' => 'success',
+                'data' => $annotations,
+            ]);
         }
+
+        // Listing all annotations of current user
+        $rawAnnotations = BookAnnotation::where('user_id', $user->id)
+            ->with('book')
+            ->latest()
+            ->get();
+
+        $validOrdersByBook = $ebookAccessService
+            ->getValidOrdersForBooks($user, $rawAnnotations->pluck('book_id')->unique());
+
+        $filteredAnnotations = $rawAnnotations->filter(function ($item) use ($validOrdersByBook) {
+            return isset($validOrdersByBook[$item->book_id]);
+        })->values()->map(function ($item) use ($validOrdersByBook) {
+            $item->order_id = $validOrdersByBook[$item->book_id]->id;
+
+            return $item;
+        });
 
         return response()->json([
             'status' => 'success',
-            'data' => $query->latest()->get()
+            'data' => $filteredAnnotations,
         ]);
     }
 
@@ -35,9 +77,21 @@ class BookAnnotationController extends Controller
             'page_number' => 'nullable|integer',
         ]);
 
+        $user = $request->user();
+        $bookId = (int) $request->book_id;
+        $ebookAccessService = app(EbookAccessService::class);
+        $order = $ebookAccessService->getValidOrder($user, $bookId);
+
+        if (! $order) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Bạn không có quyền tạo ghi chú cho ebook này.',
+            ], 403);
+        }
+
         $annotation = BookAnnotation::create([
-            'user_id' => $request->user()->id,
-            'book_id' => $request->book_id,
+            'user_id' => $user->id,
+            'book_id' => $bookId,
             'chapter' => $request->chapter,
             'highlighted_text' => $request->highlighted_text,
             'note_content' => $request->note_content,
@@ -46,17 +100,19 @@ class BookAnnotationController extends Controller
             'page_number' => $request->page_number,
         ]);
 
+        $annotation->order_id = $order->id;
+
         return response()->json([
             'status' => 'success',
             'message' => 'Annotation saved.',
-            'data' => $annotation
+            'data' => $annotation,
         ], 201);
     }
 
     public function update(Request $request, $id)
     {
         $annotation = BookAnnotation::where('user_id', $request->user()->id)->findOrFail($id);
-        
+
         $request->validate([
             'note_content' => 'nullable|string',
             'color' => 'nullable|string',
@@ -67,7 +123,7 @@ class BookAnnotationController extends Controller
         return response()->json([
             'status' => 'success',
             'message' => 'Annotation updated.',
-            'data' => $annotation
+            'data' => $annotation,
         ]);
     }
 
@@ -78,22 +134,37 @@ class BookAnnotationController extends Controller
 
         return response()->json([
             'status' => 'success',
-            'message' => 'Annotation deleted.'
+            'message' => 'Annotation deleted.',
         ]);
     }
 
     public function recent(Request $request, $bookId)
     {
-        $userId = $request->user()->id;
-        $annotations = BookAnnotation::where('user_id', $userId)
+        $user = $request->user();
+        $ebookAccessService = app(EbookAccessService::class);
+        $order = $ebookAccessService->getValidOrder($user, (int) $bookId);
+
+        if (! $order) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Bạn không có quyền truy cập ebook này.',
+            ], 403);
+        }
+
+        $annotations = BookAnnotation::where('user_id', $user->id)
             ->where('book_id', $bookId)
             ->latest()
             ->limit(3)
-            ->get();
+            ->get()
+            ->map(function ($item) use ($order) {
+                $item->order_id = $order->id;
+
+                return $item;
+            });
 
         return response()->json([
             'status' => 'success',
-            'data' => $annotations
+            'data' => $annotations,
         ]);
     }
 }

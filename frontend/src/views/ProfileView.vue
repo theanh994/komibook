@@ -389,7 +389,6 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from 'primevue/usetoast'
 import { useConfirm } from 'primevue/useconfirm'
@@ -404,7 +403,6 @@ import Dialog from 'primevue/dialog'
 import Toast from 'primevue/toast'
 import ConfirmDialog from 'primevue/confirmdialog'
 
-const router = useRouter()
 const authStore = useAuthStore()
 const toast = useToast()
 const confirm = useConfirm()

@@ -1,10 +1,8 @@
 <script setup>
 import { ref, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
 import { useToast } from 'primevue/usetoast'
 import apiClient from '@/services/axios'
 
-const router = useRouter()
 const toast = useToast()
 
 const campaigns = ref([])

@@ -32,15 +32,17 @@ class CheckoutController extends Controller
             $orders = $this->checkoutService->processCheckout($items, $shippingData, $user->id, $couponCode);
 
             return response()->json([
+                'status' => 'success',
                 'success' => true,
                 'message' => 'Đặt hàng thành công. Đơn hàng đang được xử lý.',
-                'data' => $orders
+                'data' => $orders,
             ], 201);
 
         } catch (Exception $e) {
             return response()->json([
+                'status' => 'error',
                 'success' => false,
-                'message' => $e->getMessage()
+                'message' => $e->getMessage(),
             ], 400);
         }
     }

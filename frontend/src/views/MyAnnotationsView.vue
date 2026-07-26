@@ -183,7 +183,7 @@ const deleteNote = async (id) => {
     await apiClient.delete(`/api/annotations/${id}`)
     annotations.value = annotations.value.filter(a => a.id !== id)
     toast.add({ severity: 'success', summary: 'Thành công', detail: 'Đã xóa ghi chú', life: 3000 })
-  } catch (error) {
+  } catch {
     toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Không thể xóa ghi chú', life: 3000 })
   }
 }

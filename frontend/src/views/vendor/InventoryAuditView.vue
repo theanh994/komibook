@@ -24,31 +24,37 @@ function nowMonthYear() {
   const d = new Date()
   return `Tháng ${d.getMonth() + 1}/${d.getFullYear()}`
 }
+const error = ref(null)
 
 const fetchAudits = async () => {
   loading.value = true
+  error.value = null
   try {
     const res = await apiClient.get('/api/vendor/inventory/audits')
     if (res.data?.status === 'success') {
-      audits.value = res.data.data
+      audits.value = res.data.data || []
+    } else if (Array.isArray(res.data)) {
+      audits.value = res.data
+    } else {
+      audits.value = []
     }
 
     const whRes = await apiClient.get('/api/vendor/warehouses')
     if (whRes.data) {
-      warehouses.value = whRes.data
+      warehouses.value = Array.isArray(whRes.data) ? whRes.data : (whRes.data.data || [])
     }
 
-    const bookRes = await apiClient.get('/api/books')
-    if (bookRes.data?.data) {
-      books.value = bookRes.data.data.filter(b => b.type !== 'ebook')
-    }
+    const bookRes = await apiClient.get('/api/vendor/books', { params: { per_page: 100 } })
+    const rawBooks = Array.isArray(bookRes.data?.data)
+      ? bookRes.data.data
+      : (Array.isArray(bookRes.data?.data?.data) ? bookRes.data.data.data : (Array.isArray(bookRes.data) ? bookRes.data : []))
+    books.value = rawBooks.filter(b => b.type !== 'ebook')
   } catch (e) {
     console.error('Không tải được dữ liệu kiểm kê', e)
-    // Fallback Mock Data
-    audits.value = [
-      { id: 1, warehouse: { name: 'Kho Trung Tâm A' }, auditor: { name: 'Đặng Thế Anh' }, audit_period: 'Tháng 07/2026', status: 'completed', created_at: '2026-07-10' },
-      { id: 2, warehouse: { name: 'Kho Trung Tâm A' }, auditor: { name: 'Đặng Thế Anh' }, audit_period: 'Tháng 07/2026', status: 'draft', created_at: '2026-07-13' },
-    ]
+    error.value = e.response?.data?.message || 'Không thể kết nối API kiểm kê kho.'
+    audits.value = []
+    warehouses.value = []
+    books.value = []
   } finally {
     loading.value = false
   }
@@ -85,7 +91,7 @@ const createAudit = async () => {
       showCreateDialog.value = false
       fetchAudits()
     }
-  } catch (e) {
+  } catch {
     toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Không thể tạo phiếu kiểm kê.', life: 3000 })
   }
 }
@@ -97,7 +103,7 @@ const completeAudit = async (id) => {
       toast.add({ severity: 'success', summary: 'Đã đối soát', detail: 'Số tồn hệ thống đã được đồng bộ với thực tế.', life: 3000 })
       fetchAudits()
     }
-  } catch (e) {
+  } catch {
     toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Không thể đối soát phiếu.', life: 3000 })
   }
 }
@@ -113,15 +119,8 @@ const viewAuditDetails = async (audit) => {
       showDetailsDialog.value = true
     }
   } catch (e) {
-    // Mock detail fallback
-    selectedAuditDetails.value = {
-      ...audit,
-      items: [
-        { id: 10, book: { title: 'Đại Gia Gatsby' }, system_qty: 45, physical_qty: 43, difference: -2 },
-        { id: 11, book: { title: 'Chiến Lược Đại Dương Xanh' }, system_qty: 20, physical_qty: 20, difference: 0 }
-      ]
-    }
-    showDetailsDialog.value = true
+    console.error('Lỗi xem chi tiết kiểm kê', e)
+    toast.add({ severity: 'error', summary: 'Không thể xem chi tiết', detail: 'Không lấy được thông tin chi tiết phiếu kiểm kê.', life: 3000 })
   }
 }
 
@@ -144,8 +143,21 @@ onMounted(() => {
       </div>
     </div>
 
+    <div v-if="loading" class="flex justify-center p-12">
+      <i class="pi pi-spin pi-spinner text-3xl text-indigo-600"></i>
+    </div>
+
+    <div v-else-if="error" class="bg-white rounded-2xl p-8 border border-slate-200 shadow-sm text-center max-w-md mx-auto space-y-4 my-8">
+      <div class="w-12 h-12 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mx-auto">
+        <i class="pi pi-exclamation-triangle text-xl"></i>
+      </div>
+      <h3 class="text-base font-bold text-slate-900">Không thể tải dữ liệu kiểm kê kho</h3>
+      <p class="text-xs text-slate-500 leading-relaxed">{{ error }}</p>
+      <Button label="Thử lại" icon="pi pi-refresh" class="p-button-primary bg-indigo-600 p-button-sm" @click="fetchAudits" />
+    </div>
+
     <!-- Audits list table -->
-    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+    <div v-else class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
       <div class="p-4 border-b border-slate-100 bg-slate-50/50">
         <h3 class="font-bold text-slate-800 text-sm">Lịch sử các phiếu kiểm kê</h3>
       </div>
@@ -186,7 +198,7 @@ onMounted(() => {
               </td>
             </tr>
             <tr v-if="audits.length === 0">
-              <td colspan="7" class="p-8 text-center text-slate-400">Không tìm thấy phiếu kiểm kê nào.</td>
+              <td colspan="7" class="p-8 text-center text-slate-400">Chưa có phiếu kiểm kê kho nào.</td>
             </tr>
           </tbody>
         </table>

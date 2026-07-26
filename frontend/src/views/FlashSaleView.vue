@@ -25,8 +25,22 @@
         </div>
       </div>
 
+      <!-- Error State -->
+      <div v-else-if="error" class="flex flex-col items-center justify-center py-24 bg-surface-container-lowest rounded-[48px] shadow-2xl border border-outline-variant/10 text-center animate-fade-in space-y-6">
+        <div class="w-20 h-20 bg-rose-50 rounded-full flex items-center justify-center text-rose-500">
+           <span class="material-symbols-outlined text-[48px]">warning</span>
+        </div>
+        <div class="space-y-2">
+          <h2 class="text-2xl font-bold text-on-surface">Không thể tải chương trình Flash Sale</h2>
+          <p class="text-on-surface-variant text-sm max-w-md mx-auto">{{ error }}</p>
+        </div>
+        <button @click="fetchActiveSale" class="bg-primary text-on-primary px-8 py-3.5 rounded-2xl font-bold text-xs uppercase tracking-widest hover:scale-105 transition-all flex items-center gap-2 cursor-pointer border-none">
+          <span class="material-symbols-outlined text-[18px]">refresh</span> Thử lại
+        </button>
+      </div>
+
       <!-- Empty State -->
-      <div v-else-if="!activeSale" class="flex flex-col items-center justify-center py-32 bg-surface-container-lowest rounded-[48px] shadow-2xl border border-outline-variant/10 text-center animate-fade-in">
+      <div v-else-if="!activeSale || !activeSale.items || activeSale.items.length === 0" class="flex flex-col items-center justify-center py-32 bg-surface-container-lowest rounded-[48px] shadow-2xl border border-outline-variant/10 text-center animate-fade-in">
         <div class="w-24 h-24 bg-primary/10 rounded-full flex items-center justify-center mb-8">
            <span class="material-symbols-outlined text-[56px] text-primary">bolt</span>
         </div>
@@ -117,7 +131,7 @@
                   </div>
                 </div>
 
-                <button @click="addToCart(item.book)" class="w-full py-3.5 rounded-2xl bg-primary text-on-primary text-[11px] font-bold uppercase tracking-widest hover:scale-[1.03] active:scale-95 transition-all shadow-md shadow-primary/10 flex items-center justify-center gap-2">
+                <button @click="addToCart(item.book)" class="w-full py-3.5 rounded-2xl bg-primary text-on-primary text-[11px] font-bold uppercase tracking-widest hover:scale-[1.03] active:scale-95 transition-all shadow-md shadow-primary/10 flex items-center justify-center gap-2 cursor-pointer border-none">
                   <span class="material-symbols-outlined text-[16px]">shopping_cart</span> Thêm vào giỏ
                 </button>
               </div>
@@ -135,25 +149,36 @@ import { ref, onMounted, onUnmounted } from 'vue'
 import { useToast } from 'primevue/usetoast'
 import { useCartStore } from '@/stores/cart'
 import apiClient from '@/services/axios'
+import { readApiData } from '@/services/apiContract'
 
 const toast = useToast()
 const cartStore = useCartStore()
 
 const activeSale = ref(null)
 const loading = ref(true)
+const error = ref(null)
 const timer = ref(null)
 const countdown = ref({ hours: '00', minutes: '00', seconds: '00' })
 
 const fetchActiveSale = async () => {
   loading.value = true
+  error.value = null
   try {
     const res = await apiClient.get('/api/flash-sales/active')
-    if (res.data && res.data.data) {
-      activeSale.value = res.data.data
-      startCountdown(new Date(activeSale.value.end_time))
+    const sale = readApiData(res.data)
+    if (sale) {
+      activeSale.value = sale
+      if (activeSale.value.end_time) {
+        startCountdown(new Date(activeSale.value.end_time))
+      }
+    } else {
+      activeSale.value = null
     }
-  } catch (error) {
-    console.error('Lỗi tải thông tin Flash Sale:', error)
+  } catch (err) {
+    console.error('Lỗi tải thông tin Flash Sale:', err)
+    activeSale.value = null
+    error.value = err.response?.data?.message || 'Không thể kết nối chương trình Flash Sale.'
+    if (timer.value) clearInterval(timer.value)
   } finally {
     loading.value = false
   }
@@ -177,9 +202,9 @@ const startCountdown = (endTime) => {
     const s = Math.floor((diff % (1000 * 60)) / 1000)
     
     countdown.value = {
-      hours: h < 10 ? '0' + h : h,
-      minutes: m < 10 ? '0' + m : m,
-      seconds: s < 10 ? '0' + s : s
+      hours: h < 10 ? '0' + h : String(h),
+      minutes: m < 10 ? '0' + m : String(m),
+      seconds: s < 10 ? '0' + s : String(s)
     }
   }
   
@@ -192,13 +217,15 @@ const getSoldPercent = (item) => {
   const stock = item.book?.stock || 0
   const max = item.max_quantity || 0
   
+  if (sold === 0) return 0
+
+  let pct = 0
   if (max > 0) {
-    return Math.round((sold / max) * 100)
+    pct = Math.round((sold / max) * 100)
+  } else if (sold + stock > 0) {
+    pct = Math.round((sold / (sold + stock)) * 100)
   }
-  // Nếu không giới hạn số lượng tham gia, tính dựa trên tồn kho giả định
-  if (sold === 0) return 12 // Giả lập chút đã bán cho đẹp mắt
-  const total = sold + stock
-  return Math.min(95, Math.round((sold / total) * 100))
+  return Math.max(0, Math.min(100, pct))
 }
 
 const addToCart = (book) => {
@@ -244,9 +271,6 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-
-
-
 @keyframes fade-in {
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }

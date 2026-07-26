@@ -345,6 +345,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useRouter, useRoute } from 'vue-router'
 import { ref, computed, onMounted } from 'vue'
 import apiClient from '@/services/axios'
+import { readApiData } from '@/services/apiContract'
 import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
 import Select from 'primevue/select'
@@ -463,7 +464,7 @@ const applyCoupon = async () => {
         category_id: item.book.category_id
       }))
     })
-    appliedCoupon.value = response.data.data
+    appliedCoupon.value = readApiData(response.data)
     toast.add({ severity: 'success', summary: 'Thành công', detail: response.data.message || 'Đã áp dụng mã giảm giá!', life: 3000 })
   } catch (error) {
     const msg = error.response?.data?.message || 'Có lỗi xảy ra khi áp dụng mã'
@@ -495,7 +496,7 @@ const processCheckout = async () => {
     const res = await cartStore.checkout(payload)
     
     if (paymentMethod.value === 'VNPAY') {
-       const firstOrder = res.data[0];
+       const firstOrder = res[0]
        if (firstOrder) {
            const vnpayRes = await apiClient.post('/api/vnpay/create', { order_id: firstOrder.id })
            cartStore.clearCart() 
@@ -506,7 +507,7 @@ const processCheckout = async () => {
 
     // COD Case
     cartStore.clearCart()
-    router.push({ name: 'checkout-success', query: { order_id: res.data[0]?.id } })
+    router.push({ name: 'checkout-success', query: { order_id: res[0]?.id } })
   } catch (error) {
     console.error(error)
     const msg = error.response?.data?.message || 'Có lỗi xảy ra khi thanh toán'

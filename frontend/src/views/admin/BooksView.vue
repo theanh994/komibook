@@ -1,6 +1,5 @@
 <script setup>
-import { ref, onMounted, computed } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, onMounted } from 'vue'
 import { useToast } from 'primevue/usetoast'
 import { useConfirm } from 'primevue/useconfirm'
 import apiClient from '@/services/axios'
@@ -12,9 +11,7 @@ import InputText from 'primevue/inputtext'
 import Select from 'primevue/select'
 import Tag from 'primevue/tag'
 import ConfirmDialog from 'primevue/confirmdialog'
-import Skeleton from 'primevue/skeleton'
 
-const router = useRouter()
 const toast = useToast()
 const confirm = useConfirm()
 
@@ -60,9 +57,6 @@ const getCoverUrl = (path) => {
 
 const getTypeSeverity = (type) => (type === 'ebook' ? 'info' : 'success')
 const getTypeLabel = (type) => (type === 'ebook' ? 'E-book' : 'Vật lý')
-const getStatusSeverity = (status) => (status === 'published' ? 'success' : 'warn')
-const getStatusLabel = (status) => (status === 'published' ? 'Đã xuất bản' : 'Nháp')
-
 // ─── API Calls ───
 const fetchBooks = async () => {
   loading.value = true

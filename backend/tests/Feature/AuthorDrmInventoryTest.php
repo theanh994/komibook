@@ -154,7 +154,7 @@ class AuthorDrmInventoryTest extends TestCase
 
         $response->assertStatus(403)
             ->assertJson([
-                'message' => 'Đơn hàng chưa được thanh toán. Vui lòng thanh toán trước khi đọc.',
+                'message' => 'Đơn hàng chưa được thanh toán hoặc không đủ quyền truy cập.',
             ]);
     }
 
@@ -455,6 +455,7 @@ class AuthorDrmInventoryTest extends TestCase
             'bank_name' => 'Vietinbank',
             'bank_holder_name' => 'NGUYEN VAN B',
             'identity_document' => 'document.jpg',
+            'phone_verified_at' => now(),
             'status' => 'pending',
         ]);
 
@@ -487,6 +488,26 @@ class AuthorDrmInventoryTest extends TestCase
                 'status' => 'error',
                 'message' => 'Tác giả đối tác chỉ được sở hữu và đăng ký tối đa 1 nhà kho duy nhất.',
             ]);
+    }
+
+    public function test_author_approval_requires_phone_verification()
+    {
+        $author = Author::create([
+            'user_id' => $this->user->id,
+            'pen_name' => 'Tác Giả Chưa Xác Minh',
+            'bank_account_number' => '123',
+            'bank_name' => 'Vietinbank',
+            'bank_holder_name' => 'NGUYEN VAN C',
+            'identity_document' => 'unverified-document.jpg',
+            'status' => 'pending',
+        ]);
+
+        $this->actingAs($this->admin)
+            ->patchJson("/api/admin/approvals/authors/{$author->id}/approve")
+            ->assertStatus(422)
+            ->assertJsonPath('message', 'Tác giả phải xác minh số điện thoại trước khi được phê duyệt.');
+
+        $this->assertSame('pending', $author->fresh()->status);
     }
 
     /**
@@ -700,8 +721,17 @@ class AuthorDrmInventoryTest extends TestCase
     public function test_phone_otp_flow_registered()
     {
         // Tạo trước tài khoản
-        User::factory()->create([
+        $registeredUser = User::factory()->create([
             'phone' => '0988888888',
+        ]);
+        $author = Author::create([
+            'user_id' => $registeredUser->id,
+            'pen_name' => 'OTP Author',
+            'bank_account_number' => '123',
+            'bank_name' => 'Test Bank',
+            'bank_holder_name' => 'OTP AUTHOR',
+            'identity_document' => 'otp-author.jpg',
+            'status' => 'pending',
         ]);
 
         // 1. Gửi OTP
@@ -724,6 +754,7 @@ class AuthorDrmInventoryTest extends TestCase
                 'status' => 'success',
                 'message' => 'Xác thực số điện thoại thành công.',
             ]);
+        $this->assertNotNull($author->fresh()->phone_verified_at);
     }
 
     /**
@@ -733,7 +764,7 @@ class AuthorDrmInventoryTest extends TestCase
     {
         $response = $this->postJson('/api/auth/phone/verify-otp', [
             'phone' => '0987777777',
-            'otp' => '999999', // OTP sai
+            'otp' => '99999999', // OTP sai
         ]);
 
         $response->assertStatus(422)
@@ -744,7 +775,7 @@ class AuthorDrmInventoryTest extends TestCase
     }
 
     /**
-     * Test mã OTP hardcode 123456 bị từ chối và rate limit khi gửi quá nhanh.
+     * Test mã OTP hardcode bị từ chối và rate limit khi gửi quá nhanh.
      */
     public function test_otp_security_hardened()
     {
@@ -754,16 +785,16 @@ class AuthorDrmInventoryTest extends TestCase
         // 2. Thử gửi lại ngay lập tức -> Bị rate limit 429
         $this->postJson('/api/auth/phone/send-otp', ['phone' => '0977111222'])->assertStatus(429);
 
-        // 3. Thử dùng 123456 -> Bị từ chối 422
+        // 3. Thử dùng mã 8 chữ số cố định -> Bị từ chối 422
         $this->postJson('/api/auth/phone/verify-otp', [
             'phone' => '0977111222',
-            'otp' => '123456',
+            'otp' => '12345678',
         ])->assertStatus(422);
 
         // 4. Thử nhập sai 5 lần -> Bị khóa 429
         for ($i = 0; $i < 4; $i++) {
-            $this->postJson('/api/auth/phone/verify-otp', ['phone' => '0977111222', 'otp' => '000000'])->assertStatus(422);
+            $this->postJson('/api/auth/phone/verify-otp', ['phone' => '0977111222', 'otp' => '00000000'])->assertStatus(422);
         }
-        $this->postJson('/api/auth/phone/verify-otp', ['phone' => '0977111222', 'otp' => '000000'])->assertStatus(429);
+        $this->postJson('/api/auth/phone/verify-otp', ['phone' => '0977111222', 'otp' => '00000000'])->assertStatus(429);
     }
 }
