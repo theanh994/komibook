@@ -24,13 +24,14 @@ class RegisterRequest extends FormRequest
     {
         return [
             'name' => ['required', 'string', 'max:255'],
-            'email' => ['required_without:phone', 'nullable', 'string', 'email', 'max:255', 'unique:users,email'],
+            'email' => ['required_without_all:phone,challenge_token', 'nullable', 'string', 'email', 'max:255', 'unique:users,email'],
             'password' => ['required', 'string', 'min:8', 'confirmed'],
-            'phone' => ['required_without:email', 'nullable', 'string', 'max:20', 'unique:users,phone'],
+            'phone' => ['required_without_all:email,challenge_token', 'nullable', 'string', 'max:20', 'unique:users,phone'],
             'gender' => ['nullable', 'string', 'in:male,female,other'],
             'birthday' => ['nullable', 'date'],
             'desired_role' => ['nullable', 'string', 'in:customer,author,vendor'],
             'challenge_token' => ['nullable', 'string', 'uuid'],
+            'email_verification_token' => ['nullable', 'string', 'uuid'],
         ];
     }
 

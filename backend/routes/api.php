@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\Admin\SystemConfigController;
 use App\Http\Controllers\Api\Admin\UserController;
 use App\Http\Controllers\Api\Admin\VendorApprovalController;
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\EmailRegistrationOtpController;
 use App\Http\Controllers\Api\AuthorController;
 use App\Http\Controllers\Api\BookAnnotationController;
 use App\Http\Controllers\Api\BookController;
@@ -43,6 +44,8 @@ Route::prefix('auth')->name('auth.')->group(function () {
     Route::post('/login', [AuthController::class, 'login'])->name('login')->middleware('throttle:login');
     Route::post('/google-login', [AuthController::class, 'googleLogin'])->name('google-login');
     Route::post('/facebook-login', [AuthController::class, 'facebookLogin'])->name('facebook-login');
+    Route::post('/email/send-otp', [EmailRegistrationOtpController::class, 'sendOtp'])->name('email.send-otp');
+    Route::post('/email/verify-otp', [EmailRegistrationOtpController::class, 'verifyOtp'])->name('email.verify-otp');
     Route::post('/phone/send-otp', [PhoneAuthController::class, 'sendOtp'])->name('phone.send-otp');
     Route::post('/phone/verify-otp', [PhoneAuthController::class, 'verifyOtp'])->name('phone.verify-otp');
     Route::post('/forgot-password', [AuthController::class, 'forgotPassword'])->name('forgot-password')->middleware('throttle:forgot-password');

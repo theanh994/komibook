@@ -182,33 +182,24 @@
         </div>
 
         <div class="grid grid-cols-1 gap-4">
-          <!-- Gender -->
+          <!-- Phone -->
           <div class="flex flex-col gap-1.5">
             <label class="text-[13px] font-semibold text-on-surface-variant flex items-center gap-2 uppercase tracking-wide">
-              <span class="material-symbols-outlined text-[18px] text-primary/80">wc</span>
-              Giới tính
+              <span class="material-symbols-outlined text-[18px] text-primary/80">phone</span>
+              Số điện thoại
             </label>
-            <select              v-model="googleRegForm.gender"
-              class="w-full h-11 bg-surface-container-lowest border border-outline-variant/60 rounded-xl px-4 text-sm text-on-surface focus:outline-none focus:border-primary transition-all duration-200"            >
-              <option value="male">Nam</option>
-              <option value="female">Nữ</option>
-              <option value="other">Khác</option>
-            </select>
+            <input              v-model="googleRegForm.phone"
+              required
+              type="tel"
+              inputmode="tel"
+              autocomplete="tel"
+              pattern="0[35789][0-9]{8}"
+              placeholder="0987xxxxxx"
+              class="w-full h-11 bg-surface-container-lowest border border-outline-variant/60 rounded-xl px-4 text-sm text-on-surface focus:outline-none focus:border-primary transition-all duration-200"            />
           </div>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <!-- Birthday -->
-          <div class="flex flex-col gap-1.5 col-span-1">
-            <label class="text-[13px] font-semibold text-on-surface-variant flex items-center gap-2 uppercase tracking-wide">
-              <span class="material-symbols-outlined text-[18px] text-primary/80">cake</span>
-              Ngày sinh
-            </label>
-            <input              v-model="googleRegForm.birthday"
-              type="date"
-              class="w-full h-11 bg-surface-container-lowest border border-outline-variant/60 rounded-xl px-4 text-sm text-on-surface focus:outline-none focus:border-primary transition-all duration-200"            />
-          </div>
-
+        <div class="grid grid-cols-1 gap-4">
           <!-- Desired Role -->
           <div class="flex flex-col gap-1.5 col-span-1">
             <label class="text-[13px] font-semibold text-on-surface-variant flex items-center gap-2 uppercase tracking-wide">
@@ -475,8 +466,7 @@ const googleRegForm = reactive({
   challenge_token: '',
   name: '',
   email: '',
-  gender: 'male',
-  birthday: '',
+  phone: '',
   desired_role: 'customer',
   password: '',
   password_confirmation: ''
@@ -545,8 +535,7 @@ const handleGoogleCredentialResponse = async (response) => {
       googleRegForm.challenge_token = res.data.challenge_token
       googleRegForm.email = res.data.email
       googleRegForm.name = res.data.name
-      googleRegForm.gender = 'male'
-      googleRegForm.birthday = ''
+      googleRegForm.phone = ''
       googleRegForm.desired_role = 'customer'
       googleRegForm.password = ''
       googleRegForm.password_confirmation = ''
@@ -619,8 +608,7 @@ const openFacebookLogin = async () => {
       googleRegForm.challenge_token = res.data.challenge_token
       googleRegForm.email = res.data.email || ''
       googleRegForm.name = res.data.name || ''
-      googleRegForm.gender = 'male'
-      googleRegForm.birthday = ''
+      googleRegForm.phone = ''
       googleRegForm.desired_role = 'customer'
       googleRegForm.password = ''
       googleRegForm.password_confirmation = ''
@@ -719,10 +707,10 @@ const handleGoogleRegister = async () => {
     await authStore.register({
       challenge_token: googleRegForm.challenge_token,
       name: googleRegForm.name,
+      email: googleRegForm.email,
+      phone: googleRegForm.phone,
       password: googleRegForm.password,
       password_confirmation: googleRegForm.password_confirmation,
-      gender: googleRegForm.gender,
-      birthday: googleRegForm.birthday,
       desired_role: googleRegForm.desired_role
     })
     googleRegDialogVisible.value = false

@@ -36,6 +36,7 @@ class AuthController extends Controller
         $email = $request->email;
         $googleId = null;
         $facebookId = null;
+        $emailVerified = false;
 
         // Không cho phép client tự khai báo mã định danh của nhà cung cấp mạng xã hội.
         if (
@@ -65,14 +66,33 @@ class AuthController extends Controller
             if ($googleData) {
                 $email = $googleData['email'];
                 $googleId = $googleData['google_id'];
+                $emailVerified = true;
             } else {
                 $email = $facebookData['email'] ?: $request->email;
                 $facebookId = $facebookData['facebook_id'];
+                $emailVerified = ! empty($facebookData['email']);
             }
+        } elseif ($email) {
+            $verificationToken = $request->string('email_verification_token')->toString();
+            $verifiedEmail = $verificationToken
+                ? Cache::pull('registration_email_verified_'.$verificationToken)
+                : null;
+
+            if (! $verifiedEmail || ! hash_equals(Str::lower(trim($email)), $verifiedEmail)) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Vui lòng xác thực email bằng mã OTP trước khi đăng ký.',
+                    'errors' => [
+                        'email_verification_token' => ['Mã xác thực email không hợp lệ hoặc đã hết hạn.'],
+                    ],
+                ], 422);
+            }
+
+            $emailVerified = true;
         }
 
         // Thực hiện trong transaction và kiểm tra lại các khóa duy nhất.
-        $user = DB::transaction(function () use ($request, $email, $googleId, $facebookId) {
+        $user = DB::transaction(function () use ($request, $email, $googleId, $facebookId, $emailVerified) {
             if ($googleId && User::where('google_id', $googleId)->exists()) {
                 throw new \InvalidArgumentException('Tài khoản Google này đã được liên kết với người dùng khác.');
             }
@@ -94,6 +114,10 @@ class AuthController extends Controller
                 'facebook_id' => $facebookId,
                 'role' => 'customer',
             ]);
+
+            if ($emailVerified) {
+                $newUser->forceFill(['email_verified_at' => now()])->save();
+            }
 
             if ($request->desired_role === 'author') {
                 Author::create([

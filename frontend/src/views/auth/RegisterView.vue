@@ -90,33 +90,19 @@
                 />
               </div>
 
-              <!-- Gender & Birthday Grid -->
-              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <!-- Gender Input -->
-                <div class="flex flex-col gap-1.5">
-                  <label class="text-[13px] font-semibold text-on-surface-variant ml-0.5 flex items-center gap-2 uppercase tracking-wide" for="gender">
-                    <span class="material-symbols-outlined text-[18px] text-primary/80">wc</span>
-                    Giới tính
-                  </label>
-                  <select                    v-model="form.gender"
-                    class="w-full h-11 bg-surface-container-lowest border border-outline-variant/60 rounded-xl px-4 text-sm text-on-surface focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/5 transition-all duration-200"                    id="gender"
-                  >
-                    <option value="male">Nam</option>
-                    <option value="female">Nữ</option>
-                    <option value="other">Khác</option>
-                  </select>
-                </div>
-
-                <!-- Birthday Input -->
-                <div class="flex flex-col gap-1.5">
-                  <label class="text-[13px] font-semibold text-on-surface-variant ml-0.5 flex items-center gap-2 uppercase tracking-wide" for="birthday">
-                    <span class="material-symbols-outlined text-[18px] text-primary/80">cake</span>
-                    Ngày sinh
-                  </label>
-                  <input                    v-model="form.birthday"
-                    class="w-full h-11 bg-surface-container-lowest border border-outline-variant/60 rounded-xl px-4 text-sm text-on-surface placeholder:text-outline/40 focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/5 transition-all duration-200"                    id="birthday"                    type="date"
-                  />
-                </div>
+              <!-- Phone Input -->
+              <div class="flex flex-col gap-1.5">
+                <label class="text-[13px] font-semibold text-on-surface-variant ml-0.5 flex items-center gap-2 uppercase tracking-wide" for="phone">
+                  <span class="material-symbols-outlined text-[18px] text-primary/80">phone</span>
+                  Số điện thoại
+                </label>
+                <input                  v-model="form.phone"
+                  class="w-full h-11 bg-surface-container-lowest border border-outline-variant/60 rounded-xl px-4 text-sm text-on-surface placeholder:text-outline/40 focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/5 transition-all duration-200"                  id="phone"                  placeholder="0987xxxxxx"                  type="tel"
+                  inputmode="tel"
+                  autocomplete="tel"
+                  pattern="0[35789][0-9]{8}"
+                  required
+                />
               </div>
 
               <!-- Vai trò mong muốn -->
@@ -220,6 +206,46 @@
       </div>
     </main>
 
+    <Dialog
+      v-model:visible="emailOtpDialogVisible"
+      header="Xác thực email"
+      :modal="true"
+      :closable="!loading"
+      class="!max-w-lg !w-[92vw] !rounded-[24px] !bg-surface-container-lowest"
+    >
+      <form @submit.prevent="handleConfirmEmailOtp" class="flex flex-col gap-5 py-3">
+        <div class="rounded-xl border border-primary/10 bg-primary/5 p-4 text-sm text-on-surface-variant">
+          Mã OTP 8 chữ số đã được gửi tới <strong class="text-on-surface">{{ emailOtpSentFor }}</strong>.
+          Mã có hiệu lực trong 5 phút.
+        </div>
+
+        <div class="flex flex-col gap-2">
+          <label class="text-[13px] font-semibold text-on-surface-variant uppercase tracking-wide">
+            Mã OTP
+          </label>
+          <OtpCodeInput v-model="emailOtpInput" :disabled="loading" @complete="handleConfirmEmailOtp" />
+        </div>
+
+        <button
+          type="submit"
+          :disabled="loading || emailOtpInput.length !== 8"
+          class="w-full h-12 bg-primary text-on-primary font-semibold rounded-xl hover:bg-primary-container disabled:opacity-60 disabled:cursor-not-allowed transition-all duration-200 flex justify-center items-center gap-2"
+        >
+          <span v-if="loading" class="pi pi-spin pi-spinner text-sm"></span>
+          <span>{{ loading ? 'Đang xác thực...' : 'Xác thực và tạo tài khoản' }}</span>
+        </button>
+
+        <button
+          type="button"
+          :disabled="loading"
+          class="text-sm font-semibold text-primary hover:underline disabled:opacity-60"
+          @click="handleResendEmailOtp"
+        >
+          Gửi lại mã OTP
+        </button>
+      </form>
+    </Dialog>
+
 
     <!-- Social Account Complete Registration Dialog -->
     <Dialog      v-model:visible="googleRegDialogVisible"      :header="`Hoàn tất đăng ký với ${socialProviderLabel}`"      :modal="true"      class="!max-w-xl !w-[90vw] !rounded-[24px] !bg-surface-container-lowest"
@@ -261,33 +287,24 @@
         </div>
 
         <div class="grid grid-cols-1 gap-4">
-          <!-- Gender -->
+          <!-- Phone -->
           <div class="flex flex-col gap-1.5">
             <label class="text-[13px] font-semibold text-on-surface-variant flex items-center gap-2 uppercase tracking-wide">
-              <span class="material-symbols-outlined text-[18px] text-primary/80">wc</span>
-              Giới tính
+              <span class="material-symbols-outlined text-[18px] text-primary/80">phone</span>
+              Số điện thoại
             </label>
-            <select              v-model="googleRegForm.gender"
-              class="w-full h-11 bg-surface-container-lowest border border-outline-variant/60 rounded-xl px-4 text-sm text-on-surface focus:outline-none focus:border-primary transition-all duration-200"            >
-              <option value="male">Nam</option>
-              <option value="female">Nữ</option>
-              <option value="other">Khác</option>
-            </select>
+            <input              v-model="googleRegForm.phone"
+              required
+              type="tel"
+              inputmode="tel"
+              autocomplete="tel"
+              pattern="0[35789][0-9]{8}"
+              placeholder="0987xxxxxx"
+              class="w-full h-11 bg-surface-container-lowest border border-outline-variant/60 rounded-xl px-4 text-sm text-on-surface focus:outline-none focus:border-primary transition-all duration-200"            />
           </div>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <!-- Birthday -->
-          <div class="flex flex-col gap-1.5 col-span-1">
-            <label class="text-[13px] font-semibold text-on-surface-variant flex items-center gap-2 uppercase tracking-wide">
-              <span class="material-symbols-outlined text-[18px] text-primary/80">cake</span>
-              Ngày sinh
-            </label>
-            <input              v-model="googleRegForm.birthday"
-              type="date"
-              class="w-full h-11 bg-surface-container-lowest border border-outline-variant/60 rounded-xl px-4 text-sm text-on-surface focus:outline-none focus:border-primary transition-all duration-200"            />
-          </div>
-
+        <div class="grid grid-cols-1 gap-4">
           <!-- Desired Role -->
           <div class="flex flex-col gap-1.5 col-span-1">
             <label class="text-[13px] font-semibold text-on-surface-variant flex items-center gap-2 uppercase tracking-wide">
@@ -547,8 +564,7 @@ const googleRegForm = reactive({
   challenge_token: '',
   name: '',
   email: '',
-  gender: 'male',
-  birthday: '',
+  phone: '',
   desired_role: 'customer',
   password: '',
   password_confirmation: ''
@@ -577,12 +593,14 @@ const toast = useToast()
 
 const loading = ref(false)
 const showPassword = ref(false)
+const emailOtpDialogVisible = ref(false)
+const emailOtpInput = ref('')
+const emailOtpSentFor = ref('')
 
 const form = reactive({
   name: '',
   email: '',
-  gender: 'male',
-  birthday: '',
+  phone: '',
   password: '',
   password_confirmation: '',
   desired_role: 'customer'
@@ -627,8 +645,7 @@ const handleGoogleCredentialResponse = async (response) => {
       googleRegForm.challenge_token = res.data.challenge_token
       googleRegForm.email = res.data.email
       googleRegForm.name = res.data.name
-      googleRegForm.gender = 'male'
-      googleRegForm.birthday = ''
+      googleRegForm.phone = ''
       googleRegForm.desired_role = 'customer'
       googleRegForm.password = ''
       googleRegForm.password_confirmation = ''
@@ -701,8 +718,7 @@ const openFacebookLogin = async () => {
       googleRegForm.challenge_token = res.data.challenge_token
       googleRegForm.email = res.data.email || ''
       googleRegForm.name = res.data.name || ''
-      googleRegForm.gender = 'male'
-      googleRegForm.birthday = ''
+      googleRegForm.phone = ''
       googleRegForm.desired_role = 'customer'
       googleRegForm.password = ''
       googleRegForm.password_confirmation = ''
@@ -833,9 +849,54 @@ const handleRegister = async () => {
     return
   }
 
+  const cleanedPhone = form.phone.replace(/[^0-9]/g, '')
+  if (!/^0[35789]\d{8}$/.test(cleanedPhone)) {
+    toast.add({ severity: 'warn', summary: 'Cảnh báo', detail: 'Số điện thoại không đúng định dạng 10 chữ số tại Việt Nam.', life: 3000 })
+    return
+  }
+  form.phone = cleanedPhone
+
   loading.value = true
   try {
-    await authStore.register({ ...form })
+    await authStore.sendRegistrationEmailOtp(form.email)
+    emailOtpSentFor.value = form.email
+    emailOtpInput.value = ''
+    emailOtpDialogVisible.value = true
+    toast.add({ severity: 'success', summary: 'Đã gửi OTP', detail: 'Vui lòng kiểm tra email để lấy mã xác thực 8 chữ số.', life: 4000 })
+  } catch (error) {
+    const errorMessage = error.response?.data?.message || Object.values(error.response?.data?.errors || {})[0]?.[0] || 'Không thể gửi mã OTP.'
+    toast.add({ severity: 'error', summary: 'Lỗi gửi OTP', detail: errorMessage, life: 4000 })
+  } finally {
+    loading.value = false
+  }
+}
+
+const handleResendEmailOtp = async () => {
+  loading.value = true
+  try {
+    await authStore.sendRegistrationEmailOtp(emailOtpSentFor.value)
+    emailOtpInput.value = ''
+    toast.add({ severity: 'success', summary: 'Đã gửi lại', detail: 'Một mã OTP mới đã được gửi tới email của bạn.', life: 3000 })
+  } catch (error) {
+    const errorMessage = error.response?.data?.message || 'Chưa thể gửi lại mã OTP.'
+    toast.add({ severity: 'error', summary: 'Lỗi gửi OTP', detail: errorMessage, life: 4000 })
+  } finally {
+    loading.value = false
+  }
+}
+
+const handleConfirmEmailOtp = async () => {
+  if (!/^\d{8}$/.test(emailOtpInput.value) || loading.value) return
+
+  loading.value = true
+  try {
+    const verification = await authStore.verifyRegistrationEmailOtp(emailOtpSentFor.value, emailOtpInput.value)
+    await authStore.register({
+      ...form,
+      email_verification_token: verification.data.verification_token
+    })
+    emailOtpDialogVisible.value = false
+
     let message = 'Đăng ký tài khoản thành công! Đang chuyển hướng...'
     if (form.desired_role === 'author' || form.desired_role === 'vendor') {
       message = 'Đăng ký thành công! Hồ sơ đối tác của bạn đang chờ Admin phê duyệt.'
@@ -845,14 +906,8 @@ const handleRegister = async () => {
       router.push({ name: 'dashboard' })
     }, 1200)
   } catch (error) {
-    console.error('Registration error:', error)
-    let errorMessage = 'Có lỗi xảy ra trong quá trình đăng ký.'
-    if (error.response?.data?.message) {
-      errorMessage = error.response.data.message
-    } else if (error.response?.data?.errors) {
-      errorMessage = Object.values(error.response.data.errors)[0][0]
-    }
-    toast.add({ severity: 'error', summary: 'Lỗi đăng ký', detail: errorMessage, life: 3000 })
+    const errorMessage = error.response?.data?.message || Object.values(error.response?.data?.errors || {})[0]?.[0] || 'Không thể xác thực mã OTP.'
+    toast.add({ severity: 'error', summary: 'Lỗi xác thực', detail: errorMessage, life: 4000 })
   } finally {
     loading.value = false
   }

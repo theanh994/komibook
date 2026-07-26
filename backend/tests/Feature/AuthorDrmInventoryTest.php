@@ -33,6 +33,14 @@ class AuthorDrmInventoryTest extends TestCase
 
     protected $category;
 
+    private function verifiedEmailToken(string $email): string
+    {
+        $token = (string) \Illuminate\Support\Str::uuid();
+        Cache::put('registration_email_verified_'.$token, strtolower(trim($email)), now()->addMinutes(10));
+
+        return $token;
+    }
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -407,6 +415,7 @@ class AuthorDrmInventoryTest extends TestCase
             'password_confirmation' => 'password123',
             'phone' => '0987111222',
             'desired_role' => 'author',
+            'email_verification_token' => $this->verifiedEmailToken('author_new@komibook.id.vn'),
         ]);
 
         $response->assertStatus(201);
@@ -523,6 +532,7 @@ class AuthorDrmInventoryTest extends TestCase
             'phone' => '0987654321',
             'gender' => 'male',
             'birthday' => '2000-01-01',
+            'email_verification_token' => $this->verifiedEmailToken('testphone@gmail.com'),
         ]);
 
         $response->assertStatus(201)
@@ -672,6 +682,7 @@ class AuthorDrmInventoryTest extends TestCase
             'email' => 'user_email_only@komibook.id.vn',
             'password' => 'password123',
             'password_confirmation' => 'password123',
+            'email_verification_token' => $this->verifiedEmailToken('user_email_only@komibook.id.vn'),
         ]);
 
         $response->assertStatus(201)

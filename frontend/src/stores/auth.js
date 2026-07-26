@@ -21,6 +21,16 @@ export const useAuthStore = defineStore('auth', {
       return response.data
     },
 
+    async sendRegistrationEmailOtp(email) {
+      const response = await apiClient.post('/api/auth/email/send-otp', { email })
+      return response.data
+    },
+
+    async verifyRegistrationEmailOtp(email, otp) {
+      const response = await apiClient.post('/api/auth/email/verify-otp', { email, otp })
+      return response.data
+    },
+
     async login(credentials) {
       // 1. Phải gọi lấy CSRF Cookie của Sanctum trước
       await apiClient.get('/sanctum/csrf-cookie')
