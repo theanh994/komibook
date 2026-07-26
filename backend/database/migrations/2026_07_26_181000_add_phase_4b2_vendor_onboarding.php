@@ -49,7 +49,9 @@ return new class extends Migration
                 'onboarding_status' => $canonical,
                 'approved_at' => $canonical === 'approved' ? $vendor->updated_at : null,
                 'rejected_at' => $canonical === 'rejected' ? $vendor->updated_at : null,
-                'last_review_reason' => $vendor->rejection_reason,
+                'last_review_reason' => property_exists($vendor, 'rejection_reason')
+                    ? $vendor->rejection_reason
+                    : null,
             ]);
         });
 
@@ -88,6 +90,13 @@ return new class extends Migration
         DB::table('vendors')->whereNull('slug')->orderBy('id')->each(function (object $vendor): void {
             DB::table('vendors')->where('id', $vendor->id)->update(['slug' => 'pending-'.$vendor->id]);
         });
+
+        if (Schema::getConnection()->getDriverName() === 'mysql'
+            && ! Schema::hasIndex('vendors', 'vendors_user_id_foreign')) {
+            Schema::table('vendors', function (Blueprint $table) {
+                $table->index('user_id', 'vendors_user_id_foreign');
+            });
+        }
 
         Schema::table('vendors', function (Blueprint $table) {
             $table->dropUnique('vendors_user_id_unique');
