@@ -20,19 +20,19 @@ export default defineConfig({
     allowedHosts: ['komibook.id.vn'],
     proxy: {
       '/api': {
-        target: 'http://127.0.0.1:8000',
+        target: process.env.VITE_BACKEND_URL || 'http://127.0.0.1:8000',
         changeOrigin: true,
         headers: { Accept: 'application/json' },
         ...(process.env.VITE_COOKIE_DOMAIN ? { cookieDomainRewrite: process.env.VITE_COOKIE_DOMAIN } : {})
       },
       '/sanctum': {
-        target: 'http://127.0.0.1:8000',
+        target: process.env.VITE_BACKEND_URL || 'http://127.0.0.1:8000',
         changeOrigin: true,
         headers: { Accept: 'application/json' },
         ...(process.env.VITE_COOKIE_DOMAIN ? { cookieDomainRewrite: process.env.VITE_COOKIE_DOMAIN } : {})
       },
       '/storage': {
-        target: 'http://127.0.0.1:8000',
+        target: process.env.VITE_BACKEND_URL || 'http://127.0.0.1:8000',
         changeOrigin: true,
         ...(process.env.VITE_COOKIE_DOMAIN ? { cookieDomainRewrite: process.env.VITE_COOKIE_DOMAIN } : {})
       }

@@ -5,7 +5,7 @@
  * @param {Object} authState - Auth state containing isAuthenticated and userRole
  * @returns {boolean|Object} Returns true to allow, or a route location object to redirect
  */
-export function evaluateRouteGuard(to, { isAuthenticated, userRole }) {
+export function evaluateRouteGuard(to, { isAuthenticated, userRole, capabilities = {} }) {
   // 1. General auth requirement check
   if (to.meta?.requiresAuth && !isAuthenticated) {
     return { name: 'login', query: { redirect: to.fullPath } }
@@ -19,6 +19,12 @@ export function evaluateRouteGuard(to, { isAuthenticated, userRole }) {
   // 3. Role-based access control check
   if (to.meta?.role && userRole !== to.meta.role) {
     return { name: 'home' }
+  }
+
+  if (to.meta?.capability && !capabilities[to.meta.capability]) {
+    return to.meta.capability === 'approved_author'
+      ? { name: 'author-register' }
+      : { name: 'home' }
   }
 
   return true
@@ -39,8 +45,9 @@ export async function runRouteGuard(to, authStore) {
 
   const isAuthenticated = authStore.isAuthenticated
   const userRole = authStore.user?.role
+  const capabilities = authStore.user?.capabilities || {}
 
-  return evaluateRouteGuard(to, { isAuthenticated, userRole })
+  return evaluateRouteGuard(to, { isAuthenticated, userRole, capabilities })
 }
 
 /**

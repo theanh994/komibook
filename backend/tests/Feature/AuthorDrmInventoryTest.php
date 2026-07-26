@@ -17,6 +17,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 class AuthorDrmInventoryTest extends TestCase
@@ -35,7 +36,7 @@ class AuthorDrmInventoryTest extends TestCase
 
     private function verifiedEmailToken(string $email): string
     {
-        $token = (string) \Illuminate\Support\Str::uuid();
+        $token = (string) Str::uuid();
         Cache::put('registration_email_verified_'.$token, strtolower(trim($email)), now()->addMinutes(10));
 
         return $token;
@@ -91,17 +92,19 @@ class AuthorDrmInventoryTest extends TestCase
                 'bank_account_number' => '007100012345',
                 'bank_holder_name' => 'NGUYEN VAN A',
                 'identity_document' => $file,
+                'terms_accepted' => true,
             ]);
 
         $response->assertStatus(201)
             ->assertJson([
                 'status' => 'success',
-                'message' => 'Gửi yêu cầu đăng ký tác giả thành công! Chờ ban quản trị phê duyệt.',
+                'message' => 'Hồ sơ tác giả đã được gửi để kiểm duyệt.',
             ]);
 
         $this->assertDatabaseHas('authors', [
             'pen_name' => 'Nam Cao',
             'user_id' => $this->user->id,
+            'onboarding_status' => 'submitted',
         ]);
     }
 
@@ -438,6 +441,8 @@ class AuthorDrmInventoryTest extends TestCase
             'bank_holder_name' => 'NGUYEN VAN B',
             'identity_document' => 'document.jpg',
             'status' => 'pending',
+            'onboarding_status' => 'under_review',
+            'terms_accepted_at' => now(),
         ]);
 
         $response = $this->actingAs($this->admin)
@@ -452,11 +457,10 @@ class AuthorDrmInventoryTest extends TestCase
     }
 
     /**
-     * Test giới hạn kho hàng của tác giả tối đa là 1.
+     * Test duyệt tác giả không tự cấp quyền nhà bán hoặc kho hàng.
      */
-    public function test_author_warehouse_limit()
+    public function test_author_approval_does_not_grant_vendor_warehouse_access()
     {
-        // Phê duyệt tác giả để đổi role thành vendor
         $author = Author::create([
             'user_id' => $this->user->id,
             'pen_name' => 'Tác Giả Có Kho',
@@ -466,37 +470,26 @@ class AuthorDrmInventoryTest extends TestCase
             'identity_document' => 'document.jpg',
             'phone_verified_at' => now(),
             'status' => 'pending',
+            'onboarding_status' => 'under_review',
+            'terms_accepted_at' => now(),
         ]);
 
         $this->actingAs($this->admin)
-            ->patchJson("/api/admin/approvals/authors/{$author->id}/approve");
+            ->patchJson("/api/admin/approvals/authors/{$author->id}/approve")
+            ->assertOk();
 
-        // Bây giờ user đã là vendor có liên kết author
         $this->user->refresh();
+        $this->assertSame('customer', $this->user->role);
+        $this->assertNull($this->user->vendor);
+        $this->assertSame('approved', $author->fresh()->onboarding_status->value);
 
-        // Tạo kho hàng thứ nhất (OK)
-        $response1 = $this->actingAs($this->user)
+        $this->actingAs($this->user)
             ->postJson('/api/vendor/warehouses', [
                 'name' => 'Kho Sách Tác Giả 1',
                 'address' => 'Số 1 Nguyễn Du',
                 'capacity' => '50%',
                 'status' => 'Hoạt động',
-            ]);
-        $response1->assertStatus(201);
-
-        // Tạo kho hàng thứ hai (Bị từ chối vì là Tác giả)
-        $response2 = $this->actingAs($this->user)
-            ->postJson('/api/vendor/warehouses', [
-                'name' => 'Kho Sách Tác Giả 2',
-                'address' => 'Số 2 Nguyễn Du',
-                'capacity' => '50%',
-                'status' => 'Hoạt động',
-            ]);
-        $response2->assertStatus(422)
-            ->assertJson([
-                'status' => 'error',
-                'message' => 'Tác giả đối tác chỉ được sở hữu và đăng ký tối đa 1 nhà kho duy nhất.',
-            ]);
+            ])->assertForbidden();
     }
 
     public function test_author_approval_requires_phone_verification()
@@ -509,6 +502,8 @@ class AuthorDrmInventoryTest extends TestCase
             'bank_holder_name' => 'NGUYEN VAN C',
             'identity_document' => 'unverified-document.jpg',
             'status' => 'pending',
+            'onboarding_status' => 'under_review',
+            'terms_accepted_at' => now(),
         ]);
 
         $this->actingAs($this->admin)

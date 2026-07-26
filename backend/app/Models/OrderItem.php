@@ -21,6 +21,10 @@ class OrderItem extends Model
         'book_id',
         'quantity',
         'price',
+        'list_unit_price',
+        'promotion_discount_amount',
+        'flash_sale_book_id',
+        'promotion_snapshot',
     ];
 
     /**
@@ -33,6 +37,9 @@ class OrderItem extends Model
         return [
             'price' => 'integer',
             'quantity' => 'integer',
+            'list_unit_price' => 'integer',
+            'promotion_discount_amount' => 'integer',
+            'promotion_snapshot' => 'array',
         ];
     }
 

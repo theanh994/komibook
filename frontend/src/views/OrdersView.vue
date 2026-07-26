@@ -123,6 +123,14 @@
                     <span class="text-lg font-black text-primary">{{ formatCurrency(order.total_amount) }}</span>
                   </div>
                   <div class="flex items-center gap-3">
+                    <button
+                      v-if="canRequestReturn(order)"
+                      @click="$router.push({ path: '/returns', query: { order: order.id } })"
+                      class="px-3 py-1.5 rounded-xl border border-primary text-xs font-bold text-primary hover:bg-primary hover:text-on-primary transition-all flex items-center gap-1 cursor-pointer"
+                    >
+                      <span class="material-symbols-outlined text-[16px]">assignment_return</span>
+                      Yêu cầu trả hàng
+                    </button>
                     <button 
                       v-if="order.status === 'pending' && order.payment_status === 'unpaid' && (order.payment_method === 'online' || order.payment_method === 'VNPAY')"
                       @click="payNow(order)"
@@ -286,6 +294,11 @@ const getPaymentMethodText = (method) => {
   const map = { cod: 'COD', online: 'Online (VNPAY)', vnpay: 'Online (VNPAY)', VNPAY: 'Online (VNPAY)' }
   return map[method] || method
 }
+
+const canRequestReturn = (order) => order.status === 'completed'
+  && order.shipping_status === 'delivered'
+  && order.items?.some((item) => item.book?.type === 'physical')
+  && !['refunding', 'refunded'].includes(order.refund_status)
 
 const payNow = async (order) => {
   payingOrderId.value = order.id

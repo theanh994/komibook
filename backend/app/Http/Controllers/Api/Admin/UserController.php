@@ -8,7 +8,6 @@ use App\Models\Vendor;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
 class UserController extends Controller
@@ -30,12 +29,12 @@ class UserController extends Controller
 
         return response()->json([
             'status' => 'success',
-            'data'   => $users->items(),
-            'meta'   => [
+            'data' => $users->items(),
+            'meta' => [
                 'current_page' => $users->currentPage(),
-                'last_page'    => $users->lastPage(),
-                'per_page'     => $users->perPage(),
-                'total'        => $users->total(),
+                'last_page' => $users->lastPage(),
+                'per_page' => $users->perPage(),
+                'total' => $users->total(),
             ],
         ]);
     }
@@ -60,39 +59,35 @@ class UserController extends Controller
         // Không cho phép đổi role của chính mình hoặc user admin khác
         if ($user->role === 'admin') {
             return response()->json([
-                'status'  => 'error',
+                'status' => 'error',
                 'message' => 'Không thể thay đổi quyền của Admin.',
             ], 422);
         }
 
         $newRole = $validated['role'];
-        $user->role = $newRole;
-        $user->save();
-
-        // Nếu đổi thành vendor → tạo Vendor profile nếu chưa có
-        if ($newRole === 'vendor') {
-            $existingVendor = Vendor::withoutGlobalScopes()
-                ->where('user_id', $user->id)
-                ->first();
-
-            if (!$existingVendor) {
-                Vendor::withoutGlobalScopes()->create([
-                    'user_id'     => $user->id,
-                    'shop_name'   => 'Shop của ' . $user->name,
-                    'slug'        => Str::slug($user->name . '-' . $user->id),
-                    'description' => '',
-                    'status'      => 'active',
-                ]);
-            }
+        $existingVendor = Vendor::withoutGlobalScopes()->where('user_id', $user->id)->first();
+        if ($newRole === 'vendor' && (! $existingVendor || ! $existingVendor->isActive())) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Chỉ có thể gán role vendor sau khi hồ sơ nhà bán được phê duyệt.',
+            ], 422);
         }
+        if ($newRole !== 'vendor' && $user->role === 'vendor' && $existingVendor?->isActive()) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Hãy đình chỉ hoặc thu hồi hồ sơ nhà bán trước khi bỏ role vendor.',
+            ], 422);
+        }
+
+        $user->update(['role' => $newRole]);
 
         // Reload với vendor relationship
         $user->load('vendor:id,user_id,shop_name,status');
 
         return response()->json([
-            'status'  => 'success',
+            'status' => 'success',
             'message' => "Đã cập nhật role thành '{$newRole}'.",
-            'data'    => $user,
+            'data' => $user,
         ]);
     }
 
@@ -103,12 +98,12 @@ class UserController extends Controller
      */
     public function show(int $id): JsonResponse
     {
-        $user = User::with(['addresses' => function($q) {
+        $user = User::with(['addresses' => function ($q) {
             $q->orderBy('is_default', 'desc');
         }, 'membershipTier'])->findOrFail($id);
 
         $data = $user->toArray();
-        
+
         // Lấy thêm số lượng đơn hàng và tổng chi tiêu
         $orderStats = DB::table('orders')
             ->where('user_id', $user->id)
@@ -128,7 +123,7 @@ class UserController extends Controller
 
         return response()->json([
             'status' => 'success',
-            'data' => $data
+            'data' => $data,
         ]);
     }
 }

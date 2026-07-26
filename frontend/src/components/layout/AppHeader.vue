@@ -259,19 +259,19 @@ const userMenuItems = computed(() => {
   if (authStore.isAuthenticated) {
     const authorProfile = authStore.user?.author_profile
     if (authorProfile) {
-      if (authorProfile.status === 'active') {
+      if (authorProfile.onboarding_status === 'approved') {
         items.push({
           label: 'Kênh sáng tác Tác giả',
           icon: 'pi pi-pencil',
-          command: () => router.push('/vendor/dashboard')
+          command: () => router.push('/author/dashboard')
         })
-      } else if (authorProfile.status === 'pending') {
+      } else if (['draft', 'submitted', 'resubmitted', 'under_review', 'changes_requested'].includes(authorProfile.onboarding_status)) {
         items.push({
           label: 'Đang duyệt Tác giả',
           icon: 'pi pi-clock',
           disabled: true
         })
-      } else if (authorProfile.status === 'rejected') {
+      } else if (['rejected', 'suspended', 'revoked'].includes(authorProfile.onboarding_status)) {
         items.push({
           label: 'Hồ sơ Tác giả bị từ chối',
           icon: 'pi pi-times-circle',
@@ -283,6 +283,15 @@ const userMenuItems = computed(() => {
         label: 'Đăng ký làm Tác giả',
         icon: 'pi pi-user-plus',
         command: () => router.push('/author/register')
+      })
+    }
+
+    const vendorProfile = authStore.user?.vendor_profile
+    if (vendorProfile && !authStore.user?.capabilities?.active_vendor) {
+      items.push({
+        label: vendorProfile.onboarding_status === 'changes_requested' ? 'Bổ sung hồ sơ Nhà bán' : 'Hồ sơ Nhà bán',
+        icon: 'pi pi-store',
+        command: () => router.push('/vendor/register')
       })
     }
   }

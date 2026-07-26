@@ -18,6 +18,7 @@ const selectedPartner = ref(null)
 
 const showRejectDialog = ref(false)
 const rejectReason = ref('')
+const reviewAction = ref('rejected')
 
 const fetchApprovals = async () => {
   loading.value = true
@@ -44,32 +45,39 @@ const fetchApprovals = async () => {
   }
 }
 
-const approveVendor = async (id) => {
+const transitionVendor = async (id, toStatus, reason = null) => {
   try {
-    const res = await apiClient.patch(`/api/admin/approvals/vendors/${id}/approve`)
+    const res = await apiClient.patch(`/api/admin/approvals/vendors/${id}/transition`, {
+      to_status: toStatus,
+      reason,
+    })
     if (res.data?.status === 'success') {
-      toast.add({ severity: 'success', summary: 'Đã phê duyệt', detail: 'Đã kích hoạt tài khoản nhà bán đối tác thành công.', life: 3000 })
+      toast.add({ severity: 'success', summary: 'Đã cập nhật', detail: 'Trạng thái hồ sơ nhà bán đã được cập nhật.', life: 3000 })
       fetchApprovals()
     }
-  } catch {
-    toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Không thể phê duyệt tài khoản.', life: 3000 })
+  } catch (e) {
+    toast.add({ severity: 'error', summary: 'Lỗi', detail: e.response?.data?.message || 'Không thể cập nhật hồ sơ.', life: 3000 })
   }
 }
 
-const approveAuthor = async (id) => {
+const transitionAuthor = async (id, toStatus, reason = null) => {
   try {
-    const res = await apiClient.patch(`/api/admin/approvals/authors/${id}/approve`)
+    const res = await apiClient.patch(`/api/admin/approvals/authors/${id}/transition`, {
+      to_status: toStatus,
+      reason,
+    })
     if (res.data?.status === 'success') {
-      toast.add({ severity: 'success', summary: 'Đã phê duyệt', detail: 'Đã duyệt đối tác tác giả và tự động kích hoạt gian hàng.', life: 3500 })
+      toast.add({ severity: 'success', summary: 'Đã cập nhật', detail: 'Trạng thái tác giả đã được cập nhật độc lập với gian hàng.', life: 3500 })
       fetchApprovals()
     }
-  } catch {
-    toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Không thể phê duyệt tài khoản.', life: 3000 })
+  } catch (e) {
+    toast.add({ severity: 'error', summary: 'Lỗi', detail: e.response?.data?.message || 'Không thể cập nhật hồ sơ.', life: 3000 })
   }
 }
 
-const openRejectDialog = (partner, type) => {
+const openRejectDialog = (partner, type, action = 'rejected') => {
   selectedPartner.value = { ...partner, type }
+  reviewAction.value = action
   rejectReason.value = ''
   showRejectDialog.value = true
 }
@@ -82,9 +90,14 @@ const rejectPartner = async () => {
 
   try {
     const { id, type } = selectedPartner.value
-    const res = await apiClient.patch(`/api/admin/approvals/partners/${type}/${id}/reject`, {
-      reason: rejectReason.value
-    })
+    const res = ['author', 'vendor'].includes(type)
+      ? await apiClient.patch(`/api/admin/approvals/${type}s/${id}/transition`, {
+          to_status: reviewAction.value,
+          reason: rejectReason.value,
+        })
+      : await apiClient.patch(`/api/admin/approvals/partners/${type}/${id}/reject`, {
+          reason: rejectReason.value,
+        })
 
     if (res.data?.status === 'success') {
       toast.add({ severity: 'info', summary: 'Đã từ chối', detail: 'Đã gửi email phản hồi từ chối hồ sơ đăng ký.', life: 3000 })
@@ -186,8 +199,12 @@ onMounted(() => {
             </div>
 
             <div class="flex gap-2 w-full sm:w-auto shrink-0 justify-end">
-              <Button label="Phê duyệt" icon="pi pi-check" class="p-button-success p-button-sm text-xs font-bold" @click="approveVendor(vendor.id)" />
-              <Button label="Từ chối" icon="pi pi-times" class="p-button-outlined p-button-danger p-button-sm text-xs" @click="openRejectDialog(vendor, 'vendor')" />
+              <Button v-if="['submitted', 'resubmitted'].includes(vendor.onboarding_status)" label="Bắt đầu duyệt" icon="pi pi-search" class="p-button-info p-button-sm text-xs font-bold" @click="transitionVendor(vendor.id, 'under_review')" />
+              <template v-if="vendor.onboarding_status === 'under_review'">
+                <Button label="Phê duyệt" icon="pi pi-check" class="p-button-success p-button-sm text-xs font-bold" @click="transitionVendor(vendor.id, 'approved')" />
+                <Button label="Yêu cầu sửa" icon="pi pi-pencil" class="p-button-outlined p-button-warning p-button-sm text-xs" @click="openRejectDialog(vendor, 'vendor', 'changes_requested')" />
+                <Button label="Từ chối" icon="pi pi-times" class="p-button-outlined p-button-danger p-button-sm text-xs" @click="openRejectDialog(vendor, 'vendor', 'rejected')" />
+              </template>
             </div>
           </div>
         </div>
@@ -222,8 +239,12 @@ onMounted(() => {
             </div>
 
             <div class="flex gap-2 w-full sm:w-auto shrink-0 justify-end">
-              <Button label="Duyệt & Kích hoạt" icon="pi pi-check" class="p-button-success p-button-sm text-xs font-bold" @click="approveAuthor(author.id)" />
-              <Button label="Từ chối" icon="pi pi-times" class="p-button-outlined p-button-danger p-button-sm text-xs" @click="openRejectDialog(author, 'author')" />
+              <Button v-if="['submitted', 'resubmitted'].includes(author.onboarding_status)" label="Bắt đầu duyệt" icon="pi pi-search" class="p-button-info p-button-sm text-xs font-bold" @click="transitionAuthor(author.id, 'under_review')" />
+              <template v-if="author.onboarding_status === 'under_review'">
+                <Button label="Phê duyệt" icon="pi pi-check" class="p-button-success p-button-sm text-xs font-bold" @click="transitionAuthor(author.id, 'approved')" />
+                <Button label="Yêu cầu sửa" icon="pi pi-pencil" class="p-button-outlined p-button-warning p-button-sm text-xs" @click="openRejectDialog(author, 'author', 'changes_requested')" />
+                <Button label="Từ chối" icon="pi pi-times" class="p-button-outlined p-button-danger p-button-sm text-xs" @click="openRejectDialog(author, 'author', 'rejected')" />
+              </template>
             </div>
           </div>
         </div>
@@ -235,7 +256,7 @@ onMounted(() => {
     </div>
 
     <!-- Reject Dialog -->
-    <Dialog v-model:visible="showRejectDialog" modal header="Từ chối hồ sơ đăng ký đối tác" :style="{ width: '90vw', maxWidth: '500px' }">
+    <Dialog v-model:visible="showRejectDialog" modal :header="reviewAction === 'changes_requested' ? 'Yêu cầu bổ sung hồ sơ' : 'Từ chối hồ sơ đăng ký'" :style="{ width: '90vw', maxWidth: '500px' }">
       <div class="space-y-4">
         <div class="flex flex-col gap-1.5">
           <label class="text-xs font-bold text-slate-500">Lý do từ chối hồ sơ <span class="text-rose-500">*</span></label>

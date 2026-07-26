@@ -11,6 +11,11 @@ class FlashSale extends Model
         'start_time',
         'end_time',
         'is_active',
+        'status',
+        'timezone',
+        'coupon_stacking_policy',
+        'priority',
+        'created_by',
     ];
 
     protected function casts(): array
@@ -19,6 +24,7 @@ class FlashSale extends Model
             'start_time' => 'datetime',
             'end_time' => 'datetime',
             'is_active' => 'boolean',
+            'priority' => 'integer',
         ];
     }
 

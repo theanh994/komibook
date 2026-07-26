@@ -5,129 +5,64 @@ namespace App\Http\Controllers\Api\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Order;
 use App\Models\PayoutRequest;
-use App\Models\Vendor;
+use App\Services\PayoutService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
+use LogicException;
 
 class ReconciliationController extends Controller
 {
-    /**
-     * GET /api/admin/reconciliation
-     *
-     * Danh sách đối soát: các đơn hàng completed chưa thanh toán cho vendor
-     * + các yêu cầu rút tiền đang chờ duyệt.
-     */
     public function index(Request $request): JsonResponse
     {
-        // ── KPI ──────────────────────────────────────────────────────────
-        $pendingPayoutAmount = PayoutRequest::where('status', 'pending')->sum('amount');
-        $approvedPayoutAmount = PayoutRequest::where('status', 'approved')->sum('amount');
-        $totalSettled = PayoutRequest::where('status', 'completed')->sum('amount');
-
-        $unreconciled = Order::withoutGlobalScopes()
-            ->where('status', 'completed')
-            ->where('payment_status', 'paid')
-            ->count();
-
-        // ── Danh sách yêu cầu rút tiền (phân trang) ─────────────────────
-        $query = PayoutRequest::with('vendor:id,shop_name,balance,total_withdrawn')
-            ->orderByDesc('created_at');
-
+        $query = PayoutRequest::with('vendor:id,shop_name,balance,total_withdrawn')->latest();
         if ($request->filled('status') && $request->status !== 'all') {
             $query->where('status', $request->status);
         }
-
         if ($request->filled('search')) {
-            $search = $request->search;
-            $query->whereHas('vendor', function ($q) use ($search) {
-                $q->where('shop_name', 'LIKE', "%{$search}%");
-            });
+            $query->whereHas('vendor', fn ($vendor) => $vendor->where('shop_name', 'like', '%'.$request->search.'%'));
         }
+        $items = $query->paginate($request->integer('per_page', 15));
 
-        $payoutRequests = $query->paginate($request->get('per_page', 15));
-
-        return response()->json([
-            'status' => 'success',
-            'data'   => [
-                'kpi' => [
-                    'pending_payout'  => (int) $pendingPayoutAmount,
-                    'approved_payout' => (int) $approvedPayoutAmount,
-                    'total_settled'   => (int) $totalSettled,
-                    'unreconciled'    => $unreconciled,
-                ],
-                'payout_requests' => $payoutRequests->items(),
-                'meta' => [
-                    'current_page' => $payoutRequests->currentPage(),
-                    'last_page'    => $payoutRequests->lastPage(),
-                    'per_page'     => $payoutRequests->perPage(),
-                    'total'        => $payoutRequests->total(),
-                ],
+        return response()->json(['status' => 'success', 'data' => [
+            'kpi' => [
+                'pending_payout' => (int) PayoutRequest::where('status', 'pending')->sum('amount'),
+                'approved_payout' => (int) PayoutRequest::whereIn('status', ['approved', 'processing'])->sum('amount'),
+                'total_settled' => (int) PayoutRequest::where('status', 'completed')->sum('amount'),
+                'unreconciled' => Order::withoutGlobalScopes()->where('status', 'completed')->where('payment_status', 'paid')->count(),
             ],
-        ]);
+            'payout_requests' => $items->items(),
+            'meta' => ['current_page' => $items->currentPage(), 'last_page' => $items->lastPage(), 'per_page' => $items->perPage(), 'total' => $items->total()],
+        ]]);
     }
 
-    /**
-     * PATCH /api/admin/reconciliation/{id}/approve
-     *
-     * Duyệt yêu cầu rút tiền → cộng vào total_withdrawn của vendor.
-     */
-    public function approve(int $id): JsonResponse
+    public function transition(Request $request, PayoutRequest $payout, PayoutService $payouts): JsonResponse
     {
-        $payout = PayoutRequest::findOrFail($id);
-
-        if ($payout->status !== 'pending') {
-            return response()->json([
-                'status'  => 'error',
-                'message' => 'Yêu cầu này đã được xử lý trước đó.',
-            ], 422);
-        }
-
-        DB::transaction(function () use ($payout) {
-            $payout->status = 'approved';
-            $payout->save();
-
-            // Cộng vào tổng đã rút của vendor
-            $vendor = Vendor::withoutGlobalScopes()->findOrFail($payout->vendor_id);
-            $vendor->total_withdrawn += $payout->amount;
-            $vendor->save();
-        });
-
-        return response()->json([
-            'status'  => 'success',
-            'message' => 'Đã duyệt yêu cầu rút tiền thành công.',
+        $validated = $request->validate([
+            'target' => 'required|in:approved,rejected,processing,completed', 'reason' => 'nullable|string|max:1000',
+            'transfer_reference' => 'nullable|string|max:120', 'transfer_evidence' => 'nullable|string|max:500',
+            'idempotency_key' => 'required|string|max:120',
         ]);
+        try {
+            $updated = $payouts->transition($payout, $validated['target'], $request->user(), $validated['idempotency_key'], $validated);
+
+            return response()->json(['status' => 'success', 'data' => $updated]);
+        } catch (LogicException $exception) {
+            return response()->json(['status' => 'error', 'message' => $exception->getMessage()], 422);
+        }
     }
 
-    /**
-     * PATCH /api/admin/reconciliation/{id}/reject
-     *
-     * Từ chối yêu cầu rút tiền → hoàn lại số dư cho vendor.
-     */
-    public function reject(int $id): JsonResponse
+    public function approve(Request $request, int $id, PayoutService $payouts): JsonResponse
     {
-        $payout = PayoutRequest::findOrFail($id);
+        $request->merge(['target' => 'approved', 'idempotency_key' => $request->input('idempotency_key', (string) Str::uuid())]);
 
-        if ($payout->status !== 'pending') {
-            return response()->json([
-                'status'  => 'error',
-                'message' => 'Yêu cầu này đã được xử lý trước đó.',
-            ], 422);
-        }
+        return $this->transition($request, PayoutRequest::withoutGlobalScopes()->findOrFail($id), $payouts);
+    }
 
-        DB::transaction(function () use ($payout) {
-            $payout->status = 'rejected';
-            $payout->save();
+    public function reject(Request $request, int $id, PayoutService $payouts): JsonResponse
+    {
+        $request->merge(['target' => 'rejected', 'idempotency_key' => $request->input('idempotency_key', (string) Str::uuid())]);
 
-            // Hoàn lại số dư cho vendor (vì đã trừ khi tạo request)
-            $vendor = Vendor::withoutGlobalScopes()->findOrFail($payout->vendor_id);
-            $vendor->balance += $payout->amount;
-            $vendor->save();
-        });
-
-        return response()->json([
-            'status'  => 'success',
-            'message' => 'Đã từ chối yêu cầu rút tiền. Số dư đã được hoàn lại cho nhà bán.',
-        ]);
+        return $this->transition($request, PayoutRequest::withoutGlobalScopes()->findOrFail($id), $payouts);
     }
 }

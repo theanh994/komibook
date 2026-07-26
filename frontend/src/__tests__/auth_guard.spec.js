@@ -133,4 +133,20 @@ describe('Auth Store & Guard Matrix Tests', () => {
     const adminResult = evaluateRouteGuard(adminRoute, { isAuthenticated: true, userRole: 'admin' })
     expect(adminResult).toBe(true)
   })
+
+  it('uses approved_author capability independently from the legacy vendor role', () => {
+    const authorRoute = { path: '/author/dashboard', meta: { requiresAuth: true, capability: 'approved_author' } }
+
+    expect(evaluateRouteGuard(authorRoute, {
+      isAuthenticated: true,
+      userRole: 'customer',
+      capabilities: { approved_author: true, active_vendor: false },
+    })).toBe(true)
+
+    expect(evaluateRouteGuard(authorRoute, {
+      isAuthenticated: true,
+      userRole: 'vendor',
+      capabilities: { approved_author: false, active_vendor: true },
+    })).toEqual({ name: 'author-register' })
+  })
 })

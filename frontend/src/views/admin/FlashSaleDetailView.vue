@@ -179,7 +179,7 @@ const getStatusTagClass = (status) => {
 const approveItem = async (item) => {
   loading.value = true
   try {
-    await apiClient.put(`/api/admin/flash-sales/items/${item.id}/approve`)
+    await apiClient.put(`/api/admin/flash-sales/items/${item.id}/approve`, { operation_key: `flash-ui:approve:${item.id}:${Date.now()}` })
     toast.add({ severity: 'success', summary: 'Thành công', detail: 'Đã duyệt sản phẩm vào Flash Sale', life: 3000 })
     fetchFlashSale()
   } catch (e) {
@@ -190,9 +190,11 @@ const approveItem = async (item) => {
 }
 
 const rejectItem = async (item) => {
+  const reason = window.prompt('Nhập lý do từ chối:')
+  if (!reason) return
   loading.value = true
   try {
-    await apiClient.put(`/api/admin/flash-sales/items/${item.id}/reject`)
+    await apiClient.put(`/api/admin/flash-sales/items/${item.id}/reject`, { reason, operation_key: `flash-ui:reject:${item.id}:${Date.now()}` })
     toast.add({ severity: 'success', summary: 'Thành công', detail: 'Đã từ chối đề xuất tham gia Flash Sale', life: 3000 })
     fetchFlashSale()
   } catch (e) {

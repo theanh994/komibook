@@ -546,6 +546,13 @@ class InventoryReservationCheckoutIntegrationTest extends TestCase
         $this->assertEquals(2, OrderItem::count());
         $this->assertEquals(2, InventoryReservation::count());
         $this->assertEquals(10, $stock->fresh()->quantity);
+        $snapshotItemIds = collect($orders[0]->invoiceSnapshot->line_items)->pluck('order_item_id');
+        $this->assertCount(2, $snapshotItemIds);
+        $this->assertSame(2, $snapshotItemIds->unique()->count());
+        $this->assertEqualsCanonicalizing(
+            $orders[0]->orderItems()->pluck('id')->all(),
+            $snapshotItemIds->all()
+        );
 
         // Run ProcessOrder job
         (new ProcessOrder($orders[0]->id))->handle();

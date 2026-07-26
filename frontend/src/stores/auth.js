@@ -9,7 +9,7 @@ export const useAuthStore = defineStore('auth', {
   getters: {
     isAuthenticated: (state) => !!state.user,
     isAdmin: (state) => state.user?.role === 'admin',
-    isAuthor: (state) => state.user?.role === 'author' || state.user?.author_profile?.status === 'active',
+    isAuthor: (state) => state.user?.capabilities?.approved_author === true,
     isVendor: (state) => state.user?.role === 'vendor',
     isCustomer: (state) => state.user?.role === 'customer',
   },

@@ -2,164 +2,169 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Enums\AuthorOnboardingStatus;
 use App\Http\Controllers\Controller;
+use App\Http\Resources\AuthorProfileResource;
 use App\Models\Author;
-use App\Models\Book;
+use App\Services\AuthorOnboardingService;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 
 class AuthorController extends Controller
 {
-    /**
-     * Đăng ký trở thành tác giả.
-     */
-    public function register(Request $request)
+    public function register(Request $request, AuthorOnboardingService $service)
     {
-        $request->validate([
+        $validated = $request->validate([
             'pen_name' => 'required|string|max:255',
-            'bio' => 'nullable|string',
+            'bio' => 'nullable|string|max:5000',
             'bank_account_number' => 'required|string|max:50',
             'bank_name' => 'required|string|max:100',
             'bank_holder_name' => 'required|string|max:255',
-            'identity_document' => 'required|image|max:5120', // CCCD/Passport Max 5MB
+            'identity_document' => 'nullable|image|max:5120',
+            'terms_accepted' => 'accepted',
+            'operation_key' => 'nullable|string|max:100',
         ]);
 
-        $user = Auth::user();
-
-        // Kiểm tra xem đã đăng ký chưa
-        $existing = Author::where('user_id', $user->id)->first();
-        if ($existing) {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Bạn đã gửi yêu cầu đăng ký tác giả trước đó rồi.',
-            ], 422);
+        $user = $request->user();
+        $author = Author::firstOrNew(['user_id' => $user->id]);
+        $isNew = ! $author->exists;
+        $current = $author->exists ? $author->onboarding_status : AuthorOnboardingStatus::Draft;
+        if ($current instanceof AuthorOnboardingStatus && ! in_array($current, [AuthorOnboardingStatus::Draft, AuthorOnboardingStatus::ChangesRequested], true)) {
+            throw ValidationException::withMessages(['profile' => 'Hồ sơ hiện tại không thể được gửi lại ở trạng thái này.']);
         }
 
-        $filePath = null;
-        if ($request->hasFile('identity_document')) {
-            // Lưu tài liệu vào private disk để bảo vệ khỏi truy cập công khai
-            $filePath = $request->file('identity_document')->store('authors/cccd', 'private');
-        }
-
-        $author = Author::create([
-            'user_id' => $user->id,
-            'pen_name' => $request->pen_name,
-            'bio' => $request->bio,
-            'bank_account_number' => $request->bank_account_number,
-            'bank_name' => $request->bank_name,
-            'bank_holder_name' => $request->bank_holder_name,
-            'identity_document' => $filePath,
+        $profile = [
+            'pen_name' => $validated['pen_name'],
+            'bio' => $validated['bio'] ?? null,
+            'bank_account_number' => $validated['bank_account_number'],
+            'bank_name' => $validated['bank_name'],
+            'bank_holder_name' => $validated['bank_holder_name'],
+            'terms_accepted_at' => now(),
             'status' => 'pending',
-        ]);
+            'onboarding_status' => $current,
+        ];
+        if ($request->hasFile('identity_document')) {
+            $profile['identity_document'] = $request->file('identity_document')->store('authors/cccd', 'private');
+        }
+        $author->fill($profile)->save();
+
+        $target = $current === AuthorOnboardingStatus::ChangesRequested
+            ? AuthorOnboardingStatus::Resubmitted
+            : AuthorOnboardingStatus::Submitted;
+        $author = $service->transition(
+            $author,
+            $target,
+            $user,
+            operationKey: $this->operationKey($request, 'submit')
+        );
 
         return response()->json([
             'status' => 'success',
-            'message' => 'Gửi yêu cầu đăng ký tác giả thành công! Chờ ban quản trị phê duyệt.',
-            'data' => $author,
-        ], 201);
+            'message' => 'Hồ sơ tác giả đã được gửi để kiểm duyệt.',
+            'data' => new AuthorProfileResource($author),
+        ], $isNew ? 201 : 200);
     }
 
-    /**
-     * Truy cập an toàn file CCCD/tài liệu tác giả (chỉ admin hoặc chính tác giả).
-     */
+    public function saveDraft(Request $request)
+    {
+        $validated = $request->validate([
+            'pen_name' => 'sometimes|required|string|max:255',
+            'bio' => 'nullable|string|max:5000',
+            'bank_account_number' => 'sometimes|required|string|max:50',
+            'bank_name' => 'sometimes|required|string|max:100',
+            'bank_holder_name' => 'sometimes|required|string|max:255',
+            'identity_document' => 'sometimes|required|image|max:5120',
+            'terms_accepted' => 'sometimes|accepted',
+        ]);
+
+        $author = Author::firstOrNew(['user_id' => $request->user()->id]);
+        $state = $author->exists ? $author->onboarding_status : AuthorOnboardingStatus::Draft;
+        if (! in_array($state, [AuthorOnboardingStatus::Draft, AuthorOnboardingStatus::ChangesRequested], true)) {
+            throw ValidationException::withMessages(['profile' => 'Hồ sơ hiện tại không thể chỉnh sửa.']);
+        }
+
+        foreach (['pen_name', 'bio', 'bank_account_number', 'bank_name', 'bank_holder_name'] as $field) {
+            if (array_key_exists($field, $validated)) {
+                $author->{$field} = $validated[$field];
+            }
+        }
+        if ($request->hasFile('identity_document')) {
+            $author->identity_document = $request->file('identity_document')->store('authors/cccd', 'private');
+        }
+        if ($request->boolean('terms_accepted')) {
+            $author->terms_accepted_at = now();
+        }
+        $author->status ??= 'pending';
+        $author->onboarding_status = $state;
+        $author->save();
+
+        return response()->json(['status' => 'success', 'data' => new AuthorProfileResource($author)]);
+    }
+
+    public function submit(Request $request, AuthorOnboardingService $service)
+    {
+        $request->validate(['operation_key' => 'nullable|string|max:100']);
+        $author = Author::where('user_id', $request->user()->id)->firstOrFail();
+        $target = $author->onboarding_status === AuthorOnboardingStatus::ChangesRequested
+            ? AuthorOnboardingStatus::Resubmitted
+            : AuthorOnboardingStatus::Submitted;
+
+        $author = $service->transition($author, $target, $request->user(), operationKey: $this->operationKey($request, 'submit'));
+
+        return response()->json(['status' => 'success', 'data' => new AuthorProfileResource($author)]);
+    }
+
     public function downloadIdentityDocument(Request $request, $id)
     {
         $author = Author::findOrFail($id);
-        $user = Auth::user();
-
-        if ($user->role !== 'admin' && $user->id !== $author->user_id) {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Bạn không có quyền truy cập tài liệu này.',
-            ], 403);
+        if ($request->user()->role !== 'admin' && $request->user()->id !== $author->user_id) {
+            return response()->json(['status' => 'error', 'message' => 'Bạn không có quyền truy cập tài liệu này.'], 403);
         }
 
         $path = $author->identity_document;
         if (! $path) {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Tài liệu không tồn tại.',
-            ], 404);
+            return response()->json(['status' => 'error', 'message' => 'Tài liệu không tồn tại.'], 404);
+        }
+        foreach (['private', 'public'] as $disk) {
+            if (Storage::disk($disk)->exists($path)) {
+                return response()->file(Storage::disk($disk)->path($path), ['X-Content-Type-Options' => 'nosniff']);
+            }
         }
 
-        if (Storage::disk('private')->exists($path)) {
-            return response()->file(Storage::disk('private')->path($path), [
-                'X-Content-Type-Options' => 'nosniff',
-            ]);
-        }
-
-        // Fallback kiểm tra đĩa public cũ nếu chưa di trú
-        if (Storage::disk('public')->exists($path)) {
-            return response()->file(Storage::disk('public')->path($path), [
-                'X-Content-Type-Options' => 'nosniff',
-            ]);
-        }
-
-        return response()->json([
-            'status' => 'error',
-            'message' => 'Tài liệu không tồn tại.',
-        ], 404);
+        return response()->json(['status' => 'error', 'message' => 'Tài liệu không tồn tại.'], 404);
     }
 
-    /**
-     * Lấy trạng thái đăng ký tác giả của user hiện tại.
-     */
-    public function status()
+    public function status(Request $request)
     {
-        $user = Auth::user();
-        $author = Author::where('user_id', $user->id)->first();
+        $author = Author::where('user_id', $request->user()->id)->first();
 
-        return response()->json([
-            'status' => 'success',
-            'data' => $author,
-        ]);
+        return response()->json(['status' => 'success', 'data' => $author ? new AuthorProfileResource($author) : null]);
     }
 
-    /**
-     * Bảng thống kê của tác giả.
-     */
-    public function dashboardStats()
+    public function dashboardStats(Request $request)
     {
-        $user = Auth::user();
-        $author = Author::where('user_id', $user->id)->first();
-
-        if (! $author || $author->status !== 'active') {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Bạn chưa phải là tác giả được kích hoạt.',
-            ], 403);
+        $author = Author::where('user_id', $request->user()->id)->first();
+        if (! $author || $author->onboarding_status !== AuthorOnboardingStatus::Approved) {
+            return response()->json(['status' => 'error', 'message' => 'Bạn chưa phải là tác giả được phê duyệt.'], 403);
         }
 
-        // Tác giả hoạt động như Vendor, lấy thống kê của Vendor liên kết
-        $vendor = $user->vendor;
-        if (! $vendor) {
-            return response()->json([
-                'status' => 'success',
-                'data' => [
-                    'total_books' => 0,
-                    'total_chapters' => 0,
-                    'total_revenue' => 0,
-                    'balance' => 0,
-                ],
-            ]);
-        }
+        return response()->json(['status' => 'success', 'data' => [
+            'pen_name' => $author->pen_name,
+            'onboarding_status' => $author->onboarding_status->value,
+            'total_books' => 0,
+            'total_ebooks' => 0,
+            'total_physical' => 0,
+            'balance' => 0,
+            'total_withdrawn' => 0,
+        ]]);
+    }
 
-        $booksCount = Book::withoutGlobalScopes()->where('vendor_id', $vendor->id)->count();
-        $ebooksCount = Book::withoutGlobalScopes()->where('vendor_id', $vendor->id)->where('type', 'ebook')->count();
-        $physicalCount = Book::withoutGlobalScopes()->where('vendor_id', $vendor->id)->where('type', 'physical')->count();
-
-        return response()->json([
-            'status' => 'success',
-            'data' => [
-                'pen_name' => $author->pen_name,
-                'status' => $author->status,
-                'total_books' => $booksCount,
-                'total_ebooks' => $ebooksCount,
-                'total_physical' => $physicalCount,
-                'balance' => $vendor->balance,
-                'total_withdrawn' => $vendor->total_withdrawn,
-            ],
-        ]);
+    private function operationKey(Request $request, string $action): string
+    {
+        return $request->input('operation_key')
+            ?? $request->header('Idempotency-Key')
+            ?? "author:{$request->user()->id}:{$action}:".Str::uuid();
     }
 }

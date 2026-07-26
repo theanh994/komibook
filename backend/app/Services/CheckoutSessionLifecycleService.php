@@ -10,6 +10,7 @@ use App\Models\CheckoutSession;
 use App\Models\CheckoutSessionOrder;
 use App\Models\InventoryReservation;
 use App\Models\Order;
+use App\Models\OrderTransitionOperation;
 use App\Models\PaymentTransaction;
 use App\Services\Inventory\InventoryReservationService;
 use Illuminate\Auth\Access\AuthorizationException;
@@ -34,6 +35,10 @@ class CheckoutSessionLifecycleService
 
         if ((int) $order->user_id !== $userId) {
             throw new AuthorizationException("User ID {$userId} is not authorized to cancel order ID {$orderId}");
+        }
+
+        if (strtolower((string) $order->payment_method) === 'cod') {
+            return [$this->cancelCodOrder($orderId, $userId)];
         }
 
         $link = CheckoutSessionOrder::where('order_id', $order->id)->first();
@@ -134,6 +139,53 @@ class CheckoutSessionLifecycleService
             $reservationService->releaseSession($session);
 
             return $sessionOrders->all();
+        });
+    }
+
+    private function cancelCodOrder(int $orderId, int $userId): Order
+    {
+        return DB::transaction(function () use ($orderId, $userId) {
+            $order = Order::withoutGlobalScopes()
+                ->whereKey($orderId)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if ((int) $order->user_id !== $userId) {
+                throw new AuthorizationException("User ID {$userId} is not authorized to cancel order ID {$orderId}");
+            }
+            if ($order->status === 'cancelled') {
+                return $order;
+            }
+            if (
+                ! in_array($order->status, ['confirmed', 'processing'], true)
+                || ! in_array($order->shipping_status, [null, 'pending_pickup'], true)
+            ) {
+                throw new LogicException("Cannot cancel COD order ID {$order->id} after shipment");
+            }
+
+            $operationKey = "buyer-cancel-cod:{$order->id}";
+            if (OrderTransitionOperation::where('operation_key', $operationKey)->exists()) {
+                throw new LogicException("Cancellation operation exists but order ID {$order->id} is not cancelled");
+            }
+
+            app(InventoryReservationService::class)->restoreCommittedOrder($order, $operationKey);
+            $from = $order->status;
+            $order->status = 'cancelled';
+            $order->save();
+
+            OrderTransitionOperation::create([
+                'order_id' => $order->id,
+                'operation_key' => $operationKey,
+                'actor_type' => 'customer',
+                'actor_id' => $userId,
+                'transition_kind' => 'order',
+                'from_state' => $from,
+                'to_state' => 'cancelled',
+                'metadata' => ['payment_method' => 'cod'],
+                'occurred_at' => now(),
+            ]);
+
+            return $order;
         });
     }
 

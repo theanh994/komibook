@@ -33,7 +33,7 @@ class OrderController extends Controller
         $order = Order::withoutGlobalScopes()
             ->where('user_id', $request->user()->id)
             ->where('id', $orderId)
-            ->with(['user', 'orderItems.book'])
+            ->with(['user', 'orderItems.book', 'invoiceSnapshot'])
             ->first();
 
         if (! $order) {

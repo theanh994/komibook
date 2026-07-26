@@ -10,6 +10,7 @@ use App\Models\CheckoutSession;
 use App\Models\CheckoutSessionOrder;
 use App\Models\InventoryReservation;
 use App\Models\InventoryReservationAllocation;
+use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\WarehouseStock;
 use DateTimeInterface;
@@ -22,6 +23,62 @@ use RuntimeException;
 
 class InventoryReservationService
 {
+    public function restoreCommittedOrder(Order $order, string $operationKey): void
+    {
+        DB::transaction(function () use ($order, $operationKey) {
+            $items = $order->orderItems()->with('inventoryReservation')->orderBy('id')->lockForUpdate()->get();
+
+            foreach ($items as $item) {
+                $reservation = $item->inventoryReservation;
+                if (! $reservation || $reservation->status === InventoryReservationStatus::RESTORED) {
+                    continue;
+                }
+
+                if ($reservation->status === InventoryReservationStatus::RESERVED) {
+                    $reservation->status = InventoryReservationStatus::RELEASED;
+                    $reservation->released_at = now();
+                    $reservation->save();
+
+                    continue;
+                }
+                if ($reservation->status !== InventoryReservationStatus::COMMITTED) {
+                    throw new LogicException("Cannot restore reservation ID {$reservation->id} in status '{$reservation->status->value}'");
+                }
+
+                $allocations = InventoryReservationAllocation::where('inventory_reservation_id', $reservation->id)
+                    ->orderBy('id')
+                    ->lockForUpdate()
+                    ->get();
+
+                foreach ($allocations as $allocation) {
+                    $restoreKey = "{$operationKey}:{$allocation->id}";
+                    if (DB::table('inventory_cancellation_restorations')->where('operation_key', $restoreKey)->exists()) {
+                        continue;
+                    }
+
+                    $stock = WarehouseStock::whereKey($allocation->warehouse_stock_id)->lockForUpdate()->firstOrFail();
+                    DB::table('inventory_cancellation_restorations')->insert([
+                        'order_item_id' => $item->id,
+                        'inventory_reservation_allocation_id' => $allocation->id,
+                        'warehouse_stock_id' => $stock->id,
+                        'operation_key' => $restoreKey,
+                        'quantity' => $allocation->quantity,
+                        'restored_at' => now(),
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ]);
+                    $stock->quantity += (int) $allocation->quantity;
+                    $stock->save();
+                }
+
+                $reservation->status = InventoryReservationStatus::RESTORED;
+                $reservation->save();
+                $totalOnHand = (int) WarehouseStock::where('book_id', $item->book_id)->sum('quantity');
+                Book::withoutGlobalScopes()->whereKey($item->book_id)->update(['stock' => $totalOnHand]);
+            }
+        });
+    }
+
     /**
      * Giữ chỗ tồn kho cho một CheckoutSession.
      *

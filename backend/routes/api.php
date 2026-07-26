@@ -1,5 +1,10 @@
 <?php
 
+use App\Http\Controllers\Api\AccountSessionController;
+use App\Http\Controllers\Api\Admin\ArticleController as AdminArticleController;
+use App\Http\Controllers\Api\Admin\BookPublishingController as AdminBookPublishingController;
+use App\Http\Controllers\Api\Admin\CommerceFeeScheduleController;
+use App\Http\Controllers\Api\Admin\CopyrightClaimController as AdminCopyrightClaimController;
 use App\Http\Controllers\Api\Admin\FinanceReportController;
 use App\Http\Controllers\Api\Admin\MembershipTierController;
 use App\Http\Controllers\Api\Admin\NotificationCampaignController;
@@ -7,21 +12,28 @@ use App\Http\Controllers\Api\Admin\ReconciliationController;
 use App\Http\Controllers\Api\Admin\SystemConfigController;
 use App\Http\Controllers\Api\Admin\UserController;
 use App\Http\Controllers\Api\Admin\VendorApprovalController;
+use App\Http\Controllers\Api\ArticleController;
 use App\Http\Controllers\Api\AuthController;
-use App\Http\Controllers\Api\EmailRegistrationOtpController;
 use App\Http\Controllers\Api\AuthorController;
 use App\Http\Controllers\Api\BookAnnotationController;
+use App\Http\Controllers\Api\BookAuthorController;
 use App\Http\Controllers\Api\BookController;
+use App\Http\Controllers\Api\BookPublishingController;
 use App\Http\Controllers\Api\CategoryController;
 use App\Http\Controllers\Api\ChapterController;
 use App\Http\Controllers\Api\CheckoutController;
+use App\Http\Controllers\Api\CopyrightClaimController;
 use App\Http\Controllers\Api\CouponController;
 use App\Http\Controllers\Api\DrmController;
+use App\Http\Controllers\Api\EmailRegistrationOtpController;
 use App\Http\Controllers\Api\HelpCenterController;
 use App\Http\Controllers\Api\InventoryAuditController;
 use App\Http\Controllers\Api\OrderController;
 use App\Http\Controllers\Api\PhoneAuthController;
 use App\Http\Controllers\Api\ProfileController;
+use App\Http\Controllers\Api\ReadingProgressController;
+use App\Http\Controllers\Api\ReturnRequestController;
+use App\Http\Controllers\Api\ReviewController;
 use App\Http\Controllers\Api\StockTransferController;
 use App\Http\Controllers\Api\SupportTicketController;
 use App\Http\Controllers\Api\UserNotificationController;
@@ -31,6 +43,7 @@ use App\Http\Controllers\Api\Vendor\FinanceController;
 use App\Http\Controllers\Api\Vendor\FlashSaleController;
 use App\Http\Controllers\Api\Vendor\SeriesController;
 use App\Http\Controllers\Api\Vendor\WarehouseController;
+use App\Http\Controllers\Api\VendorOnboardingController;
 use App\Http\Controllers\Api\VnpayController;
 use App\Http\Controllers\Api\WishlistController;
 use Illuminate\Support\Facades\Route;
@@ -66,6 +79,8 @@ Route::get('/books/{id}/related', [BookController::class, 'relatedBooks']);
 Route::get('/help-center/articles', [HelpCenterController::class, 'index']);
 Route::get('/help-center/articles/{id}', [HelpCenterController::class, 'show']);
 Route::post('/help-center/articles/{id}/helpful', [HelpCenterController::class, 'helpful']);
+Route::get('/articles', [ArticleController::class, 'index']);
+Route::get('/articles/{slug}', [ArticleController::class, 'show']);
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Protected routes — Yêu cầu Sanctum token hợp lệ
@@ -74,11 +89,14 @@ Route::post('/help-center/articles/{id}/helpful', [HelpCenterController::class, 
 Route::middleware('auth:sanctum')->prefix('auth')->name('auth.')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
     Route::get('/me', [AuthController::class, 'me'])->name('me');
+    Route::post('/confirm-password', [AuthController::class, 'confirmRecentAuthentication'])->middleware('verified-email')->name('confirm-password');
 });
 
 Route::middleware('auth:sanctum')->prefix('profile')->name('profile.')->group(function () {
     Route::put('/info', [ProfileController::class, 'updateInfo'])->name('updateInfo');
-    Route::put('/password', [ProfileController::class, 'updatePassword'])->name('updatePassword');
+    Route::put('/password', [ProfileController::class, 'updatePassword'])->middleware(['verified-email', 'recent-auth'])->name('updatePassword');
+    Route::get('/sessions', [AccountSessionController::class, 'index'])->name('sessions.index');
+    Route::delete('/sessions/{sessionId}', [AccountSessionController::class, 'destroy'])->middleware(['verified-email', 'recent-auth'])->name('sessions.destroy');
     Route::post('/avatar', [ProfileController::class, 'uploadAvatar'])->name('uploadAvatar');
     Route::get('/addresses', [ProfileController::class, 'getAddresses'])->name('getAddresses');
     Route::post('/addresses', [ProfileController::class, 'addAddress'])->name('addAddress');
@@ -89,12 +107,16 @@ Route::middleware('auth:sanctum')->prefix('profile')->name('profile.')->group(fu
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/checkout', [CheckoutController::class, 'store'])->middleware('throttle:checkout');
-    Route::post('/books/{id}/reviews', [BookController::class, 'addReview']);
+    Route::post('/books/{book}/reviews', [ReviewController::class, 'upsert']);
+    Route::post('/reviews/{review}/reports', [ReviewController::class, 'report']);
     Route::get('/books/{id}/check-ownership', [BookController::class, 'checkOwnership']);
     Route::post('/coupons/apply', [CouponController::class, 'apply']);
     Route::get('/my-orders', [OrderController::class, 'myOrders']);
     Route::get('/my-orders/{order}', [OrderController::class, 'myOrderDetail']);
     Route::post('/orders/{order}/cancel', [OrderController::class, 'cancel']);
+    Route::get('/returns', [ReturnRequestController::class, 'customerIndex']);
+    Route::post('/orders/{order}/returns', [ReturnRequestController::class, 'store']);
+    Route::get('/returns/{returnRequest}', [ReturnRequestController::class, 'show']);
     Route::get('/my-library', [OrderController::class, 'myLibrary']);
     Route::get('/orders/{order}/ebooks/{book}/generate-link', [OrderController::class, 'generateEbookLink']);
 
@@ -107,6 +129,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/annotations/{id}', [BookAnnotationController::class, 'update']);
     Route::delete('/annotations/{id}', [BookAnnotationController::class, 'destroy']);
     Route::get('/books/{id}/recent-annotations', [BookAnnotationController::class, 'recent']);
+    Route::get('/books/{book}/reading-progress', [ReadingProgressController::class, 'show']);
+    Route::put('/books/{book}/reading-progress', [ReadingProgressController::class, 'update']);
 
     // Wishlist
     Route::get('/wishlist', [WishlistController::class, 'index']);
@@ -120,8 +144,26 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Đăng ký và Trạng thái Tác giả
     Route::post('/auth/register-author', [AuthorController::class, 'register']);
+    Route::patch('/author/draft', [AuthorController::class, 'saveDraft']);
+    Route::post('/author/submit', [AuthorController::class, 'submit']);
     Route::get('/author/status', [AuthorController::class, 'status']);
     Route::get('/author/dashboard-stats', [AuthorController::class, 'dashboardStats']);
+    Route::post('/vendor-onboarding/register', [VendorOnboardingController::class, 'register']);
+    Route::patch('/vendor-onboarding/draft', [VendorOnboardingController::class, 'saveDraft']);
+    Route::post('/vendor-onboarding/submit', [VendorOnboardingController::class, 'submit']);
+    Route::get('/vendor-onboarding/status', [VendorOnboardingController::class, 'status']);
+    Route::get('/vendors/{vendor}/documents/{type}', [VendorOnboardingController::class, 'downloadDocument']);
+    Route::patch('/author/book-authors/{bookAuthor}/respond', [BookAuthorController::class, 'respond']);
+    Route::post('/author/books/{book}/delegations', [BookAuthorController::class, 'inviteDelegate']);
+    Route::patch('/author/delegations/{delegation}/respond', [BookAuthorController::class, 'respondDelegation']);
+    Route::patch('/author/delegations/{delegation}/revoke', [BookAuthorController::class, 'revokeDelegation']);
+    Route::post('/author/books/{book}/copyright', [CopyrightClaimController::class, 'store']);
+    Route::patch('/author/copyright/{claim}', [CopyrightClaimController::class, 'update']);
+    Route::post('/author/copyright/{claim}/submit', [CopyrightClaimController::class, 'submit']);
+    Route::get('/author/copyright/{claim}', [CopyrightClaimController::class, 'show']);
+    Route::get('/author/copyright/{claim}/evidence', [CopyrightClaimController::class, 'downloadEvidence']);
+    Route::post('/author/royalty-agreements/{agreement}/accept', [BookPublishingController::class, 'acceptRoyaltyAsAuthor']);
+    Route::get('/author/royalty-agreements', [BookPublishingController::class, 'authorRoyaltyAgreements']);
     Route::get('/authors/{id}/identity-document', [AuthorController::class, 'downloadIdentityDocument']);
 
     // Tickets yêu cầu hỗ trợ (Khách hàng)
@@ -136,7 +178,7 @@ Route::middleware('auth:sanctum')->group(function () {
 // Vendor routes — Quản lý gian hàng (yêu cầu role: vendor)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-Route::middleware(['auth:sanctum', 'role:vendor'])->prefix('vendor')->name('vendor.')->group(function () {
+Route::middleware(['auth:sanctum', 'role:vendor', 'active-vendor'])->prefix('vendor')->name('vendor.')->group(function () {
     // Thống kê dashboard
     Route::get('dashboard-stats', [DashboardController::class, 'stats'])->name('dashboard.stats');
 
@@ -150,12 +192,22 @@ Route::middleware(['auth:sanctum', 'role:vendor'])->prefix('vendor')->name('vend
     Route::delete('series/{id}', [SeriesController::class, 'destroy'])->name('series.destroy');
 
     Route::apiResource('books', App\Http\Controllers\Api\Vendor\BookController::class);
+    Route::post('books/{book}/authors', [BookAuthorController::class, 'inviteByVendor'])->name('books.authors.invite');
+    Route::post('books/{book}/royalty-agreements', [BookPublishingController::class, 'acceptRoyalty'])->name('books.royalty.accept');
+    Route::get('books/{book}/publishing', [BookPublishingController::class, 'show'])->name('books.publishing.show');
+    Route::post('books/{book}/submit', [BookPublishingController::class, 'submit'])->name('books.publish.submit');
+    Route::patch('books/{book}/return-to-draft', [BookPublishingController::class, 'returnToDraft'])->name('books.publish.draft');
+    Route::post('books/{book}/publish', [BookPublishingController::class, 'publish'])->name('books.publish');
 
     // Quản lý đơn hàng
     Route::get('orders', [App\Http\Controllers\Api\Vendor\OrderController::class, 'index'])->name('orders.index');
     Route::patch('orders/bulk-status', [App\Http\Controllers\Api\Vendor\OrderController::class, 'bulkUpdateStatus'])->name('orders.bulkUpdateStatus');
     Route::get('orders/{order}', [App\Http\Controllers\Api\Vendor\OrderController::class, 'show'])->name('orders.show');
     Route::patch('orders/{order}/status', [App\Http\Controllers\Api\Vendor\OrderController::class, 'updateStatus'])->name('orders.updateStatus');
+    Route::get('returns', [ReturnRequestController::class, 'vendorIndex'])->name('returns.index');
+    Route::patch('returns/{returnRequest}/transition', [ReturnRequestController::class, 'transition'])->middleware(['verified-email', 'recent-auth'])->name('returns.transition');
+    Route::post('returns/{returnRequest}/refund', [ReturnRequestController::class, 'processRefund'])->middleware(['verified-email', 'recent-auth'])->name('returns.refund');
+    Route::post('returns/{returnRequest}/refund/reconcile', [ReturnRequestController::class, 'reconcileRefund'])->middleware(['verified-email', 'recent-auth'])->name('returns.refund.reconcile');
 
     // Quản lý kho hàng (Warehouse)
     Route::get('warehouses', [WarehouseController::class, 'index'])->name('warehouses.index');
@@ -165,7 +217,7 @@ Route::middleware(['auth:sanctum', 'role:vendor'])->prefix('vendor')->name('vend
 
     // Quản lý tài chính / doanh thu (Finance)
     Route::get('finance', [FinanceController::class, 'index'])->name('finance.index');
-    Route::post('finance/payout', [FinanceController::class, 'requestPayout'])->name('finance.payout');
+    Route::post('finance/payout', [FinanceController::class, 'requestPayout'])->middleware(['verified-email', 'recent-auth'])->name('finance.payout');
 
     // Phân tích độc giả / báo cáo (Analytics)
     Route::get('analytics', [AnalyticsController::class, 'index'])->name('analytics.index');
@@ -180,6 +232,10 @@ Route::middleware(['auth:sanctum', 'role:vendor'])->prefix('vendor')->name('vend
     Route::post('books/{book}/chapters', [ChapterController::class, 'store'])->name('books.chapters.store');
     Route::put('books/{book}/chapters/{chapter}', [ChapterController::class, 'update'])->name('books.chapters.update');
     Route::delete('books/{book}/chapters/{chapter}', [ChapterController::class, 'destroy'])->name('books.chapters.destroy');
+    Route::patch('books/{book}/chapters/{chapter}/autosave', [ChapterController::class, 'autosave'])->name('books.chapters.autosave');
+    Route::post('books/{book}/chapters/{chapter}/restore/{revision}', [ChapterController::class, 'restore'])->name('books.chapters.restore');
+    Route::patch('books/{book}/chapters-order', [ChapterController::class, 'reorder'])->name('books.chapters.reorder');
+    Route::post('books/{book}/chapters-import', [ChapterController::class, 'import'])->name('books.chapters.import');
 
     // Cấu hình bản quyền & DRM
     Route::get('books/{book}/drm-settings', [DrmController::class, 'show'])->name('books.drm.show');
@@ -207,6 +263,15 @@ Route::middleware(['auth:sanctum', 'role:vendor'])->prefix('vendor')->name('vend
 // ═══════════════════════════════════════════════════════════════════════════════
 
 Route::middleware(['auth:sanctum', 'role:admin'])->prefix('admin')->name('admin.')->group(function () {
+    Route::get('fee-schedules', [CommerceFeeScheduleController::class, 'index'])->name('fee-schedules.index');
+    Route::post('fee-schedules', [CommerceFeeScheduleController::class, 'store'])->name('fee-schedules.store');
+    Route::post('fee-schedules/preview', [CommerceFeeScheduleController::class, 'preview'])->name('fee-schedules.preview');
+
+    Route::get('articles', [AdminArticleController::class, 'index'])->name('articles.index');
+    Route::post('articles', [AdminArticleController::class, 'store'])->name('articles.store');
+    Route::patch('articles/{article}', [AdminArticleController::class, 'update'])->name('articles.update');
+    Route::patch('articles/{article}/transition', [AdminArticleController::class, 'transition'])->name('articles.transition');
+
     // Thống kê tổng quan
     Route::get('stats', [App\Http\Controllers\Api\Admin\DashboardController::class, 'stats'])->name('stats');
 
@@ -214,6 +279,8 @@ Route::middleware(['auth:sanctum', 'role:admin'])->prefix('admin')->name('admin.
     Route::get('users', [UserController::class, 'index'])->name('users.index');
     Route::get('users/{id}', [UserController::class, 'show'])->name('users.show');
     Route::patch('users/{id}/role', [UserController::class, 'updateRole'])->name('users.updateRole');
+    Route::get('reviews/moderation', [ReviewController::class, 'moderationQueue'])->name('reviews.moderation.index');
+    Route::patch('reviews/{review}/moderate', [ReviewController::class, 'moderate'])->middleware(['verified-email', 'recent-auth'])->name('reviews.moderation.update');
 
     // Quản lý Toàn bộ Sách (Admin)
     Route::get('books', [App\Http\Controllers\Api\Admin\BookController::class, 'index'])->name('books.index');
@@ -227,6 +294,7 @@ Route::middleware(['auth:sanctum', 'role:admin'])->prefix('admin')->name('admin.
     // Quản lý Coupons và Flash Sales
     Route::apiResource('coupons', App\Http\Controllers\Api\Admin\CouponController::class);
     Route::apiResource('flash-sales', App\Http\Controllers\Api\Admin\FlashSaleController::class);
+    Route::patch('flash-sales/{flashSale}/transition', [App\Http\Controllers\Api\Admin\FlashSaleController::class, 'transition']);
     Route::post('flash-sales/{flash_sale}/items', [App\Http\Controllers\Api\Admin\FlashSaleController::class, 'addItem']);
     Route::delete('flash-sales/{flash_sale}/items/{item}', [App\Http\Controllers\Api\Admin\FlashSaleController::class, 'removeItem']);
     Route::post('flash-sales/{flash_sale}/items/bulk-delete', [App\Http\Controllers\Api\Admin\FlashSaleController::class, 'bulkRemoveItems']);
@@ -235,15 +303,21 @@ Route::middleware(['auth:sanctum', 'role:admin'])->prefix('admin')->name('admin.
 
     // Admin Notification Campaigns
     Route::apiResource('notifications/campaigns', NotificationCampaignController::class);
-    Route::post('notifications/campaigns/{id}/send', [NotificationCampaignController::class, 'send']);
+    Route::post('notifications/campaigns/{id}/send', [NotificationCampaignController::class, 'send'])->middleware(['verified-email', 'recent-auth']);
+    Route::post('notifications/campaigns/{id}/retry', [NotificationCampaignController::class, 'retry'])->middleware(['verified-email', 'recent-auth']);
 
     // Báo cáo tài chính
     Route::get('finance-report', [FinanceReportController::class, 'index'])->name('finance-report.index');
 
     // Đối soát doanh thu
     Route::get('reconciliation', [ReconciliationController::class, 'index'])->name('reconciliation.index');
-    Route::patch('reconciliation/{id}/approve', [ReconciliationController::class, 'approve'])->name('reconciliation.approve');
-    Route::patch('reconciliation/{id}/reject', [ReconciliationController::class, 'reject'])->name('reconciliation.reject');
+    Route::patch('reconciliation/{id}/approve', [ReconciliationController::class, 'approve'])->middleware(['verified-email', 'recent-auth'])->name('reconciliation.approve');
+    Route::patch('reconciliation/{id}/reject', [ReconciliationController::class, 'reject'])->middleware(['verified-email', 'recent-auth'])->name('reconciliation.reject');
+    Route::patch('reconciliation/payouts/{payout}/transition', [ReconciliationController::class, 'transition'])->middleware(['verified-email', 'recent-auth'])->name('reconciliation.payouts.transition');
+    Route::get('returns', [ReturnRequestController::class, 'adminIndex'])->name('returns.index');
+    Route::patch('returns/{returnRequest}/transition', [ReturnRequestController::class, 'transition'])->middleware(['verified-email', 'recent-auth'])->name('returns.transition');
+    Route::post('returns/{returnRequest}/refund', [ReturnRequestController::class, 'processRefund'])->middleware(['verified-email', 'recent-auth'])->name('returns.refund');
+    Route::post('returns/{returnRequest}/refund/reconcile', [ReturnRequestController::class, 'reconcileRefund'])->middleware(['verified-email', 'recent-auth'])->name('returns.refund.reconcile');
 
     // Cấu hình hệ thống
     Route::get('config', [SystemConfigController::class, 'show'])->name('config.show');
@@ -252,8 +326,13 @@ Route::middleware(['auth:sanctum', 'role:admin'])->prefix('admin')->name('admin.
     // Phê duyệt nhà bán & tác giả
     Route::get('approvals/vendors', [VendorApprovalController::class, 'index'])->name('approvals.vendors.index');
     Route::patch('approvals/vendors/{id}/approve', [VendorApprovalController::class, 'approveVendor'])->name('approvals.vendors.approve');
+    Route::patch('approvals/vendors/{vendor}/transition', [VendorApprovalController::class, 'transitionVendor'])->name('approvals.vendors.transition');
     Route::patch('approvals/authors/{id}/approve', [VendorApprovalController::class, 'approveAuthor'])->name('approvals.authors.approve');
+    Route::patch('approvals/authors/{author}/transition', [VendorApprovalController::class, 'transitionAuthor'])->name('approvals.authors.transition');
     Route::patch('approvals/partners/{type}/{id}/reject', [VendorApprovalController::class, 'reject'])->name('approvals.partners.reject');
+    Route::get('copyright-claims', [AdminCopyrightClaimController::class, 'index'])->name('copyright.index');
+    Route::patch('copyright-claims/{claim}/transition', [AdminCopyrightClaimController::class, 'transition'])->name('copyright.transition');
+    Route::patch('books/{book}/publishing-transition', [AdminBookPublishingController::class, 'transition'])->name('books.publishing.transition');
 
     // Quản lý Tickets hội thoại (Admin)
     Route::get('support/tickets', [SupportTicketController::class, 'adminIndex'])->name('support.tickets.adminIndex');
@@ -271,6 +350,7 @@ Route::middleware(['auth:sanctum', 'role:admin'])->prefix('admin')->name('admin.
 
 Route::get('/flash-sales', [CouponController::class, 'flashSales']);
 Route::get('/flash-sales/active', [CouponController::class, 'activeFlashSale']);
+Route::get('/books/{book}/chapters/{chapter}/preview', [ChapterController::class, 'preview']);
 
 // Route để stream e-book (Dùng signed URL, xử lý bảo mật bên trong controller bằng relative signature)
 Route::get('/ebooks/{filename}/stream', [OrderController::class, 'streamEbook'])

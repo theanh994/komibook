@@ -12,14 +12,14 @@ class BookDrmSetting extends Model
 
     protected $fillable = [
         'book_id',
-        'copyright_number',
-        'copyright_owner',
         'social_drm',
         'hard_drm',
         'copy_limit_percent',
         'allow_printing',
         'license_type',
     ];
+
+    protected $hidden = ['copyright_number', 'copyright_owner'];
 
     protected function casts(): array
     {

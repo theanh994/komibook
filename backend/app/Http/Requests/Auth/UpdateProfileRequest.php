@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Auth;
 
+use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 
 class UpdateProfileRequest extends FormRequest
@@ -17,7 +18,7 @@ class UpdateProfileRequest extends FormRequest
     /**
      * Get the validation rules that apply to the request.
      *
-     * @return array<string, \Illuminate\Contracts\Validation\ValidationRule|array<mixed>|string>
+     * @return array<string, ValidationRule|array<mixed>|string>
      */
     public function rules(): array
     {
@@ -29,6 +30,7 @@ class UpdateProfileRequest extends FormRequest
             'address' => ['nullable', 'string', 'max:1000'],
             'favorite_category_ids' => ['nullable', 'array'],
             'favorite_category_ids.*' => ['integer', 'exists:categories,id'],
+            'marketing_consent' => ['sometimes', 'boolean'],
         ];
     }
 

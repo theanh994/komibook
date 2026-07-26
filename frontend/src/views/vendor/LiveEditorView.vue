@@ -22,10 +22,12 @@ const activeChapter = ref({
   content: '',
   price: 0,
   is_preview: false,
+  current_revision: 0,
 })
 
 const loading = ref(true)
 const saving = ref(false)
+let autosaveTimer = null
 const wordCount = ref(0)
 const charCount = ref(0)
 const error = ref(null)
@@ -96,7 +98,7 @@ const saveChapter = async () => {
         title: ch.title,
         content: ch.content,
         price: ch.price,
-        is_preview: ch.is_preview,
+        is_free: ch.is_free ?? ch.is_preview,
         chapter_number: ch.chapter_number
       })
     } else {
@@ -104,7 +106,7 @@ const saveChapter = async () => {
         title: ch.title,
         content: ch.content,
         price: ch.price,
-        is_preview: ch.is_preview,
+        is_free: ch.is_free ?? ch.is_preview,
         chapter_number: ch.chapter_number
       })
     }
@@ -120,6 +122,25 @@ const saveChapter = async () => {
     toast.add({ severity: 'error', summary: 'Không lưu được', detail: msg, life: 3000 })
   } finally {
     saving.value = false
+  }
+}
+
+const autosaveChapter = async () => {
+  const ch = activeChapter.value
+  if (!ch.id || saving.value) return
+  try {
+    const res = await apiClient.patch(`/api/vendor/books/${bookId}/chapters/${ch.id}/autosave`, {
+      title: ch.title,
+      content: ch.content,
+      is_free: ch.is_free ?? ch.is_preview,
+      expected_revision: ch.current_revision || 0,
+    })
+    chapters.value[activeChapterIndex.value] = res.data.data
+    activeChapter.value = { ...res.data.data }
+  } catch (e) {
+    if (e.response?.status === 422) {
+      toast.add({ severity: 'warn', summary: 'Xung đột phiên bản', detail: 'Chương có phiên bản mới hơn. Hãy tải lại trước khi tiếp tục.', life: 4000 })
+    }
   }
 }
 
@@ -156,6 +177,8 @@ const deleteChapter = async () => {
 
 watch(() => activeChapter.value.content, () => {
   updateCounts()
+  clearTimeout(autosaveTimer)
+  autosaveTimer = setTimeout(autosaveChapter, 1200)
 })
 
 onMounted(() => {

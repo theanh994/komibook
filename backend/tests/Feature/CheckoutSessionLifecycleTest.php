@@ -233,12 +233,12 @@ class CheckoutSessionLifecycleTest extends TestCase
         $res403 = $this->postJson("/api/orders/{$codOrders[0]->id}/cancel");
         $res403->assertStatus(403);
 
-        // Đúng user thử cancel COD order (status = confirmed) -> 422
+        // Đúng user có thể hủy COD trước khi giao cho đơn vị vận chuyển.
         Sanctum::actingAs($user);
-        $res422 = $this->postJson("/api/orders/{$codOrders[0]->id}/cancel");
-        $res422->assertStatus(422);
+        $cancelled = $this->postJson("/api/orders/{$codOrders[0]->id}/cancel");
+        $cancelled->assertOk();
 
-        $this->assertEquals('confirmed', $codOrders[0]->fresh()->status);
+        $this->assertEquals('cancelled', $codOrders[0]->fresh()->status);
     }
 
     /**

@@ -7,8 +7,10 @@ use App\Http\Requests\Vendor\StoreBookRequest;
 use App\Http\Requests\Vendor\UpdateBookRequest;
 use App\Http\Resources\BookResource;
 use App\Models\Book;
+use App\Models\Series;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Redis;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
@@ -29,29 +31,29 @@ class BookController extends Controller
             $search = $request->search;
             $query->where(function ($q) use ($search) {
                 $q->where('title', 'LIKE', "%{$search}%")
-                  ->orWhere('author', 'LIKE', "%{$search}%");
+                    ->orWhere('author', 'LIKE', "%{$search}%");
             });
         }
 
         // Lọc theo danh mục (nhiều danh mục category_ids hoặc đơn category_id)
         if ($request->filled('category_ids')) {
-            $categoryIds = is_array($request->category_ids) 
-                ? $request->category_ids 
+            $categoryIds = is_array($request->category_ids)
+                ? $request->category_ids
                 : explode(',', $request->category_ids);
-            
+
             $query->where(function ($q) use ($categoryIds) {
                 $q->whereIn('category_id', $categoryIds)
-                  ->orWhereHas('categories', function ($catQuery) use ($categoryIds) {
-                      $catQuery->whereIn('categories.id', $categoryIds);
-                  });
+                    ->orWhereHas('categories', function ($catQuery) use ($categoryIds) {
+                        $catQuery->whereIn('categories.id', $categoryIds);
+                    });
             });
         } elseif ($request->filled('category_id') && $request->category_id !== 'all') {
             $catId = $request->category_id;
             $query->where(function ($q) use ($catId) {
                 $q->where('category_id', $catId)
-                  ->orWhereHas('categories', function ($catQuery) use ($catId) {
-                      $catQuery->where('categories.id', $catId);
-                  });
+                    ->orWhereHas('categories', function ($catQuery) use ($catId) {
+                        $catQuery->where('categories.id', $catId);
+                    });
             });
         }
 
@@ -99,7 +101,7 @@ class BookController extends Controller
         $books = $query->paginate($request->get('per_page', 15));
 
         return BookResource::collection($books)->additional([
-            'status'  => 'success',
+            'status' => 'success',
             'message' => 'Lấy danh sách sách thành công.',
         ]);
     }
@@ -115,7 +117,7 @@ class BookController extends Controller
         $data = $request->validated();
 
         // Tạo slug tự động từ title
-        $data['slug'] = Str::slug($data['title']) . '-' . Str::random(5);
+        $data['slug'] = Str::slug($data['title']).'-'.Str::random(5);
 
         // Upload ảnh bìa nếu có
         if ($request->hasFile('cover_image')) {
@@ -145,10 +147,10 @@ class BookController extends Controller
         if ($request->has('category_ids')) {
             $rawCat = $request->input('category_ids');
             $categoryIds = is_array($rawCat) ? $rawCat : json_decode($rawCat, true);
-        } elseif (!empty($data['category_id'])) {
+        } elseif (! empty($data['category_id'])) {
             $categoryIds = [(int) $data['category_id']];
         }
-        if (!empty($categoryIds)) {
+        if (! empty($categoryIds)) {
             $data['category_id'] = $categoryIds[0];
         }
 
@@ -156,9 +158,9 @@ class BookController extends Controller
         if ($request->has('series_name')) {
             $sName = trim((string) $request->input('series_name'));
             if ($sName !== '') {
-                $series = \App\Models\Series::whereRaw('LOWER(title) = ?', [mb_strtolower($sName)])->first();
-                if (!$series) {
-                    $series = \App\Models\Series::create(['title' => $sName]);
+                $series = Series::whereRaw('LOWER(title) = ?', [mb_strtolower($sName)])->first();
+                if (! $series) {
+                    $series = Series::create(['title' => $sName]);
                 }
                 $data['series_id'] = $series->id;
             } else {
@@ -169,20 +171,21 @@ class BookController extends Controller
         }
 
         // Nếu không chỉ định status, mặc định là draft
-        $data['status'] = $data['status'] ?? 'draft';
+        $data['status'] = 'draft';
+        $data['publishing_status'] = 'draft';
 
         unset($data['ebook_file'], $data['category_ids'], $data['series_name']);
 
         $book = Book::create($data);
 
-        if (!empty($categoryIds)) {
+        if (! empty($categoryIds)) {
             $book->categories()->sync($categoryIds);
         }
 
         return response()->json([
-            'status'  => 'success',
+            'status' => 'success',
             'message' => 'Thêm sách thành công!',
-            'data'    => new BookResource($book->load(['category', 'categories'])),
+            'data' => new BookResource($book->load(['category', 'categories'])),
         ], 201);
     }
 
@@ -194,9 +197,9 @@ class BookController extends Controller
     public function show(Book $book): JsonResponse
     {
         return response()->json([
-            'status'  => 'success',
+            'status' => 'success',
             'message' => 'Lấy chi tiết sách thành công.',
-            'data'    => new BookResource($book->load(['category', 'categories'])),
+            'data' => new BookResource($book->load(['category', 'categories'])),
         ]);
     }
 
@@ -209,18 +212,18 @@ class BookController extends Controller
 
         // Cập nhật slug nếu title thay đổi
         if (isset($data['title']) && $data['title'] !== $book->title) {
-            $data['slug'] = Str::slug($data['title']) . '-' . Str::random(5);
+            $data['slug'] = Str::slug($data['title']).'-'.Str::random(5);
         }
 
         // Upload ảnh bìa mới nếu có
         if ($request->hasFile('cover_image')) {
             // Xóa ảnh cũ
-            if ($book->cover_image && !filter_var($book->cover_image, FILTER_VALIDATE_URL)) {
+            if ($book->cover_image && ! filter_var($book->cover_image, FILTER_VALIDATE_URL)) {
                 Storage::disk('public')->delete($book->cover_image);
             }
             $data['cover_image'] = $request->file('cover_image')
                 ->store('books/covers', 'public');
-        } elseif (!$book->cover_image) {
+        } elseif (! $book->cover_image) {
             $data['cover_image'] = 'https://images.unsplash.com/photo-1543002588-bfa74002ed7e?q=80&w=600&auto=format&fit=crop';
         }
 
@@ -241,13 +244,14 @@ class BookController extends Controller
                 if (is_string($img) && str_starts_with($img, '/storage/')) {
                     return substr($img, strlen('/storage/'));
                 }
+
                 return $img;
             }, $existingGallery);
 
             // Xóa tệp khỏi đĩa chỉ khi thực sự bị người dùng bấm xóa khỏi album
             if (is_array($book->gallery_images)) {
                 foreach ($book->gallery_images as $oldImg) {
-                    if (!in_array($oldImg, $existingGallery) && !filter_var($oldImg, FILTER_VALIDATE_URL)) {
+                    if (! in_array($oldImg, $existingGallery) && ! filter_var($oldImg, FILTER_VALIDATE_URL)) {
                         Storage::disk('public')->delete($oldImg);
                     }
                 }
@@ -279,11 +283,11 @@ class BookController extends Controller
         if ($request->has('category_ids')) {
             $rawCat = $request->input('category_ids');
             $categoryIds = is_array($rawCat) ? $rawCat : json_decode($rawCat, true);
-            if (!empty($categoryIds)) {
+            if (! empty($categoryIds)) {
                 $data['category_id'] = $categoryIds[0];
                 $book->categories()->sync($categoryIds);
             }
-        } elseif (!empty($data['category_id'])) {
+        } elseif (! empty($data['category_id'])) {
             $book->categories()->sync([(int) $data['category_id']]);
         }
 
@@ -291,9 +295,9 @@ class BookController extends Controller
         if ($request->has('series_name')) {
             $sName = trim((string) $request->input('series_name'));
             if ($sName !== '') {
-                $series = \App\Models\Series::whereRaw('LOWER(title) = ?', [mb_strtolower($sName)])->first();
-                if (!$series) {
-                    $series = \App\Models\Series::create(['title' => $sName]);
+                $series = Series::whereRaw('LOWER(title) = ?', [mb_strtolower($sName)])->first();
+                if (! $series) {
+                    $series = Series::create(['title' => $sName]);
                 }
                 $data['series_id'] = $series->id;
             } else {
@@ -303,21 +307,21 @@ class BookController extends Controller
             $data['series_id'] = $request->input('series_id') ?: null;
         }
 
-        unset($data['ebook_file'], $data['category_ids'], $data['existing_gallery_images'], $data['series_name']);
+        unset($data['ebook_file'], $data['category_ids'], $data['existing_gallery_images'], $data['series_name'], $data['status'], $data['publishing_status']);
 
         $book->update($data);
 
         // Xoá key cache tồn kho trên Redis để cập nhật thông tin mới nhất
         try {
-            \Illuminate\Support\Facades\Redis::del("book_stock:{$book->id}");
+            Redis::del("book_stock:{$book->id}");
         } catch (\Exception $ex) {
-            \Illuminate\Support\Facades\Log::warning("Failed to clear Redis stock cache: " . $ex->getMessage());
+            \Illuminate\Support\Facades\Log::warning('Failed to clear Redis stock cache: '.$ex->getMessage());
         }
 
         return response()->json([
-            'status'  => 'success',
+            'status' => 'success',
             'message' => 'Cập nhật sách thành công!',
-            'data'    => new BookResource($book->fresh()->load(['category', 'categories'])),
+            'data' => new BookResource($book->fresh()->load(['category', 'categories'])),
         ]);
     }
 
@@ -340,13 +344,13 @@ class BookController extends Controller
 
         // Xoá key cache tồn kho trên Redis
         try {
-            \Illuminate\Support\Facades\Redis::del("book_stock:{$book->id}");
+            Redis::del("book_stock:{$book->id}");
         } catch (\Exception $ex) {
             // ignore
         }
 
         return response()->json([
-            'status'  => 'success',
+            'status' => 'success',
             'message' => 'Xóa sách thành công!',
         ]);
     }
@@ -357,9 +361,9 @@ class BookController extends Controller
     public function bulkSeries(Request $request): JsonResponse
     {
         $request->validate([
-            'book_ids'    => ['required', 'array', 'min:1'],
-            'book_ids.*'  => ['integer', 'exists:books,id'],
-            'action'      => ['required', 'string', 'in:assign,remove'],
+            'book_ids' => ['required', 'array', 'min:1'],
+            'book_ids.*' => ['integer', 'exists:books,id'],
+            'action' => ['required', 'string', 'in:assign,remove'],
             'series_name' => ['nullable', 'string', 'max:255'],
         ]);
 
@@ -370,9 +374,9 @@ class BookController extends Controller
         if ($action === 'assign') {
             $sName = trim((string) $request->input('series_name'));
             if ($sName !== '') {
-                $series = \App\Models\Series::whereRaw('LOWER(title) = ?', [mb_strtolower($sName)])->first();
-                if (!$series) {
-                    $series = \App\Models\Series::create(['title' => $sName]);
+                $series = Series::whereRaw('LOWER(title) = ?', [mb_strtolower($sName)])->first();
+                if (! $series) {
+                    $series = Series::create(['title' => $sName]);
                 }
                 $seriesId = $series->id;
             }
@@ -386,7 +390,7 @@ class BookController extends Controller
             : 'Đã gán thành công bộ sách cho các cuốn sách được chọn.';
 
         return response()->json([
-            'status'  => 'success',
+            'status' => 'success',
             'message' => $msg,
         ]);
     }
@@ -397,8 +401,8 @@ class BookController extends Controller
     public function bulkDiscount(Request $request): JsonResponse
     {
         $request->validate([
-            'book_ids'         => ['required', 'array', 'min:1'],
-            'book_ids.*'       => ['integer', 'exists:books,id'],
+            'book_ids' => ['required', 'array', 'min:1'],
+            'book_ids.*' => ['integer', 'exists:books,id'],
             'discount_percent' => ['required', 'numeric', 'min:0', 'max:15'],
         ]);
 
@@ -419,18 +423,18 @@ class BookController extends Controller
             }
 
             try {
-                \Illuminate\Support\Facades\Redis::del("book_stock:{$book->id}");
+                Redis::del("book_stock:{$book->id}");
             } catch (\Exception $e) {
-                Log::warning("Failed Redis clear stock cache: " . $e->getMessage());
+                Log::warning('Failed Redis clear stock cache: '.$e->getMessage());
             }
         }
 
         $msg = $discountPct > 0
-            ? "Đã áp dụng giảm giá {$discountPct}% cho " . $books->count() . " cuốn sách được chọn."
-            : "Đã gỡ bỏ giảm giá cho các cuốn sách được chọn.";
+            ? "Đã áp dụng giảm giá {$discountPct}% cho ".$books->count().' cuốn sách được chọn.'
+            : 'Đã gỡ bỏ giảm giá cho các cuốn sách được chọn.';
 
         return response()->json([
-            'status'  => 'success',
+            'status' => 'success',
             'message' => $msg,
         ]);
     }

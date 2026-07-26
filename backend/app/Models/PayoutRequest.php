@@ -13,16 +13,20 @@ class PayoutRequest extends Model
 
     protected $fillable = [
         'vendor_id',
+        'operation_key',
         'amount',
         'bank_name',
         'account_number',
         'account_name',
         'status',
         'notes',
+        'reviewed_by', 'reviewed_at', 'review_reason', 'processing_at', 'completed_at', 'rejected_at',
+        'transfer_reference', 'transfer_evidence',
     ];
 
     protected $casts = [
-        'amount' => 'integer',
+        'amount' => 'integer', 'reviewed_at' => 'datetime', 'processing_at' => 'datetime',
+        'completed_at' => 'datetime', 'rejected_at' => 'datetime',
     ];
 
     /**

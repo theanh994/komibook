@@ -9,12 +9,16 @@ class BookAnnotation extends Model
     protected $fillable = [
         'user_id',
         'book_id',
+        'book_chapter_id',
         'chapter',
+        'location_key',
         'highlighted_text',
         'note_content',
         'type',
         'color',
-        'page_number'
+        'page_number',
+        'position_start',
+        'position_end',
     ];
 
     public function user()

@@ -329,9 +329,12 @@
                      </div>
                   </div>
                   <div class="flex-1 min-w-0">
-                     <div class="flex items-center justify-between mb-1">
+                     <div class="flex items-center justify-between mb-1 gap-3">
                         <h4 class="text-xs font-bold text-on-surface truncate">{{ review.user?.name || 'Độc giả KomiBook' }}</h4>
-                        <span class="text-[10px] text-outline opacity-50">{{ formatDate(review.created_at) }}</span>
+                        <div class="flex items-center gap-2 shrink-0">
+                          <button v-if="authStore.isAuthenticated && review.user_id !== authStore.user?.id" @click="reportReview(review)" type="button" class="text-[10px] text-error bg-transparent border-none cursor-pointer hover:underline">Báo cáo</button>
+                          <span class="text-[10px] text-outline opacity-50">{{ formatDate(review.created_at) }}</span>
+                        </div>
                      </div>
                      <div class="flex items-center gap-1 mb-2">
                         <span v-for="i in 5" :key="i" class="material-symbols-outlined text-[14px]" :style="{ 'font-variation-settings': i <= review.rating ? `'FILL' 1` : `'FILL' 0`, color: i <= review.rating ? '#ba0035' : '#c3c6ce' }">star</span>
@@ -861,7 +864,9 @@ const submitReview = async () => {
     const response = await apiClient.post(`/api/books/${book.value.id}/reviews`, reviewForm.value)
     toast.add({ severity: 'success', summary: 'Thành công', detail: response.data.message || 'Cảm ơn bạn đã đánh giá!', life: 3000 })
     if (!book.value.reviews) book.value.reviews = []
-    book.value.reviews.unshift(response.data.data)
+    const existingIndex = book.value.reviews.findIndex(review => review.user_id === response.data.data.user_id)
+    if (existingIndex >= 0) book.value.reviews.splice(existingIndex, 1, response.data.data)
+    else book.value.reviews.unshift(response.data.data)
     reviewForm.value = { rating: 5, comment: '' }
     showReviewModal.value = false
   } catch (error) {
@@ -869,6 +874,16 @@ const submitReview = async () => {
     toast.add({ severity: 'error', summary: 'Lỗi', detail: msg, life: 4000 })
   } finally {
     isSubmittingReview.value = false
+  }
+}
+
+const reportReview = async (review) => {
+  if (!window.confirm('Báo cáo đánh giá này là không phù hợp?')) return
+  try {
+    await apiClient.post(`/api/reviews/${review.id}/reports`, { reason: 'irrelevant' })
+    toast.add({ severity: 'success', summary: 'Đã tiếp nhận', detail: 'KomiBook sẽ kiểm tra đánh giá này.', life: 3000 })
+  } catch (error) {
+    toast.add({ severity: 'error', summary: 'Không thể báo cáo', detail: error.response?.data?.message || 'Vui lòng thử lại.', life: 3500 })
   }
 }
 

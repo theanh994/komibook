@@ -17,6 +17,15 @@ class UserResource extends JsonResource
      */
     public function toArray(Request $request): array
     {
+        $authorStatus = $this->author?->onboarding_status instanceof \BackedEnum
+            ? $this->author->onboarding_status->value
+            : $this->author?->onboarding_status;
+        $approvedAuthor = $authorStatus === 'approved';
+        $vendorStatus = $this->vendor?->onboarding_status instanceof \BackedEnum
+            ? $this->vendor->onboarding_status->value
+            : $this->vendor?->onboarding_status;
+        $activeVendor = $this->vendor?->isActive() ?? false;
+
         return [
             'id' => $this->id,
             'name' => $this->name,
@@ -30,6 +39,14 @@ class UserResource extends JsonResource
             'role' => $this->role,
             'points' => $this->points ?? 0,
             'created_at' => $this->created_at?->toISOString(),
+            'marketing_consent' => $this->marketing_consent_at !== null && $this->marketing_opt_out_at === null,
+            'capabilities' => [
+                'author_profile' => $this->author !== null,
+                'approved_author' => $approvedAuthor,
+                'vendor_profile' => $this->vendor !== null,
+                'active_vendor' => $activeVendor,
+                'review_partner_onboarding' => $this->role === 'admin',
+            ],
 
             'favorite_categories' => $this->favoriteCategories ? $this->favoriteCategories->map(fn ($cat) => [
                 'id' => $cat->id,
@@ -50,20 +67,18 @@ class UserResource extends JsonResource
                 'pen_name' => $this->author->pen_name,
                 'bio' => $this->author->bio,
                 'status' => $this->author->status,
+                'onboarding_status' => $authorStatus,
             ] : null,
 
-            // Chỉ include vendor_profile khi user là vendor
-            // whenLoaded() đảm bảo không gây thêm query N+1 nếu chưa eager-load
-            'vendor_profile' => $this->when(
-                $this->role === 'vendor' || $this->role === 'author',
-                fn () => $this->whenLoaded('vendor', fn () => [
-                    'shop_name' => $this->vendor->shop_name,
-                    'slug' => $this->vendor->slug,
-                    'logo' => $this->vendor->logo ? '/storage/'.$this->vendor->logo : null,
-                    'description' => $this->vendor->description,
-                    'status' => $this->vendor->status,
-                ])
-            ),
+            'vendor_profile' => $this->vendor ? [
+                'id' => $this->vendor->id,
+                'shop_name' => $this->vendor->shop_name,
+                'slug' => $this->vendor->slug,
+                'logo' => $this->vendor->logo ? '/storage/'.$this->vendor->logo : null,
+                'description' => $this->vendor->description,
+                'status' => $this->vendor->status,
+                'onboarding_status' => $vendorStatus,
+            ] : null,
         ];
     }
 }

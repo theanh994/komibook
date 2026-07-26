@@ -12,6 +12,9 @@ use App\Services\Otp\FakeOtpSender;
 use App\Services\Otp\LogOtpSender;
 use App\Services\Otp\OtpSenderInterface;
 use App\Services\Otp\ProductionOtpSender;
+use App\Services\Refunds\FakeRefundGateway;
+use App\Services\Refunds\RefundGatewayInterface;
+use App\Services\Refunds\VnpayRefundGateway;
 use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
@@ -51,6 +54,14 @@ class AppServiceProvider extends ServiceProvider
             }
 
             return new ProductionOtpSender;
+        });
+
+        $this->app->bind(RefundGatewayInterface::class, function () {
+            if (app()->environment('testing')) {
+                return new FakeRefundGateway;
+            }
+
+            return new VnpayRefundGateway;
         });
     }
 

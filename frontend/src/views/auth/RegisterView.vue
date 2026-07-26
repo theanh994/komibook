@@ -903,7 +903,7 @@ const handleConfirmEmailOtp = async () => {
     }
     toast.add({ severity: 'success', summary: 'Thành công', detail: message, life: 4000 })
     setTimeout(() => {
-      router.push({ name: 'dashboard' })
+      router.push(form.desired_role === 'vendor' ? { name: 'vendor-register' } : { name: 'dashboard' })
     }, 1200)
   } catch (error) {
     const errorMessage = error.response?.data?.message || Object.values(error.response?.data?.errors || {})[0]?.[0] || 'Không thể xác thực mã OTP.'

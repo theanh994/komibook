@@ -3,14 +3,14 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Http\Requests\Auth\UpdateProfileRequest;
 use App\Http\Requests\Auth\UpdatePasswordRequest;
+use App\Http\Requests\Auth\UpdateProfileRequest;
 use App\Http\Resources\UserResource;
+use App\Services\AccountSessionService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
-use App\Models\UserAddress;
 
 class ProfileController extends Controller
 {
@@ -23,6 +23,13 @@ class ProfileController extends Controller
 
         // Chỉ update các trường cá nhân cơ bản (tuyệt đối không làm ảnh hưởng dữ liệu vendor/author)
         $user->update($request->only(['name', 'phone', 'gender', 'birthday', 'address']));
+
+        if ($request->has('marketing_consent')) {
+            $user->forceFill($request->boolean('marketing_consent')
+                ? ['marketing_consent_at' => now(), 'marketing_opt_out_at' => null]
+                : ['marketing_consent_at' => null, 'marketing_opt_out_at' => now()]
+            )->save();
+        }
 
         // Đồng bộ thể loại sách yêu thích (Cold Start recommendations)
         if ($request->has('favorite_category_ids')) {
@@ -42,13 +49,16 @@ class ProfileController extends Controller
     /**
      * Đổi mật khẩu
      */
-    public function updatePassword(UpdatePasswordRequest $request): JsonResponse
+    public function updatePassword(UpdatePasswordRequest $request, AccountSessionService $sessions): JsonResponse
     {
         $user = $request->user();
 
         $user->update([
             'password' => Hash::make($request->new_password),
         ]);
+
+        $sessions->revokeOtherSessions($user, $request->session()->getId());
+        $request->session()->put('auth.password_confirmed_at', time());
 
         return response()->json([
             'status' => 'success',
@@ -59,7 +69,7 @@ class ProfileController extends Controller
     public function uploadAvatar(Request $request): JsonResponse
     {
         $request->validate([
-            'avatar' => 'required|image|mimes:jpeg,png,jpg,gif|max:2048'
+            'avatar' => 'required|image|mimes:jpeg,png,jpg,gif|max:2048',
         ]);
 
         $user = $request->user();
@@ -75,7 +85,7 @@ class ProfileController extends Controller
 
             return response()->json([
                 'message' => 'Avatar updated successfully',
-                'avatar_url' => '/storage/' . $path
+                'avatar_url' => '/storage/'.$path,
             ]);
         }
 
@@ -85,6 +95,7 @@ class ProfileController extends Controller
     public function getAddresses(Request $request): JsonResponse
     {
         $addresses = $request->user()->addresses()->orderByDesc('is_default')->get();
+
         return response()->json(['data' => $addresses]);
     }
 
@@ -94,7 +105,7 @@ class ProfileController extends Controller
             'receiver_name' => 'required|string|max:255',
             'phone' => 'required|string|max:20',
             'address' => 'required|string|max:500',
-            'is_default' => 'boolean'
+            'is_default' => 'boolean',
         ]);
 
         if ($validated['is_default'] ?? false) {
@@ -114,7 +125,7 @@ class ProfileController extends Controller
             'receiver_name' => 'required|string|max:255',
             'phone' => 'required|string|max:20',
             'address' => 'required|string|max:500',
-            'is_default' => 'boolean'
+            'is_default' => 'boolean',
         ]);
 
         if ($validated['is_default'] ?? false) {
@@ -137,7 +148,7 @@ class ProfileController extends Controller
     public function setDefaultAddress(Request $request, $id): JsonResponse
     {
         $address = $request->user()->addresses()->findOrFail($id);
-        
+
         $request->user()->addresses()->update(['is_default' => false]);
         $address->update(['is_default' => true]);
 

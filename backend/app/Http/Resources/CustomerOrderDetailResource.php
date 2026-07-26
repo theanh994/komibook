@@ -27,6 +27,7 @@ class CustomerOrderDetailResource extends JsonResource
             'shipping_address' => $this->shipping_address,
             'phone' => $this->phone,
             'created_at' => $this->created_at?->toISOString(),
+            'refund_status' => $this->refund_status ?? 'none',
 
             // Customer information
             'user' => [
@@ -61,6 +62,28 @@ class CustomerOrderDetailResource extends JsonResource
                     'quantity' => $item->quantity,
                     'price' => $item->price,
                     'book' => $bookData,
+                ];
+            }),
+            'invoice' => $this->whenLoaded('invoiceSnapshot', function () {
+                if (! $this->invoiceSnapshot) {
+                    return null;
+                }
+
+                return [
+                    'invoice_number' => $this->invoiceSnapshot->invoice_number,
+                    'issued_at' => $this->invoiceSnapshot->issued_at?->toISOString(),
+                    'currency' => $this->invoiceSnapshot->currency,
+                    'buyer' => $this->invoiceSnapshot->buyer_snapshot,
+                    'seller' => $this->invoiceSnapshot->seller_snapshot,
+                    'line_items' => $this->invoiceSnapshot->line_items,
+                    'subtotal_amount' => $this->invoiceSnapshot->subtotal_amount,
+                    'coupon_discount_amount' => $this->invoiceSnapshot->coupon_discount_amount,
+                    'membership_discount_amount' => $this->invoiceSnapshot->membership_discount_amount,
+                    'shipping_fee_amount' => $this->invoiceSnapshot->shipping_fee_amount,
+                    'service_fee_amount' => $this->invoiceSnapshot->service_fee_amount,
+                    'tax_rate' => $this->invoiceSnapshot->tax_rate,
+                    'tax_amount' => $this->invoiceSnapshot->tax_amount,
+                    'total_amount' => $this->invoiceSnapshot->total_amount,
                 ];
             }),
         ];

@@ -96,15 +96,15 @@ describe('Phase 3 Operational Truth Behavioral Tests', () => {
     expect(setupState.error.value).toContain('Không thể kết nối API kiểm duyệt đối tác.')
   })
 
-  it('AuthorDashboardView sets error state and does not populate fake earnings or books on error', async () => {
+  it('AuthorDashboardView sets error state and does not populate fake author metrics on error', async () => {
     vi.spyOn(apiClient, 'get').mockRejectedValue(new Error('Server error'))
 
     const { setupState } = mountAndCapture(AuthorDashboardView)
     try { await setupState.fetchStats() } catch (err) { expect(err).toBeDefined() }
 
-    expect(setupState.books.value).toEqual([])
-    expect(setupState.stats.value.total_earnings).toBe(0)
-    expect(setupState.error.value).toContain('Không thể kết nối API thống kê tác giả.')
+    expect(setupState.profile.value.total_books).toBe(0)
+    expect(setupState.profile.value.pen_name).toBe('')
+    expect(setupState.error.value).toContain('Không thể tải hồ sơ tác giả.')
   })
 
   it('MembershipTiersView sets error state and does not populate fake tiers on rejection', async () => {

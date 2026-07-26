@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\VendorOnboardingStatus;
 use App\Traits\MultiVendorScoped;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -25,7 +26,47 @@ class Vendor extends Model
         'logo',
         'status',
         'rejection_reason',
+        'onboarding_status',
+        'application_version',
+        'legal_name',
+        'tax_code',
+        'business_registration_document',
+        'representative_identity_document',
+        'payout_bank_account',
+        'payout_bank_name',
+        'payout_bank_holder',
+        'terms_accepted_at',
+        'submitted_at',
+        'review_started_at',
+        'approved_at',
+        'changes_requested_at',
+        'rejected_at',
+        'suspended_at',
+        'revoked_at',
+        'last_review_reason',
     ];
+
+    protected $hidden = [
+        'business_registration_document',
+        'representative_identity_document',
+        'payout_bank_account',
+    ];
+
+    protected function casts(): array
+    {
+        return [
+            'onboarding_status' => VendorOnboardingStatus::class,
+            'application_version' => 'integer',
+            'terms_accepted_at' => 'datetime',
+            'submitted_at' => 'datetime',
+            'review_started_at' => 'datetime',
+            'approved_at' => 'datetime',
+            'changes_requested_at' => 'datetime',
+            'rejected_at' => 'datetime',
+            'suspended_at' => 'datetime',
+            'revoked_at' => 'datetime',
+        ];
+    }
 
     // ─── Relationships ────────────────────────────────────────────────────────
 
@@ -107,10 +148,16 @@ class Vendor extends Model
         return $this->hasMany(VendorEarningLedger::class);
     }
 
+    public function onboardingEvents(): HasMany
+    {
+        return $this->hasMany(VendorOnboardingEvent::class);
+    }
+
     // ─── Helper Methods ───────────────────────────────────────────────────────
 
     public function isActive(): bool
     {
-        return $this->status === 'active';
+        return $this->status === 'active'
+            && ($this->onboarding_status === null || $this->onboarding_status === VendorOnboardingStatus::Approved);
     }
 }

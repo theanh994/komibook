@@ -2,138 +2,125 @@
 
 namespace App\Http\Controllers\Api\Admin;
 
+use App\Enums\AuthorOnboardingStatus;
+use App\Enums\VendorOnboardingStatus;
 use App\Http\Controllers\Controller;
+use App\Http\Resources\AuthorProfileResource;
+use App\Http\Resources\VendorProfileResource;
 use App\Models\Author;
 use App\Models\Vendor;
+use App\Services\AuthorOnboardingService;
+use App\Services\VendorOnboardingService;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 class VendorApprovalController extends Controller
 {
-    /**
-     * Danh sách nhà bán và tác giả chờ duyệt.
-     */
     public function index()
     {
-        // Lấy danh sách các Vendor ở trạng thái inactive (chưa được duyệt)
-        $vendors = Vendor::with('user')->where('status', 'inactive')->get();
+        $vendors = Vendor::withoutGlobalScopes()->with('user')->whereIn('onboarding_status', [
+            VendorOnboardingStatus::Submitted->value,
+            VendorOnboardingStatus::Resubmitted->value,
+            VendorOnboardingStatus::UnderReview->value,
+        ])->get();
+        $authors = Author::with('user')->whereIn('onboarding_status', [
+            AuthorOnboardingStatus::Submitted->value,
+            AuthorOnboardingStatus::Resubmitted->value,
+            AuthorOnboardingStatus::UnderReview->value,
+        ])->get();
 
-        // Lấy danh sách tác giả chờ duyệt
-        $authors = Author::with('user')->where('status', 'pending')->get();
-
-        return response()->json([
-            'status' => 'success',
-            'data' => [
-                'vendors' => $vendors,
-                'authors' => $authors,
-            ],
-        ]);
+        return response()->json(['status' => 'success', 'data' => [
+            'vendors' => VendorProfileResource::collection($vendors),
+            'authors' => AuthorProfileResource::collection($authors),
+        ]]);
     }
 
-    /**
-     * Phê duyệt Vendor.
-     */
-    public function approveVendor($id)
+    public function transitionVendor(Request $request, Vendor $vendor, VendorOnboardingService $service)
     {
-        $vendor = Vendor::findOrFail($id);
-
-        if ($vendor->status === 'active') {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Nhà bán này đã được phê duyệt trước đó.',
-            ], 422);
-        }
-
-        $vendor->status = 'active';
-        $vendor->save();
-
-        return response()->json([
-            'status' => 'success',
-            'message' => 'Phê duyệt tài khoản nhà bán đối tác thành công.',
+        $validated = $request->validate([
+            'to_status' => 'required|string|in:under_review,approved,changes_requested,rejected,suspended,revoked',
+            'reason' => 'nullable|string|max:1000',
+            'operation_key' => 'nullable|string|max:100',
         ]);
+        $updated = $service->transition(
+            $vendor,
+            VendorOnboardingStatus::from($validated['to_status']),
+            $request->user(),
+            $validated['reason'] ?? null,
+            $validated['operation_key'] ?? $request->header('Idempotency-Key') ?? 'admin-vendor:'.Str::uuid(),
+        );
+
+        return response()->json(['status' => 'success', 'data' => new VendorProfileResource($updated)]);
     }
 
-    /**
-     * Phê duyệt Tác giả (Author).
-     */
-    public function approveAuthor($id)
+    public function approveVendor(Request $request, $id, VendorOnboardingService $service)
+    {
+        $vendor = Vendor::withoutGlobalScopes()->findOrFail($id);
+        $baseKey = $request->header('Idempotency-Key') ?? 'admin-vendor-approve:'.Str::uuid();
+        if (in_array($vendor->onboarding_status, [VendorOnboardingStatus::Submitted, VendorOnboardingStatus::Resubmitted], true)) {
+            $vendor = $service->transition($vendor, VendorOnboardingStatus::UnderReview, $request->user(), operationKey: $baseKey.':review');
+        }
+        $vendor = $service->transition($vendor, VendorOnboardingStatus::Approved, $request->user(), operationKey: $baseKey.':approve');
+
+        return response()->json(['status' => 'success', 'message' => 'Phê duyệt hồ sơ nhà bán thành công.', 'data' => new VendorProfileResource($vendor)]);
+    }
+
+    public function transitionAuthor(Request $request, Author $author, AuthorOnboardingService $service)
+    {
+        $validated = $request->validate([
+            'to_status' => 'required|string|in:under_review,approved,changes_requested,rejected,suspended,revoked',
+            'reason' => 'nullable|string|max:1000',
+            'operation_key' => 'nullable|string|max:100',
+        ]);
+
+        $updated = $service->transition(
+            $author,
+            AuthorOnboardingStatus::from($validated['to_status']),
+            $request->user(),
+            $validated['reason'] ?? null,
+            $validated['operation_key'] ?? $request->header('Idempotency-Key') ?? 'admin-author:'.Str::uuid(),
+        );
+
+        return response()->json(['status' => 'success', 'data' => new AuthorProfileResource($updated)]);
+    }
+
+    public function approveAuthor(Request $request, $id, AuthorOnboardingService $service)
     {
         $author = Author::findOrFail($id);
-
-        if ($author->status === 'active') {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Tác giả này đã được phê duyệt trước đó.',
-            ], 422);
+        $baseKey = $request->header('Idempotency-Key') ?? 'admin-author-approve:'.Str::uuid();
+        if (in_array($author->onboarding_status, [AuthorOnboardingStatus::Submitted, AuthorOnboardingStatus::Resubmitted], true)) {
+            $author = $service->transition($author, AuthorOnboardingStatus::UnderReview, $request->user(), operationKey: $baseKey.':review');
         }
-
-        if (! $author->phone_verified_at) {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Tác giả phải xác minh số điện thoại trước khi được phê duyệt.',
-            ], 422);
-        }
-
-        return DB::transaction(function () use ($author) {
-            $author->status = 'active';
-            $author->save();
-
-            // Cập nhật vai trò người dùng thành 'vendor' để họ có quyền đăng bán sách cũ & ebook
-            $user = $author->user;
-            $user->role = 'vendor';
-            $user->save();
-
-            // Tự động tạo hồ sơ Vendor cho tác giả nếu chưa có
-            $vendor = Vendor::where('user_id', $user->id)->first();
-            if (! $vendor) {
-                Vendor::create([
-                    'user_id' => $user->id,
-                    'shop_name' => $author->pen_name.' (Tác giả)',
-                    'slug' => str_replace(' ', '-', strtolower($author->pen_name)).'-'.rand(100, 999),
-                    'description' => $author->bio ?? 'Tác giả tự sáng tác trên nền tảng KomiBook.',
-                    'status' => 'active',
-                ]);
-            } else {
-                $vendor->status = 'active';
-                $vendor->save();
-            }
-
-            return response()->json([
-                'status' => 'success',
-                'message' => 'Phê duyệt đối tác Tác giả thành công! Vai trò tài khoản đã chuyển thành đối tác và kích hoạt gian hàng.',
-            ]);
-        });
-    }
-
-    /**
-     * Từ chối phê duyệt (cho cả Vendor hoặc Author).
-     */
-    public function reject(Request $request, $type, $id)
-    {
-        $request->validate([
-            'reason' => 'required|string|max:500',
-        ]);
-
-        if ($type === 'vendor') {
-            $vendor = Vendor::withoutGlobalScopes()->findOrFail($id);
-            $vendor->status = 'rejected';
-            $vendor->rejection_reason = $request->reason;
-            $vendor->save();
-        } elseif ($type === 'author') {
-            $author = Author::findOrFail($id);
-            $author->status = 'rejected';
-            $author->rejection_reason = $request->reason;
-            $author->save();
-        } else {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Loại đối tác không hợp lệ.',
-            ], 400);
-        }
+        $author = $service->transition($author, AuthorOnboardingStatus::Approved, $request->user(), operationKey: $baseKey.':approve');
 
         return response()->json([
             'status' => 'success',
-            'message' => 'Đã từ chối đơn đăng ký đối tác thành công và lưu lý do.',
+            'message' => 'Phê duyệt hồ sơ tác giả thành công. Quyền nhà bán không bị thay đổi.',
+            'data' => new AuthorProfileResource($author),
         ]);
+    }
+
+    public function reject(Request $request, $type, $id, AuthorOnboardingService $authorService, VendorOnboardingService $vendorService)
+    {
+        $validated = $request->validate(['reason' => 'required|string|max:500']);
+        if ($type === 'vendor') {
+            $vendor = Vendor::withoutGlobalScopes()->findOrFail($id);
+            $baseKey = $request->header('Idempotency-Key') ?? 'admin-vendor-reject:'.Str::uuid();
+            if (in_array($vendor->onboarding_status, [VendorOnboardingStatus::Submitted, VendorOnboardingStatus::Resubmitted], true)) {
+                $vendor = $vendorService->transition($vendor, VendorOnboardingStatus::UnderReview, $request->user(), operationKey: $baseKey.':review');
+            }
+            $vendorService->transition($vendor, VendorOnboardingStatus::Rejected, $request->user(), $validated['reason'], $baseKey.':reject');
+        } elseif ($type === 'author') {
+            $author = Author::findOrFail($id);
+            $baseKey = $request->header('Idempotency-Key') ?? 'admin-author-reject:'.Str::uuid();
+            if (in_array($author->onboarding_status, [AuthorOnboardingStatus::Submitted, AuthorOnboardingStatus::Resubmitted], true)) {
+                $author = $authorService->transition($author, AuthorOnboardingStatus::UnderReview, $request->user(), operationKey: $baseKey.':review');
+            }
+            $authorService->transition($author, AuthorOnboardingStatus::Rejected, $request->user(), $validated['reason'], $baseKey.':reject');
+        } else {
+            return response()->json(['status' => 'error', 'message' => 'Loại đối tác không hợp lệ.'], 400);
+        }
+
+        return response()->json(['status' => 'success', 'message' => 'Đã từ chối hồ sơ và lưu lý do.']);
     }
 }

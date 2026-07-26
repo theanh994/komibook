@@ -36,6 +36,12 @@ const router = createRouter({
       meta: { guestOnly: false, requiresAuth: false }
     },
     {
+      path: '/blog/:slug',
+      name: 'article-detail',
+      component: () => import('@/views/ArticleView.vue'),
+      meta: { guestOnly: false, requiresAuth: false }
+    },
+    {
       path: '/book/:slug',
       name: 'book-detail',
       component: () => import('@/views/BookDetailView.vue'),
@@ -84,6 +90,12 @@ const router = createRouter({
       meta: { requiresAuth: true }
     },
     {
+      path: '/returns',
+      name: 'returns',
+      component: () => import('@/views/ReturnsView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
       path: '/wishlist',
       name: 'wishlist',
       component: () => import('@/views/WishlistView.vue'),
@@ -111,6 +123,30 @@ const router = createRouter({
       path: '/author/verify',
       name: 'author-verify',
       component: () => import('@/views/auth/AccountVerificationView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/author/dashboard',
+      name: 'author-dashboard',
+      component: () => import('@/views/vendor/AuthorDashboardView.vue'),
+      meta: { requiresAuth: true, capability: 'approved_author', title: 'Bảng điều khiển Tác giả' }
+    },
+    {
+      path: '/author/books/:bookId/copyright',
+      name: 'author-copyright',
+      component: () => import('@/views/author/CopyrightClaimView.vue'),
+      meta: { requiresAuth: true, capability: 'approved_author', title: 'Hồ sơ bản quyền' }
+    },
+    {
+      path: '/author/royalty-agreements',
+      name: 'author-royalty-agreements',
+      component: () => import('@/views/author/RoyaltyAgreementsView.vue'),
+      meta: { requiresAuth: true, capability: 'approved_author', title: 'Thỏa thuận royalty' }
+    },
+    {
+      path: '/vendor/register',
+      name: 'vendor-register',
+      component: () => import('@/views/auth/VendorRegisterView.vue'),
       meta: { requiresAuth: true }
     },
     {
@@ -183,6 +219,18 @@ const router = createRouter({
           meta: { requiresAuth: true, role: 'admin', hideHeader: true, title: 'Tổng quan' }
         },
         {
+          path: 'returns',
+          name: 'admin-returns',
+          component: () => import('@/views/shared/ReturnManagementView.vue'),
+          meta: { requiresAuth: true, role: 'admin', hideHeader: true, title: 'Trả hàng & hoàn tiền' }
+        },
+        {
+          path: 'reviews/moderation',
+          name: 'admin-review-moderation',
+          component: () => import('@/views/admin/ReviewModerationView.vue'),
+          meta: { requiresAuth: true, role: 'admin', hideHeader: true, title: 'Kiểm duyệt đánh giá' }
+        },
+        {
           path: 'users',
           name: 'admin-users',
           component: () => import('@/views/admin/UsersView.vue'),
@@ -221,6 +269,12 @@ const router = createRouter({
           name: 'admin-system-config',
           component: () => import('@/views/admin/SystemConfigView.vue'),
           meta: { requiresAuth: true, role: 'admin', hideHeader: true, title: 'Cấu hình hệ thống' }
+        },
+        {
+          path: 'fee-schedules',
+          name: 'admin-fee-schedules',
+          component: () => import('@/views/admin/FeeSchedulesView.vue'),
+          meta: { requiresAuth: true, role: 'admin', hideHeader: true, title: 'Commission & phí dịch vụ' }
         },
         {
           path: 'finance-report',
@@ -263,6 +317,18 @@ const router = createRouter({
           name: 'admin-approvals',
           component: () => import('@/views/admin/VendorApprovalsView.vue'),
           meta: { requiresAuth: true, role: 'admin', hideHeader: true, title: 'Kiểm duyệt đối tác' }
+        },
+        {
+          path: 'publishing-reviews',
+          name: 'admin-publishing-reviews',
+          component: () => import('@/views/admin/PublishingReviewView.vue'),
+          meta: { requiresAuth: true, role: 'admin', hideHeader: true, title: 'Kiểm duyệt xuất bản' }
+        },
+        {
+          path: 'articles',
+          name: 'admin-articles',
+          component: () => import('@/views/admin/ArticlesView.vue'),
+          meta: { requiresAuth: true, role: 'admin', hideHeader: true, title: 'CMS bài viết' }
         },
         {
           path: 'support/tickets',
@@ -326,6 +392,12 @@ const router = createRouter({
           meta: { requiresAuth: true, role: 'vendor', hideHeader: true, title: 'Chỉnh Sửa Sách' }
         },
         {
+          path: 'books/:bookId/publishing',
+          name: 'vendor-book-publishing',
+          component: () => import('@/views/vendor/PublishingWorkflowView.vue'),
+          meta: { requiresAuth: true, role: 'vendor', hideHeader: true, title: 'Quy trình xuất bản' }
+        },
+        {
           path: 'warehouses',
           name: 'vendor-warehouses',
           component: () => import('@/views/vendor/WarehousesView.vue'),
@@ -336,6 +408,12 @@ const router = createRouter({
           name: 'vendor-orders',
           component: () => import('@/views/vendor/OrdersView.vue'),
           meta: { requiresAuth: true, role: 'vendor', hideHeader: true, title: 'Quản lý Đơn hàng' }
+        },
+        {
+          path: 'returns',
+          name: 'vendor-returns',
+          component: () => import('@/views/shared/ReturnManagementView.vue'),
+          meta: { requiresAuth: true, role: 'vendor', hideHeader: true, title: 'Trả hàng & hoàn tiền' }
         },
         {
           path: 'orders/:id',
@@ -396,12 +474,6 @@ const router = createRouter({
           name: 'vendor-inventory-transfers-print',
           component: () => import('@/views/vendor/StockTransferPrintView.vue'),
           meta: { requiresAuth: true, role: 'vendor', hideHeader: true, title: 'In phiếu chuyển kho' }
-        },
-        {
-          path: 'author-dashboard',
-          name: 'author-dashboard',
-          component: () => import('@/views/vendor/AuthorDashboardView.vue'),
-          meta: { requiresAuth: true, role: 'vendor', hideHeader: true, title: 'Bảng điều khiển Tác giả' }
         },
       ]
     }

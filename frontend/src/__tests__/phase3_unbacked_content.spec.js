@@ -17,14 +17,12 @@ async function render(Component) {
 }
 
 describe('Phase 3C.3 unbacked public content closure', () => {
-  it('renders an honest unavailable Blog state with real internal destinations', async () => {
+  it('renders the backed editorial entry point without invented article cards', async () => {
     const html = await render(BlogView)
 
-    expect(html).toContain('Nội dung biên tập chưa được mở')
-    expect(html).toContain('data-route="/"')
-    expect(html).toContain('data-route="/help-center"')
-    expect(html).not.toContain('Tải thêm bài viết')
-    expect(html).not.toContain('chat_bubble')
+    expect(html).toContain('KomiBook Editorial')
+    expect(html).toContain('Đang tải bài viết')
+    expect(html).not.toContain('Nội dung biên tập chưa được mở')
     expect(html).not.toContain('<form')
   })
 

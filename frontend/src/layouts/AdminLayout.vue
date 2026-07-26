@@ -50,6 +50,11 @@ const vendorMenuItems = [
     route: '/vendor/orders',
   },
   {
+    label: 'Trả hàng & Hoàn tiền',
+    icon: 'pi pi-replay',
+    route: '/vendor/returns',
+  },
+  {
     label: 'Doanh thu & Rút tiền',
     icon: 'pi pi-wallet',
     route: '/vendor/finance',
@@ -77,6 +82,16 @@ const adminMenuItems = [
     route: '/admin/users',
   },
   {
+    label: 'Trả hàng & Hoàn tiền',
+    icon: 'pi pi-replay',
+    route: '/admin/returns',
+  },
+  {
+    label: 'Kiểm duyệt đánh giá',
+    icon: 'pi pi-comments',
+    route: '/admin/reviews/moderation',
+  },
+  {
     label: 'Quản lý Sách',
     icon: 'pi pi-book',
     children: [
@@ -89,6 +104,11 @@ const adminMenuItems = [
         label: 'Thể loại sách',
         icon: 'pi pi-tags',
         route: '/admin/books/categories',
+      },
+      {
+        label: 'Kiểm duyệt xuất bản',
+        icon: 'pi pi-check-circle',
+        route: '/admin/publishing-reviews',
       },
     ],
   },
@@ -113,9 +133,19 @@ const adminMenuItems = [
     route: '/admin/notifications',
   },
   {
+    label: 'CMS bài viết',
+    icon: 'pi pi-file-edit',
+    route: '/admin/articles',
+  },
+  {
     label: 'Cấu hình hệ thống',
     icon: 'pi pi-cog',
     route: '/admin/system-config',
+  },
+  {
+    label: 'Commission & phí',
+    icon: 'pi pi-percentage',
+    route: '/admin/fee-schedules',
   },
 ]
 
@@ -156,6 +186,11 @@ const authorMenuItems = [
     route: '/vendor/orders',
   },
   {
+    label: 'Trả hàng & Hoàn tiền',
+    icon: 'pi pi-replay',
+    route: '/vendor/returns',
+  },
+  {
     label: 'Doanh thu & Rút tiền',
     icon: 'pi pi-wallet',
     route: '/vendor/finance',
@@ -164,13 +199,11 @@ const authorMenuItems = [
 
 const menuItems = computed(() => {
   if (authStore.isAdmin) return adminMenuItems
-  if (authStore.user?.author_profile) return authorMenuItems
   return vendorMenuItems
 })
 
 const panelLabel = computed(() => {
   if (authStore.isAdmin) return 'Admin Panel'
-  if (authStore.user?.author_profile) return 'Author Panel'
   return 'Vendor Panel'
 })
 

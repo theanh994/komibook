@@ -2,7 +2,9 @@
 
 namespace App\Models;
 
+use App\Enums\BookPublicationStatus;
 use App\Traits\MultiVendorScoped;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -44,6 +46,13 @@ class Book extends Model
         'type',
         'status',
         'file_path',
+        'publishing_status',
+        'publication_version',
+        'submitted_for_review_at',
+        'approved_at',
+        'scheduled_for',
+        'published_at',
+        'publication_feedback',
     ];
 
     /**
@@ -59,7 +68,13 @@ class Book extends Model
             'stock' => 'integer',
             'pages' => 'integer',
             'views' => 'integer',
+            'publication_version' => 'integer',
             'gallery_images' => 'array',
+            'publishing_status' => BookPublicationStatus::class,
+            'submitted_for_review_at' => 'datetime',
+            'approved_at' => 'datetime',
+            'scheduled_for' => 'datetime',
+            'published_at' => 'datetime',
         ];
     }
 
@@ -145,6 +160,31 @@ class Book extends Model
         return $this->hasMany(InventoryReservation::class);
     }
 
+    public function authorRelations(): HasMany
+    {
+        return $this->hasMany(BookAuthor::class);
+    }
+
+    public function copyrightClaims(): HasMany
+    {
+        return $this->hasMany(CopyrightClaim::class);
+    }
+
+    public function publishingEvents(): HasMany
+    {
+        return $this->hasMany(BookPublishingEvent::class);
+    }
+
+    public function publishedRevisions(): HasMany
+    {
+        return $this->hasMany(BookPublishedRevision::class);
+    }
+
+    public function royaltyAgreements(): HasMany
+    {
+        return $this->hasMany(RoyaltyAgreement::class);
+    }
+
     /**
      * Tồn kho thực tế tại các kho của sách này.
      */
@@ -158,6 +198,13 @@ class Book extends Model
     public function isPublished(): bool
     {
         return $this->status === 'published';
+    }
+
+    public function scopeSellable(Builder $query): Builder
+    {
+        return $query->where('books.status', 'published')
+            ->where(fn (Builder $statusQuery) => $statusQuery->whereNull('books.publishing_status')->orWhere('books.publishing_status', BookPublicationStatus::Published->value))
+            ->whereHas('vendor', fn (Builder $vendorQuery) => $vendorQuery->withoutGlobalScopes()->where('status', 'active'));
     }
 
     public function isEbook(): bool
@@ -180,12 +227,17 @@ class Book extends Model
         if (self::$activeFlashSaleBooks === null) {
             $now = now();
             $activeSale = FlashSale::where('is_active', true)
+                ->where('status', 'active')
                 ->where('start_time', '<=', $now)
                 ->where('end_time', '>', $now)
                 ->first();
 
             if ($activeSale) {
-                self::$activeFlashSaleBooks = $activeSale->items()->where('status', 'approved')->get()->keyBy('book_id');
+                self::$activeFlashSaleBooks = $activeSale->items()->where('status', 'approved')
+                    ->where(function ($query) {
+                        $query->where('max_quantity', 0)->orWhereColumn('sold_quantity', '<', 'max_quantity');
+                    })
+                    ->get()->keyBy('book_id');
             } else {
                 self::$activeFlashSaleBooks = collect();
             }
@@ -198,9 +250,7 @@ class Book extends Model
     {
         $activeFlashSaleItem = self::getActiveFlashSaleItem($this->id);
         if ($activeFlashSaleItem) {
-            $discountAmount = $this->price * ($activeFlashSaleItem->discount_percent / 100);
-
-            return max(0, (int) ($this->price - $discountAmount));
+            return (int) ($activeFlashSaleItem->sale_price ?? round($this->price * (100 - $activeFlashSaleItem->discount_percent) / 100));
         }
 
         return $value;

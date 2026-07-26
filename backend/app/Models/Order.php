@@ -25,6 +25,7 @@ class Order extends Model
         'total_amount',
         'status',
         'payment_status',
+        'refund_status',
         'payment_method',
         'shipping_address',
         'phone',
@@ -116,6 +117,16 @@ class Order extends Model
     public function vendorEarningLedger(): HasOne
     {
         return $this->hasOne(VendorEarningLedger::class);
+    }
+
+    public function invoiceSnapshot(): HasOne
+    {
+        return $this->hasOne(InvoiceSnapshot::class);
+    }
+
+    public function returnRequests(): HasMany
+    {
+        return $this->hasMany(ReturnRequest::class);
     }
 
     // ─── Helper Methods ───────────────────────────────────────────────────────

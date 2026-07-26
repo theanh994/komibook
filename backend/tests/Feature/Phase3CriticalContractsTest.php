@@ -324,6 +324,7 @@ class Phase3CriticalContractsTest extends TestCase
                 'book_id' => $ebook->id,
                 'type' => 'note',
                 'note_content' => 'Valid annotation content',
+                'page_number' => 1,
             ]);
 
         $storeRes->assertStatus(201)

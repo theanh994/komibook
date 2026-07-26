@@ -39,13 +39,13 @@
           </button>
           <button 
             type="button" 
-            @click="submitForm('published')" 
+            @click="submitForm('workflow')"
             :disabled="saving"
             class="px-5 py-2.5 bg-primary text-on-primary font-bold text-xs uppercase tracking-wider rounded-xl shadow-md hover:bg-primary/90 active:scale-95 transition-all cursor-pointer flex items-center gap-1.5 border-none"
           >
             <span v-if="saving" class="material-symbols-outlined animate-spin text-base">progress_activity</span>
             <span v-else class="material-symbols-outlined text-base">check_circle</span>
-            <span>{{ isEditMode ? 'Cập Nhật Sách' : 'Xuất Bản Sách' }}</span>
+            <span>{{ isEditMode ? 'Lưu và cấu hình xuất bản' : 'Tạo bản nháp' }}</span>
           </button>
         </div>
       </div>
@@ -734,11 +734,10 @@ const submitForm = async (targetStatus) => {
   }
 
   saving.value = true
-  bookForm.value.status = targetStatus
-
   try {
     const formData = new FormData()
     Object.entries(bookForm.value).forEach(([key, val]) => {
+      if (key === 'status') return
       if (key === 'category_ids' && Array.isArray(val)) {
         val.forEach(id => formData.append('category_ids[]', id))
       } else if (val !== null && val !== undefined && val !== '') {
@@ -769,7 +768,11 @@ const submitForm = async (targetStatus) => {
       toast.add({ severity: 'success', summary: 'Thành công', detail: 'Đã cập nhật cuốn sách!', life: 3000 })
     }
 
-    router.push('/vendor/books')
+    if (targetStatus === 'workflow' && isEditMode.value) {
+      router.push(`/vendor/books/${route.params.id}/publishing`)
+    } else {
+      router.push('/vendor/books')
+    }
   } catch (e) {
     const msg = e.response?.data?.message || 'Có lỗi xảy ra khi lưu sách.'
     toast.add({ severity: 'error', summary: 'Lỗi', detail: msg, life: 4000 })

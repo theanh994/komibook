@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import apiClient from '@/services/axios'
 
@@ -9,6 +9,8 @@ const orderId = route.params.id
 const order = ref(null)
 const loading = ref(true)
 const error = ref(null)
+const invoice = computed(() => order.value?.invoice || null)
+const invoiceItems = computed(() => invoice.value?.line_items || order.value?.items || [])
 
 const fetchOrderDetails = async () => {
   loading.value = true
@@ -82,8 +84,8 @@ onMounted(() => {
         <div class="text-left md:text-right">
           <h2 class="text-2xl font-extrabold text-slate-900 mb-1">THÔNG TIN ĐƠN HÀNG</h2>
           <div class="text-xs text-slate-500 space-y-1">
-            <p>Mã đơn hàng: <span class="font-bold text-slate-900 tracking-wider">#{{ order.order_code || order.id }}</span></p>
-            <p>Ngày đặt hàng: <span class="text-slate-900 font-medium">{{ formatDate(order.created_at) }}</span></p>
+            <p>Số chứng từ: <span class="font-bold text-slate-900 tracking-wider">#{{ invoice?.invoice_number || order.order_code || order.id }}</span></p>
+            <p>Ngày phát hành: <span class="text-slate-900 font-medium">{{ formatDate(invoice?.issued_at || order.created_at) }}</span></p>
           </div>
         </div>
       </header>
@@ -92,16 +94,17 @@ onMounted(() => {
       <section class="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs">
         <div class="bg-slate-50 p-4 rounded border border-slate-200">
           <h3 class="font-bold text-indigo-950 uppercase mb-2 border-b border-slate-200 pb-1">Thông tin đơn vị cung cấp</h3>
-          <p class="font-semibold text-slate-800">KomiBook Store</p>
-          <p class="text-slate-500 mt-1">Đại diện: Ban quản trị KomiBook</p>
+          <p class="font-semibold text-slate-800">{{ invoice?.seller?.shop_name || '—' }}</p>
+          <p class="text-slate-500 mt-1">Đại diện: {{ invoice?.seller?.contact_name || '—' }}</p>
+          <p class="text-slate-500">Email: {{ invoice?.seller?.contact_email || '—' }}</p>
         </div>
 
         <div class="bg-slate-50 p-4 rounded border border-slate-200">
           <h3 class="font-bold text-indigo-950 uppercase mb-2 border-b border-slate-200 pb-1">Thông tin người mua</h3>
-          <p class="font-semibold text-slate-800">{{ order.customer_name || order.user?.name || '—' }}</p>
-          <p class="text-slate-500 mt-1">SĐT: {{ order.customer_phone || order.phone || '—' }}</p>
-          <p class="text-slate-500">Email: {{ order.customer_email || order.user?.email || '—' }}</p>
-          <p class="text-slate-500">Đ/C: {{ order.shipping_address || '—' }}</p>
+          <p class="font-semibold text-slate-800">{{ invoice?.buyer?.name || order.customer_name || order.user?.name || '—' }}</p>
+          <p class="text-slate-500 mt-1">SĐT: {{ invoice?.buyer?.phone || order.customer_phone || order.phone || '—' }}</p>
+          <p class="text-slate-500">Email: {{ invoice?.buyer?.email || order.customer_email || order.user?.email || '—' }}</p>
+          <p class="text-slate-500">Đ/C: {{ invoice?.buyer?.shipping_address || order.shipping_address || '—' }}</p>
         </div>
       </section>
 
@@ -118,20 +121,36 @@ onMounted(() => {
             </tr>
           </thead>
           <tbody>
-            <tr v-for="(item, idx) in order.items" :key="item.id">
+            <tr v-for="(item, idx) in invoiceItems" :key="item.order_item_id || item.id || idx">
               <td class="border border-slate-900 p-2.5 text-center">{{ idx + 1 }}</td>
-              <td class="border border-slate-900 p-2.5 font-semibold">{{ item.book?.title || '—' }}</td>
-              <td class="border border-slate-900 p-2.5 text-right">{{ formatCurrency(item.price) }}</td>
+              <td class="border border-slate-900 p-2.5 font-semibold">{{ item.title || item.book?.title || '—' }}</td>
+              <td class="border border-slate-900 p-2.5 text-right">{{ formatCurrency(item.unit_price ?? item.price) }}</td>
               <td class="border border-slate-900 p-2.5 text-center">{{ item.quantity }}</td>
               <td class="border border-slate-900 p-2.5 text-right font-bold text-slate-900">
-                {{ formatCurrency(item.price * item.quantity) }}
+                {{ formatCurrency(item.line_total ?? item.price * item.quantity) }}
               </td>
             </tr>
           </tbody>
           <tfoot class="bg-slate-50 font-bold text-slate-900">
+            <tr v-if="invoice">
+              <td class="border border-slate-900 p-2.5 text-right" colspan="4">Tạm tính:</td>
+              <td class="border border-slate-900 p-2.5 text-right">{{ formatCurrency(invoice.subtotal_amount) }}</td>
+            </tr>
+            <tr v-if="invoice && invoice.coupon_discount_amount">
+              <td class="border border-slate-900 p-2.5 text-right" colspan="4">Giảm giá coupon:</td>
+              <td class="border border-slate-900 p-2.5 text-right">-{{ formatCurrency(invoice.coupon_discount_amount) }}</td>
+            </tr>
+            <tr v-if="invoice && invoice.membership_discount_amount">
+              <td class="border border-slate-900 p-2.5 text-right" colspan="4">Giảm giá thành viên:</td>
+              <td class="border border-slate-900 p-2.5 text-right">-{{ formatCurrency(invoice.membership_discount_amount) }}</td>
+            </tr>
+            <tr v-if="invoice">
+              <td class="border border-slate-900 p-2.5 text-right" colspan="4">Thuế:</td>
+              <td class="border border-slate-900 p-2.5 text-right">{{ formatCurrency(invoice.tax_amount) }}</td>
+            </tr>
             <tr class="bg-indigo-900 text-white font-extrabold text-sm">
               <td class="border border-slate-900 p-2.5 text-right" colspan="4">Tổng thanh toán:</td>
-              <td class="border border-slate-900 p-2.5 text-right">{{ formatCurrency(order.total_amount) }}</td>
+              <td class="border border-slate-900 p-2.5 text-right">{{ formatCurrency(invoice?.total_amount ?? order.total_amount) }}</td>
             </tr>
           </tfoot>
         </table>
@@ -148,6 +167,10 @@ onMounted(() => {
           <p class="text-slate-400 italic mb-16">(Ký, đóng dấu, ghi rõ họ tên)</p>
         </div>
       </footer>
+
+      <p class="text-[10px] text-slate-500">
+        Chứng từ giao dịch này được tạo từ snapshot tại thời điểm đặt hàng và không phải hóa đơn VAT điện tử.
+      </p>
 
       <!-- Print controls (Hidden on print) -->
       <div class="no-print flex justify-end gap-3 border-t border-slate-100 pt-4 mt-auto">

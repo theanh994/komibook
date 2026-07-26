@@ -556,6 +556,9 @@ const showPrintConsent = ref(false)
 const currentPage = ref(1)
 const totalPages = ref(0)
 const inputPage = ref(1)
+const progressVersion = ref(null)
+const savedPage = ref(null)
+let progressTimer = null
 
 const isDrawerVisible = ref(false)
 const showSettings = ref(false)
@@ -688,6 +691,31 @@ const bookStats = computed(() => [
 
 watch(currentTheme, (newTheme) => localStorage.setItem('readerTheme', newTheme))
 
+const syncReadingProgress = async () => {
+  const bookId = route.params.bookId
+  if (!bookId || totalPages.value < 1) return
+  try {
+    const response = await apiClient.put(`/api/books/${bookId}/reading-progress`, {
+      current_page: currentPage.value,
+      total_pages: totalPages.value,
+      version: progressVersion.value
+    })
+    progressVersion.value = response.data.data.version
+  } catch (syncError) {
+    if (syncError.response?.status === 409) {
+      const latest = await apiClient.get(`/api/books/${bookId}/reading-progress`)
+      progressVersion.value = latest.data.data?.version ?? null
+    } else {
+      console.warn('[Reader] progress sync failed:', syncError)
+    }
+  }
+}
+
+watch(currentPage, () => {
+  if (progressTimer) clearTimeout(progressTimer)
+  progressTimer = setTimeout(syncReadingProgress, 700)
+})
+
 const toggleTheme = () => {
   const keys = Object.keys(themeClasses)
   const currentIndex = keys.indexOf(currentTheme.value)
@@ -746,7 +774,7 @@ const fetchEbookData = async () => {
   error.value = null
   
   try {
-    const [urlRes, bookRes, annotRes] = await Promise.all([
+    const [urlRes, bookRes, annotRes, progressRes] = await Promise.all([
       apiClient.get(`/api/orders/${orderId}/ebooks/${bookId}/generate-link`).catch(e => {
         console.error('[Reader] generate-link failed:', e)
         throw e
@@ -758,7 +786,8 @@ const fetchEbookData = async () => {
       apiClient.get(`/api/annotations?book_id=${bookId}`).catch(e => {
         console.warn('[Reader] annotations fetch failed (non-critical):', e)
         return { data: { data: [] } }
-      })
+      }),
+      apiClient.get(`/api/books/${bookId}/reading-progress`).catch(() => ({ data: { data: null } }))
     ])
 
     pdfUrl.value = readApiData(urlRes.data).url
@@ -766,6 +795,8 @@ const fetchEbookData = async () => {
     
     book.value = bookRes.data.data || bookRes.data
     annotations.value = annotRes.data.data || []
+    progressVersion.value = progressRes.data.data?.version ?? null
+    savedPage.value = progressRes.data.data?.current_page ?? null
     
     // Điều hướng toàn bộ cuộc gọi API lấy PDF qua domain/origin hiện tại của frontend 
     // để được xử lý thông qua proxy của Vite (local) hoặc nginx/Vercel (production).
@@ -812,6 +843,11 @@ const onPdfLoaded = async (pdfApp) => {
   pdfDocument.value = pdfRef.value?.doc || pdfApp
   if (pdfDocument.value) {
     totalPages.value = pdfDocument.value.numPages
+    if (savedPage.value && savedPage.value <= totalPages.value) {
+      currentPage.value = savedPage.value
+      inputPage.value = savedPage.value
+      savedPage.value = null
+    }
     try {
       const toc = await pdfDocument.value.getOutline()
       outline.value = toc || []
@@ -877,6 +913,8 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  if (progressTimer) clearTimeout(progressTimer)
+  syncReadingProgress()
   document.body.classList.remove('overflow-hidden')
   window.removeEventListener('keydown', handleKeydown)
 })

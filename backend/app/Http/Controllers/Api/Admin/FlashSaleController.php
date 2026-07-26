@@ -3,7 +3,10 @@
 namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\Book;
 use App\Models\FlashSale;
+use App\Models\FlashSaleBook;
+use App\Services\FlashSaleWorkflowService;
 use Illuminate\Http\Request;
 
 class FlashSaleController extends Controller
@@ -20,7 +23,7 @@ class FlashSaleController extends Controller
                 $status = 'active';
                 if ($sale->start_time > $now) {
                     $status = 'upcoming';
-                } elseif ($sale->end_time < $now || !$sale->is_active) {
+                } elseif ($sale->end_time < $now || ! $sale->is_active) {
                     $status = 'ended';
                 }
 
@@ -31,7 +34,8 @@ class FlashSaleController extends Controller
                     'end' => $sale->end_time->format('Y-m-d H:i'),
                     'products' => $sale->items_count,
                     'maxDiscount' => $sale->items_max_discount_percent ?: 0,
-                    'status' => $status,
+                    'status' => $sale->status,
+                    'time_status' => $status,
                 ];
             });
 
@@ -45,9 +49,11 @@ class FlashSaleController extends Controller
             'start_time' => 'required|date',
             'end_time' => 'required|date|after:start_time',
             'is_active' => 'boolean',
+            'timezone' => 'required|timezone',
+            'coupon_stacking_policy' => 'required|in:allow,deny',
+            'priority' => 'nullable|integer|min:0',
         ]);
-
-        $sale = FlashSale::create($validated);
+        $sale = FlashSale::create([...$validated, 'status' => 'draft', 'is_active' => false, 'created_by' => $request->user()->id]);
 
         return response()->json(['message' => 'Flash sale created', 'data' => $sale], 201);
     }
@@ -55,16 +61,21 @@ class FlashSaleController extends Controller
     public function show(FlashSale $flashSale)
     {
         $flashSale->load(['items.book.vendor']);
+
         return response()->json(['data' => $flashSale]);
     }
 
     public function update(Request $request, FlashSale $flashSale)
     {
+        abort_unless($flashSale->status === 'draft', 422);
         $validated = $request->validate([
             'title' => 'required|string|max:255',
             'start_time' => 'required|date',
             'end_time' => 'required|date|after:start_time',
             'is_active' => 'boolean',
+            'timezone' => 'required|timezone',
+            'coupon_stacking_policy' => 'required|in:allow,deny',
+            'priority' => 'nullable|integer|min:0',
         ]);
 
         $flashSale->update($validated);
@@ -74,11 +85,13 @@ class FlashSaleController extends Controller
 
     public function destroy(FlashSale $flashSale)
     {
+        abort_unless($flashSale->status === 'draft' && ! $flashSale->items()->exists(), 422);
         $flashSale->delete();
+
         return response()->json(['message' => 'Flash sale deleted']);
     }
 
-    public function addItem(Request $request, FlashSale $flash_sale)
+    public function addItem(Request $request, FlashSale $flash_sale, FlashSaleWorkflowService $workflow)
     {
         $validated = $request->validate([
             'book_ids' => 'required|array',
@@ -93,42 +106,46 @@ class FlashSaleController extends Controller
                 continue;
             }
 
+            $book = Book::withoutGlobalScopes()->with('vendor')->findOrFail($bookId);
             $item = $flash_sale->items()->create([
                 'book_id' => $bookId,
+                'vendor_id' => $book->vendor_id,
                 'discount_percent' => $validated['discount_percent'],
                 'max_quantity' => $validated['max_quantity'] ?? 0,
                 'sold_quantity' => 0,
-                'status' => 'approved', // Mặc định đã duyệt cho Admin
+                'status' => 'pending',
             ]);
-            $added[] = $item->load('book');
+            $added[] = $workflow->decide($item, 'approved', $request->user(), null, 'flash-admin-item:'.$flash_sale->id.':'.$bookId.':'.now()->timestamp);
         }
 
         return response()->json(['message' => 'Items added', 'data' => $added], 201);
     }
 
-    public function approveItem($item_id)
+    public function transition(Request $request, FlashSale $flashSale, FlashSaleWorkflowService $workflow)
     {
-        $item = \App\Models\FlashSaleBook::findOrFail($item_id);
-        $item->update(['status' => 'approved']);
-        return response()->json([
-            'message' => 'Đã duyệt sản phẩm tham gia Flash Sale.',
-            'data' => $item->load('book')
-        ]);
+        $validated = $request->validate(['to_status' => 'required|in:enrollment_open,active,ended,cancelled', 'reason' => 'nullable|string|max:2000', 'operation_key' => 'required|string|max:128']);
+
+        return response()->json(['status' => 'success', 'data' => $workflow->transition($flashSale, $validated['to_status'], $request->user(), $validated['reason'] ?? null, $validated['operation_key'])]);
     }
 
-    public function rejectItem($item_id)
+    public function approveItem(Request $request, $item_id, FlashSaleWorkflowService $workflow)
     {
-        $item = \App\Models\FlashSaleBook::findOrFail($item_id);
-        $item->update(['status' => 'rejected']);
-        return response()->json([
-            'message' => 'Đã từ chối đề xuất tham gia Flash Sale.',
-            'data' => $item->load('book')
-        ]);
+        $validated = $request->validate(['operation_key' => 'required|string|max:128']);
+
+        return response()->json(['data' => $workflow->decide(FlashSaleBook::findOrFail($item_id), 'approved', $request->user(), null, $validated['operation_key'])]);
+    }
+
+    public function rejectItem(Request $request, $item_id, FlashSaleWorkflowService $workflow)
+    {
+        $validated = $request->validate(['reason' => 'required|string|max:2000', 'operation_key' => 'required|string|max:128']);
+
+        return response()->json(['data' => $workflow->decide(FlashSaleBook::findOrFail($item_id), 'rejected', $request->user(), $validated['reason'], $validated['operation_key'])]);
     }
 
     public function removeItem(FlashSale $flash_sale, $item_id)
     {
         $flash_sale->items()->where('id', $item_id)->delete();
+
         return response()->json(['message' => 'Item removed']);
     }
 
@@ -140,6 +157,7 @@ class FlashSaleController extends Controller
         ]);
 
         $flash_sale->items()->whereIn('id', $validated['ids'])->delete();
+
         return response()->json(['message' => 'Items removed']);
     }
 }

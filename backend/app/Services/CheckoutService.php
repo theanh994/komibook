@@ -7,13 +7,16 @@ use App\Models\Book;
 use App\Models\CheckoutSession;
 use App\Models\CheckoutSessionOrder;
 use App\Models\Coupon;
+use App\Models\InvoiceSnapshot;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\User;
+use App\Models\Vendor;
 use App\Services\Inventory\InventoryReservationService;
 use Exception;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
+use Illuminate\Validation\ValidationException;
 
 class CheckoutService
 {
@@ -60,7 +63,7 @@ class CheckoutService
     public function processCheckout(array $items, array $shippingData, int $userId, ?string $couponCode = null): array
     {
         $bookIds = array_column($items, 'book_id');
-        $books = Book::withoutGlobalScopes()->whereIn('id', $bookIds)->get()->keyBy('id');
+        $books = Book::withoutGlobalScopes()->with('vendor')->whereIn('id', $bookIds)->get()->keyBy('id');
 
         // BƯỚC 1: Kiểm tra E-book đã sở hữu
         $ebookIds = [];
@@ -91,6 +94,7 @@ class CheckoutService
         // BƯỚC 2: Split Orders theo Multi-vendor
         $groupedItems = [];
         $totalCartAmount = 0;
+        $promotionPricing = app(FlashSalePricingService::class);
         foreach ($items as $item) {
             $bookId = $item['book_id'];
             $quantity = $item['quantity'];
@@ -99,13 +103,20 @@ class CheckoutService
                 throw new Exception("Sản phẩm không tồn tại (ID: {$bookId})");
             }
             $book = $books->get($bookId);
+            if (! $book->isPublished()) {
+                throw new Exception("Sản phẩm chưa được xuất bản (ID: {$bookId})");
+            }
+            if (! $book->vendor || ! $book->vendor->isActive()) {
+                throw new Exception("Nhà bán của sản phẩm đang ngừng hoạt động (ID: {$bookId})");
+            }
             $vendorId = $book->vendor_id;
 
             if (! isset($groupedItems[$vendorId])) {
                 $groupedItems[$vendorId] = [];
             }
 
-            $price = $book->sale_price ?? $book->price;
+            $pricing = $promotionPricing->resolve($book, (int) $quantity);
+            $price = $pricing['unit_price'];
             $subtotal = $price * $quantity;
             $totalCartAmount += $subtotal;
 
@@ -113,6 +124,10 @@ class CheckoutService
                 'book_id' => $bookId,
                 'quantity' => $quantity,
                 'price' => $price,
+                'list_unit_price' => $pricing['list_unit_price'],
+                'promotion_discount_amount' => $pricing['promotion_discount_amount'],
+                'flash_sale_book_id' => $pricing['flash_sale_book_id'],
+                'promotion_snapshot' => $pricing['promotion_snapshot'],
             ];
         }
 
@@ -120,6 +135,13 @@ class CheckoutService
         $coupon = null;
         $vendorDiscounts = [];
         if ($couponCode) {
+            foreach ($groupedItems as $vendorItems) {
+                foreach ($vendorItems as $vendorItem) {
+                    if (($vendorItem['promotion_snapshot']['coupon_stacking_policy'] ?? null) === 'deny') {
+                        throw ValidationException::withMessages(['coupon' => 'This coupon cannot be stacked with the active Flash Sale.']);
+                    }
+                }
+            }
             $coupon = Coupon::where('code', $couponCode)->first();
             if ($coupon) {
                 $now = now();
@@ -182,7 +204,8 @@ class CheckoutService
 
         // BƯỚC 5: Tính toán snapshot tài chính cho từng vendor & session
         $user = User::with('membershipTier')->find($userId);
-        $commissionRate = $this->getCommissionRate();
+        $feeService = app(CommerceFeeService::class);
+        $feeSchedule = $feeService->effective();
 
         $vendorSnapshots = [];
         $sessionSubtotal = 0;
@@ -204,16 +227,21 @@ class CheckoutService
             }
 
             $discount = min($subtotal, $couponDisc + $membershipDisc);
-            $fee = 0;
-            $total = max(0, $subtotal - $discount + $fee);
-            $commissionAmt = (int) round(($total * $commissionRate) / 100.0);
+            $feeCalculation = $feeService->calculate(max(0, $subtotal - $discount), $feeSchedule);
+            $fee = $feeCalculation['service_fee_amount'];
+            $total = $feeCalculation['total_amount'];
+            $commissionAmt = $feeCalculation['commission_amount'];
 
             $vendorSnapshots[$vendorId] = [
                 'subtotal_amount' => $subtotal,
+                'coupon_discount_amount' => $couponDisc,
+                'membership_discount_amount' => $membershipDisc,
                 'discount_amount' => $discount,
                 'fee_amount' => $fee,
                 'total_amount' => $total,
-                'commission_rate' => $commissionRate,
+                'fee_schedule_id' => $feeSchedule['id'],
+                'service_fee_rate' => $feeCalculation['service_fee_rate'],
+                'commission_rate' => $feeCalculation['commission_rate'],
                 'commission_amount' => $commissionAmt,
             ];
 
@@ -261,23 +289,77 @@ class CheckoutService
                 $order->order_code = Order::generateOrderCode();
                 $order->saveQuietly();
 
+                $invoiceLineItems = [];
                 foreach ($vendorItems as $item) {
                     $orderItem = new OrderItem([
                         'order_id' => $order->id,
                         'book_id' => $item['book_id'],
                         'quantity' => $item['quantity'],
                         'price' => $item['price'],
+                        'list_unit_price' => $item['list_unit_price'],
+                        'promotion_discount_amount' => $item['promotion_discount_amount'],
+                        'flash_sale_book_id' => $item['flash_sale_book_id'],
+                        'promotion_snapshot' => $item['promotion_snapshot'],
                     ]);
                     $orderItem->saveQuietly();
+                    if ($item['flash_sale_book_id']) {
+                        $promotionPricing->reserve($item['flash_sale_book_id'], (int) $item['quantity']);
+                    }
+                    $book = $books->get($item['book_id']);
+                    $invoiceLineItems[] = [
+                        'order_item_id' => $orderItem->id,
+                        'book_id' => $item['book_id'],
+                        'title' => $book?->title,
+                        'type' => $book?->type,
+                        'quantity' => (int) $item['quantity'],
+                        'unit_price' => (int) $item['price'],
+                        'list_unit_price' => (int) $item['list_unit_price'],
+                        'promotion_discount_amount' => (int) $item['promotion_discount_amount'],
+                        'promotion_snapshot' => $item['promotion_snapshot'],
+                        'line_total' => (int) $item['price'] * (int) $item['quantity'],
+                    ];
                 }
+
+                $vendor = Vendor::withoutGlobalScopes()->with('user')->findOrFail($vendorId);
+                InvoiceSnapshot::create([
+                    'order_id' => $order->id,
+                    'invoice_number' => 'INV-'.$order->order_code,
+                    'currency' => 'VND',
+                    'issued_at' => now(),
+                    'buyer_snapshot' => [
+                        'user_id' => $user?->id,
+                        'name' => $user?->name,
+                        'email' => $user?->email,
+                        'phone' => $shippingData['phone'],
+                        'shipping_address' => $shippingData['shipping_address'],
+                    ],
+                    'seller_snapshot' => [
+                        'vendor_id' => $vendor->id,
+                        'shop_name' => $vendor->shop_name,
+                        'contact_name' => $vendor->user?->name,
+                        'contact_email' => $vendor->user?->email,
+                        'contact_phone' => $vendor->user?->phone,
+                    ],
+                    'line_items' => $invoiceLineItems,
+                    'subtotal_amount' => $snapshot['subtotal_amount'],
+                    'coupon_discount_amount' => $snapshot['coupon_discount_amount'],
+                    'membership_discount_amount' => $snapshot['membership_discount_amount'],
+                    'shipping_fee_amount' => 0,
+                    'service_fee_amount' => $snapshot['fee_amount'],
+                    'tax_rate' => 0,
+                    'tax_amount' => 0,
+                    'total_amount' => $snapshot['total_amount'],
+                ]);
 
                 $checkoutSessionOrder = new CheckoutSessionOrder([
                     'checkout_session_id' => $checkoutSession->id,
                     'order_id' => $order->id,
                     'vendor_id' => $vendorId,
+                    'commerce_fee_schedule_id' => $snapshot['fee_schedule_id'],
                     'subtotal_amount' => $snapshot['subtotal_amount'],
                     'discount_amount' => $snapshot['discount_amount'],
                     'fee_amount' => $snapshot['fee_amount'],
+                    'service_fee_rate' => $snapshot['service_fee_rate'],
                     'commission_rate' => $snapshot['commission_rate'],
                     'commission_amount' => $snapshot['commission_amount'],
                     'total_amount' => $snapshot['total_amount'],

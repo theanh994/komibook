@@ -8,4 +8,5 @@ enum InventoryReservationStatus: string
     case COMMITTED = 'committed';
     case RELEASED = 'released';
     case EXPIRED = 'expired';
+    case RESTORED = 'restored';
 }

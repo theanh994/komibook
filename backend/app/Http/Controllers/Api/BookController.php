@@ -18,7 +18,7 @@ class BookController extends Controller
     public function topSelling()
     {
         $books = Book::withoutGlobalScopes()
-            ->where('books.status', 'published')
+            ->sellable()
             ->join('order_items', 'books.id', '=', 'order_items.book_id')
             ->join('orders', 'order_items.order_id', '=', 'orders.id')
             ->where('orders.status', 'completed')
@@ -43,7 +43,7 @@ class BookController extends Controller
         // 1. Tắt Global Scope MultiVendor (Bản thân Book tự động bị thu gọn list với user đăng nhập là vendor. Nên ta phải huỷ global scope)
         $query = Book::withoutGlobalScopes()
             ->select('books.*')
-            ->where('books.status', 'published')
+            ->sellable()
             ->with(['vendor', 'category', 'categories', 'series']); // Eager loading
 
         // 2. Lọc theo category_id nếu có params
@@ -134,8 +134,10 @@ class BookController extends Controller
     public function show($identifier)
     {
         $query = Book::withoutGlobalScopes()
-            ->where('status', 'published')
-            ->with(['vendor', 'category', 'categories', 'series', 'reviews.user', 'chapters'])
+            ->sellable()
+            ->with(['vendor', 'category', 'categories', 'series', 'reviews' => function ($query) {
+                $query->where('active_key', 1)->where('moderation_status', 'published')->with('user');
+            }, 'chapters'])
             ->withCount('wishlists');
 
         if (is_numeric($identifier)) {
@@ -172,7 +174,7 @@ class BookController extends Controller
      */
     public function seriesBooks($bookId)
     {
-        $book = Book::withoutGlobalScopes()->findOrFail($bookId);
+        $book = Book::withoutGlobalScopes()->sellable()->findOrFail($bookId);
 
         if (! $book->series_id) {
             return response()->json([
@@ -184,7 +186,7 @@ class BookController extends Controller
         $seriesBooks = Book::withoutGlobalScopes()
             ->where('series_id', $book->series_id)
             ->where('id', '!=', $book->id)
-            ->where('status', 'published')
+            ->sellable()
             ->with(['vendor', 'category', 'categories'])
             ->orderBy('id', 'asc')
             ->limit(12)
@@ -201,7 +203,7 @@ class BookController extends Controller
      */
     public function relatedBooks($bookId)
     {
-        $book = Book::withoutGlobalScopes()->with('categories')->findOrFail($bookId);
+        $book = Book::withoutGlobalScopes()->sellable()->with('categories')->findOrFail($bookId);
 
         // Lấy tất cả ID danh mục cuốn sách này thuộc về
         $catIds = [];
@@ -215,7 +217,7 @@ class BookController extends Controller
 
         $query = Book::withoutGlobalScopes()
             ->where('id', '!=', $book->id)
-            ->where('status', 'published');
+            ->sellable();
 
         if (! empty($catIds)) {
             $query->where(function ($q) use ($catIds) {
@@ -236,7 +238,7 @@ class BookController extends Controller
             $excludeIds = $relatedBooks->pluck('id')->push($book->id)->toArray();
             $additionalBooks = Book::withoutGlobalScopes()
                 ->whereNotIn('id', $excludeIds)
-                ->where('status', 'published')
+                ->sellable()
                 ->with(['vendor', 'category', 'categories'])
                 ->orderBy('views', 'desc')
                 ->limit(5 - $relatedBooks->count())
@@ -255,12 +257,12 @@ class BookController extends Controller
      */
     public function authorBooks($bookId)
     {
-        $book = Book::withoutGlobalScopes()->findOrFail($bookId);
+        $book = Book::withoutGlobalScopes()->sellable()->findOrFail($bookId);
 
         $authorBooks = Book::withoutGlobalScopes()
             ->where('author', $book->author)
             ->where('id', '!=', $book->id)
-            ->where('status', 'published')
+            ->sellable()
             ->with(['vendor', 'category', 'categories'])
             ->limit(10)
             ->get();

@@ -39,7 +39,7 @@
         </div>
 
         <!-- Author Switcher -->
-        <div v-else-if="authStore.isAuthor || user?.role === 'author'" class="p-3.5 bg-gradient-to-br from-emerald-900 to-teal-950 text-white rounded-2xl shadow-xs border border-emerald-500/30 space-y-2.5">
+        <div v-else-if="authStore.isAuthor" class="p-3.5 bg-gradient-to-br from-emerald-900 to-teal-950 text-white rounded-2xl shadow-xs border border-emerald-500/30 space-y-2.5">
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-1.5">
               <span class="material-symbols-outlined text-emerald-300 text-sm">edit_note</span>
@@ -48,7 +48,7 @@
             <span class="px-1.5 py-0.5 bg-emerald-500/40 text-emerald-200 text-[8px] font-bold rounded-md uppercase">Author</span>
           </div>
           <p class="text-[10px] text-slate-300 leading-snug truncate">Bút danh: {{ user?.author_profile?.pen_name || user?.name }}</p>
-          <button @click="router.push('/vendor/dashboard')" class="w-full py-2 px-3 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl transition-all cursor-pointer border-none flex items-center justify-center gap-1 shadow-xs">
+          <button @click="router.push('/author/dashboard')" class="w-full py-2 px-3 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl transition-all cursor-pointer border-none flex items-center justify-center gap-1 shadow-xs">
             <span>Chuyển Sang Kênh Tác Giả</span>
             <span class="material-symbols-outlined text-xs">edit</span>
           </button>
@@ -135,6 +135,7 @@ const menuItems = [
   { label: 'Thông tin cá nhân', to: '/profile' },
   { label: 'Tủ sách của tôi', to: '/my-library' },
   { label: 'Đơn hàng của tôi', to: '/orders' },
+  { label: 'Trả hàng & hoàn tiền', to: '/returns' },
   { label: 'Danh sách yêu thích', to: '/wishlist' },
   { label: 'Thông báo', to: '/notifications' },
 ]

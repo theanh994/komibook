@@ -17,8 +17,8 @@
                   :class="{
                     'bg-slate-900 text-amber-300': authStore.isAdmin,
                     'bg-indigo-600 text-white': authStore.isVendor,
-                    'bg-emerald-600 text-white': authStore.user?.author_profile?.status === 'active',
-                    'bg-surface-container-high text-outline': !authStore.isAdmin && !authStore.isVendor && authStore.user?.author_profile?.status !== 'active'
+                    'bg-emerald-600 text-white': authStore.isAuthor,
+                    'bg-surface-container-high text-outline': !authStore.isAdmin && !authStore.isVendor && !authStore.isAuthor
                   }"
                 >
                   {{ roleLabel }}
@@ -96,6 +96,10 @@
                     <div class="space-y-2 md:col-span-2">
                       <label class="text-xs font-bold text-on-surface-variant ml-1 uppercase tracking-wider">Địa chỉ cá nhân</label>
                       <Textarea v-model="infoForm.address" rows="2" placeholder="Nhập địa chỉ nhà của bạn..." class="w-full !px-4 !py-3 !rounded-2xl !border-outline-variant/40 resize-none text-sm" />
+                    </div>
+                    <div class="md:col-span-2 flex items-start gap-3 p-4 rounded-2xl bg-surface-container-low border border-outline-variant/20">
+                      <Checkbox v-model="infoForm.marketing_consent" :binary="true" inputId="marketing_consent" />
+                      <label for="marketing_consent" class="text-xs text-on-surface-variant leading-relaxed cursor-pointer"><strong class="text-on-surface">Nhận thông tin ưu đãi</strong><br>KomiBook chỉ đưa tài khoản vào chiến dịch marketing khi bạn chủ động đồng ý. Bạn có thể rút lại lựa chọn này bất cứ lúc nào.</label>
                     </div>
                   </div>
                 </div>
@@ -290,6 +294,28 @@
                       </button>
                     </div>
                   </form>
+
+                  <div class="mt-10 pt-8 border-t border-outline-variant/20">
+                    <div class="flex items-center justify-between gap-4 mb-4">
+                      <div>
+                        <h3 class="text-base font-black text-on-surface">Phiên đăng nhập</h3>
+                        <p class="text-xs text-on-surface-variant">Kiểm tra và thu hồi thiết bị không còn sử dụng.</p>
+                      </div>
+                      <button type="button" @click="fetchSessions" class="text-xs font-bold text-primary bg-transparent border-none cursor-pointer">Làm mới</button>
+                    </div>
+                    <div v-if="loadingSessions" class="py-6 text-center text-sm text-outline">Đang tải...</div>
+                    <div v-else-if="sessions.length === 0" class="py-6 text-center text-sm text-outline">Không có phiên database nào đang hoạt động.</div>
+                    <div v-else class="space-y-3">
+                      <div v-for="session in sessions" :key="session.id" class="p-4 rounded-2xl bg-surface-container-low border border-outline-variant/20 flex items-start justify-between gap-4">
+                        <div class="min-w-0">
+                          <div class="text-sm font-bold text-on-surface">{{ session.is_current ? 'Thiết bị hiện tại' : 'Thiết bị khác' }}</div>
+                          <div class="text-xs text-outline truncate mt-1">{{ session.user_agent || 'Không rõ trình duyệt' }}</div>
+                          <div class="text-[11px] text-outline mt-1">{{ session.ip_address || 'Không rõ IP' }} · {{ formatSessionTime(session.last_active_at) }}</div>
+                        </div>
+                        <button type="button" @click="revokeSession(session)" class="shrink-0 px-3 py-2 rounded-xl text-xs font-bold text-error bg-error/10 border-none cursor-pointer">Thu hồi</button>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -422,7 +448,7 @@ const todayDate = computed(() => {
 const roleLabel = computed(() => {
   if (authStore.isAdmin) return 'Admin'
   if (authStore.isVendor) return 'Vendor'
-  if (authStore.user?.author_profile?.status === 'active') return 'Tác Giả'
+  if (authStore.isAuthor) return 'Tác Giả'
   return 'Độc Giả'
 })
 
@@ -434,7 +460,8 @@ const infoForm = reactive({
   phone: '',
   gender: 'male',
   birthday: '',
-  address: ''
+  address: '',
+  marketing_consent: false
 })
 
 const availableCategories = ref([])
@@ -443,6 +470,8 @@ const loadingCategories = ref(false)
 
 const loadingPassword = ref(false)
 const passwordForm = reactive({ current_password: '', new_password: '', new_password_confirmation: '' })
+const sessions = ref([])
+const loadingSessions = ref(false)
 
 // Addresses
 const addresses = ref([])
@@ -462,6 +491,7 @@ const switchTab = (tabId) => {
   activeTab.value = tabId
   if (tabId === 'security') {
     resetPasswordForm()
+    fetchSessions()
   }
   window.scrollTo({ top: 0, behavior: 'instant' })
 }
@@ -478,6 +508,35 @@ const fetchCategories = async () => {
   }
 }
 
+const formatSessionTime = (value) => value ? new Date(value).toLocaleString('vi-VN') : ''
+
+const fetchSessions = async () => {
+  loadingSessions.value = true
+  try {
+    const response = await apiClient.get('/api/profile/sessions')
+    sessions.value = response.data.data || []
+  } catch (error) {
+    toast.add({ severity: 'error', summary: 'Lỗi', detail: error.response?.data?.message || 'Không thể tải phiên đăng nhập.', life: 3500 })
+  } finally {
+    loadingSessions.value = false
+  }
+}
+
+const revokeSession = async (session) => {
+  try {
+    await apiClient.delete(`/api/profile/sessions/${encodeURIComponent(session.id)}`)
+    if (session.is_current) {
+      await authStore.logout()
+      window.location.assign('/login')
+      return
+    }
+    sessions.value = sessions.value.filter(item => item.id !== session.id)
+    toast.add({ severity: 'success', summary: 'Đã thu hồi', detail: 'Phiên đăng nhập đã bị thu hồi.', life: 3000 })
+  } catch (error) {
+    toast.add({ severity: 'error', summary: 'Không thể thu hồi', detail: error.response?.data?.message || 'Vui lòng đăng nhập lại rồi thử lại.', life: 4000 })
+  }
+}
+
 const populateUserData = () => {
   if (authStore.user) {
     infoForm.email = authStore.user.email || ''
@@ -486,6 +545,7 @@ const populateUserData = () => {
     infoForm.gender = authStore.user.gender || 'male'
     infoForm.birthday = authStore.user.birthday || ''
     infoForm.address = authStore.user.address || ''
+    infoForm.marketing_consent = !!authStore.user.marketing_consent
 
     if (authStore.user.favorite_categories && Array.isArray(authStore.user.favorite_categories)) {
       selectedCategoryIds.value = authStore.user.favorite_categories.map(c => c.id)

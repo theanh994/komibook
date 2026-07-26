@@ -22,11 +22,11 @@ class BookController extends Controller
             $search = $request->input('search');
             $query->where(function ($q) use ($search) {
                 $q->where('title', 'like', "%{$search}%")
-                  ->orWhere('author', 'like', "%{$search}%")
-                  ->orWhere('isbn', 'like', "%{$search}%")
-                  ->orWhereHas('vendor', function ($vq) use ($search) {
-                      $vq->where('shop_name', 'like', "%{$search}%");
-                  });
+                    ->orWhere('author', 'like', "%{$search}%")
+                    ->orWhere('isbn', 'like', "%{$search}%")
+                    ->orWhereHas('vendor', function ($vq) use ($search) {
+                        $vq->where('shop_name', 'like', "%{$search}%");
+                    });
             });
         }
 
@@ -35,9 +35,9 @@ class BookController extends Controller
             $catId = $request->input('category_id');
             $query->where(function ($q) use ($catId) {
                 $q->where('category_id', $catId)
-                  ->orWhereHas('categories', function ($cq) use ($catId) {
-                      $cq->where('categories.id', $catId);
-                  });
+                    ->orWhereHas('categories', function ($cq) use ($catId) {
+                        $cq->where('categories.id', $catId);
+                    });
             });
         }
 
@@ -55,18 +55,21 @@ class BookController extends Controller
         if ($request->filled('status')) {
             $query->where('status', $request->input('status'));
         }
+        if ($request->filled('publishing_status')) {
+            $query->where('publishing_status', $request->input('publishing_status'));
+        }
 
         $perPage = (int) $request->input('per_page', 15);
         $books = $query->orderBy('id', 'desc')->paginate($perPage);
 
         return response()->json([
             'status' => 'success',
-            'data'   => $books->items(),
-            'meta'   => [
+            'data' => $books->items(),
+            'meta' => [
                 'current_page' => $books->currentPage(),
-                'last_page'    => $books->lastPage(),
-                'per_page'     => $books->perPage(),
-                'total'        => $books->total(),
+                'last_page' => $books->lastPage(),
+                'per_page' => $books->perPage(),
+                'total' => $books->total(),
             ],
         ]);
     }
@@ -81,7 +84,7 @@ class BookController extends Controller
 
         return response()->json([
             'status' => 'success',
-            'data'   => $book,
+            'data' => $book,
         ]);
     }
 
@@ -91,15 +94,15 @@ class BookController extends Controller
     public function updateStatus(Request $request, Book $book): JsonResponse
     {
         $validated = $request->validate([
-            'status' => 'required|string|in:published,draft,hidden',
+            'status' => 'required|string|in:draft,hidden',
         ]);
 
         $book->update(['status' => $validated['status']]);
 
         return response()->json([
-            'status'  => 'success',
+            'status' => 'success',
             'message' => 'Cập nhật trạng thái sách thành công.',
-            'data'    => $book,
+            'data' => $book,
         ]);
     }
 
@@ -111,7 +114,7 @@ class BookController extends Controller
         $book->delete();
 
         return response()->json([
-            'status'  => 'success',
+            'status' => 'success',
             'message' => 'Đã xóa cuốn sách khỏi hệ thống.',
         ]);
     }

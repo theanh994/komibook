@@ -9,8 +9,6 @@ const config = ref({
   systemName: '',
   hotline: '',
   email: '',
-  authorCommission: 0,
-  serviceFee: 0,
   defaultBorrowDays: 14,
   maintenanceMode: false,
   maxUploadSize: 5,
@@ -33,8 +31,6 @@ const fetchConfig = async () => {
       systemName: data.site_name,
       hotline: data.hotline || '',
       email: data.support_email,
-      authorCommission: data.commission_rate,
-      serviceFee: data.service_fee,
       defaultBorrowDays: data.default_borrow_days,
       maintenanceMode: data.maintenance_mode,
       maxUploadSize: data.max_upload_size,
@@ -53,8 +49,6 @@ const handleSave = async () => {
       site_name: config.value.systemName,
       hotline: config.value.hotline,
       support_email: config.value.email,
-      commission_rate: config.value.authorCommission,
-      service_fee: config.value.serviceFee,
       default_borrow_days: config.value.defaultBorrowDays,
       maintenance_mode: config.value.maintenanceMode,
       max_upload_size: config.value.maxUploadSize,
@@ -147,21 +141,9 @@ onMounted(() => {
             </h2>
           </div>
           <div class="p-lg grid grid-cols-1 md:grid-cols-2 gap-lg">
-            <div class="space-y-xs">
-              <label class="font-label-md text-label-md text-on-surface-variant">Tỷ lệ chiết khấu tác giả</label>
-              <div class="relative flex items-center">
-                <input v-model.number="config.authorCommission" class="w-full bg-surface border border-outline-variant rounded-lg pl-md pr-xl py-sm font-body-md text-on-background focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-right" type="number"/>
-                <span class="absolute right-md font-body-md text-on-surface-variant">%</span>
-              </div>
-              <p class="text-[12px] text-on-surface-variant mt-xs">Phần trăm doanh thu chia cho tác giả/NXB.</p>
-            </div>
-            <div class="space-y-xs">
-              <label class="font-label-md text-label-md text-on-surface-variant">Phí dịch vụ cố định</label>
-              <div class="relative flex items-center">
-                <input v-model.number="config.serviceFee" class="w-full bg-surface border border-outline-variant rounded-lg pl-md pr-xl py-sm font-body-md text-on-background focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-right" type="text"/>
-                <span class="absolute right-md font-body-md text-on-surface-variant">VNĐ</span>
-              </div>
-              <p class="text-[12px] text-on-surface-variant mt-xs">Phí áp dụng cho mỗi giao dịch thành công.</p>
+            <div class="space-y-xs md:col-span-2 rounded-lg border border-primary/20 bg-primary/5 p-md">
+              <p class="font-label-md text-label-md text-on-surface">Commission và phí dịch vụ được quản lý theo lịch sử hiệu lực.</p>
+              <RouterLink to="/admin/fee-schedules" class="mt-sm inline-flex font-label-md text-primary hover:underline">Mở cấu hình phí có hiệu lực →</RouterLink>
             </div>
             <div class="space-y-xs md:col-span-2">
               <label class="font-label-md text-label-md text-on-surface-variant">Thời gian gia hạn mượn sách mặc định</label>

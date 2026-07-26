@@ -25,6 +25,8 @@ const identityDocument = ref(null)
 const termsAccepted = ref(false)
 const saving = ref(false)
 const registrationStatus = ref(null)
+const reviewReason = ref(null)
+const hasIdentityDocument = ref(false)
 
 const bankOptions = [
   { label: 'Vietcombank', value: 'Vietcombank' },
@@ -38,8 +40,19 @@ const checkStatus = async () => {
   try {
     const res = await apiClient.get('/api/author/status')
     if (res.data?.data) {
-      registrationStatus.value = res.data.data.status
-      if (res.data.data.status === 'active') {
+      const profile = res.data.data
+      registrationStatus.value = profile.onboarding_status || profile.status
+      reviewReason.value = profile.last_review_reason
+      hasIdentityDocument.value = Boolean(profile.has_identity_document)
+      form.value = {
+        pen_name: profile.pen_name || '',
+        bio: profile.bio || '',
+        bank_account_number: profile.bank_account_number || '',
+        bank_name: profile.bank_name || '',
+        bank_holder_name: profile.bank_holder_name || '',
+      }
+      termsAccepted.value = Boolean(profile.terms_accepted_at)
+      if (registrationStatus.value === 'approved') {
         toast.add({ severity: 'success', summary: 'Thông báo', detail: 'Tài khoản tác giả của bạn đã hoạt động.', life: 3000 })
         router.push({ name: 'author-dashboard' })
       }
@@ -58,7 +71,7 @@ const registerAuthor = async () => {
     toast.add({ severity: 'warn', summary: 'Cảnh báo', detail: 'Bạn phải đồng ý với Điều khoản và Chính sách bản quyền.', life: 3000 })
     return
   }
-  if (!form.value.pen_name || !form.value.bank_account_number || !form.value.bank_name || !form.value.bank_holder_name || !identityDocument.value) {
+  if (!form.value.pen_name || !form.value.bank_account_number || !form.value.bank_name || !form.value.bank_holder_name || (!identityDocument.value && !hasIdentityDocument.value)) {
     toast.add({ severity: 'error', summary: 'Lỗi nhập liệu', detail: 'Vui lòng điền đầy đủ các thông tin bắt buộc và tải lên CCCD.', life: 3000 })
     return
   }
@@ -71,14 +84,15 @@ const registerAuthor = async () => {
     formData.append('bank_account_number', form.value.bank_account_number)
     formData.append('bank_name', form.value.bank_name)
     formData.append('bank_holder_name', form.value.bank_holder_name)
-    formData.append('identity_document', identityDocument.value)
+    if (identityDocument.value) formData.append('identity_document', identityDocument.value)
+    formData.append('terms_accepted', '1')
 
     await apiClient.post('/api/auth/register-author', formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
     })
 
     toast.add({ severity: 'success', summary: 'Thành công', detail: 'Gửi yêu cầu đăng ký tác giả thành công!', life: 4000 })
-    registrationStatus.value = 'pending'
+    registrationStatus.value = 'submitted'
     router.push({ name: 'author-verify' })
   } catch (e) {
     const msg = e.response?.data?.message || 'Có lỗi xảy ra.'
@@ -155,7 +169,7 @@ onMounted(() => {
           </div>
 
           <!-- Pending State Display -->
-          <div v-if="registrationStatus === 'pending'" class="p-6 text-center">
+          <div v-if="['submitted', 'resubmitted', 'under_review', 'pending'].includes(registrationStatus)" class="p-6 text-center">
             <i class="pi pi-hourglass text-amber-500 text-5xl mb-4"></i>
             <h3 class="text-xl font-bold text-slate-800 mb-2">Hồ sơ đang chờ phê duyệt</h3>
             <p class="text-slate-600 mb-4 max-w-md mx-auto">
@@ -164,7 +178,16 @@ onMounted(() => {
             <Button label="Xác thực Số điện thoại" class="p-button-outlined p-button-sm" @click="router.push({ name: 'author-verify' })" />
           </div>
 
+          <div v-else-if="registrationStatus === 'rejected' || registrationStatus === 'suspended' || registrationStatus === 'revoked'" class="p-6 text-center">
+            <i class="pi pi-ban text-rose-500 text-5xl mb-4"></i>
+            <h3 class="text-xl font-bold text-slate-800 mb-2">Hồ sơ chưa thể hoạt động</h3>
+            <p class="text-slate-600">{{ reviewReason || 'Vui lòng liên hệ bộ phận hỗ trợ để biết thêm thông tin.' }}</p>
+          </div>
+
           <form v-else class="p-6 space-y-6" @submit.prevent="registerAuthor">
+            <div v-if="registrationStatus === 'changes_requested'" class="bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-800">
+              <strong>Cần bổ sung hồ sơ:</strong> {{ reviewReason }}
+            </div>
             <!-- Step 1: Profile -->
             <div>
               <div class="flex items-center gap-3 mb-4">

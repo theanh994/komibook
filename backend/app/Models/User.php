@@ -34,6 +34,8 @@ class User extends Authenticatable
         'birthday',
         'google_id',
         'facebook_id',
+        'marketing_consent_at',
+        'marketing_opt_out_at',
     ];
 
     /**
@@ -55,6 +57,8 @@ class User extends Authenticatable
     {
         return [
             'email_verified_at' => 'datetime',
+            'marketing_consent_at' => 'datetime',
+            'marketing_opt_out_at' => 'datetime',
             'password' => 'hashed',
         ];
     }

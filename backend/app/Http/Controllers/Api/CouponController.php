@@ -87,6 +87,7 @@ class CouponController extends Controller
     {
         $now = now();
         $flashSales = FlashSale::where('is_active', true)
+            ->whereIn('status', ['enrollment_open', 'active'])
             ->where('end_time', '>', $now)
             ->orderBy('start_time', 'asc')
             ->get();
@@ -102,10 +103,15 @@ class CouponController extends Controller
     {
         $now = now();
         $activeSale = FlashSale::where('is_active', true)
+            ->where('status', 'active')
             ->where('start_time', '<=', $now)
             ->where('end_time', '>', $now)
             ->with(['items' => function ($q) {
-                $q->where('status', 'approved')->with(['book.category', 'book.vendor']);
+                $q->where('status', 'approved')->where(function ($items) {
+                    $items->where('max_quantity', 0)->orWhereColumn('sold_quantity', '<', 'max_quantity');
+                })
+                    ->whereHas('book', fn ($books) => $books->withoutGlobalScopes()->where('status', 'published')->whereHas('vendor', fn ($vendors) => $vendors->withoutGlobalScopes()->where('status', 'active')))
+                    ->with(['book.category', 'book.vendor']);
             }])
             ->first();
 

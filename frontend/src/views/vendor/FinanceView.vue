@@ -21,7 +21,8 @@ const withdrawForm = ref({
   amount: 100000,
   bank_name: '',
   account_number: '',
-  account_name: ''
+  account_name: '',
+  idempotency_key: null
 })
 
 // --- API Calls ---
@@ -49,11 +50,12 @@ const handleWithdrawRequest = async () => {
   }
 
   try {
+    withdrawForm.value.idempotency_key ||= crypto.randomUUID()
     await apiClient.post('/api/vendor/finance/payout', withdrawForm.value)
     toast.add({ severity: 'success', summary: 'Thành công', detail: 'Yêu cầu rút tiền đã được gửi thành công.', life: 3000 })
     isWithdrawModalOpen.value = false
     // Reset form
-    withdrawForm.value = { amount: 100000, bank_name: '', account_number: '', account_name: '' }
+    withdrawForm.value = { amount: 100000, bank_name: '', account_number: '', account_name: '', idempotency_key: null }
     fetchFinanceData()
   } catch (err) {
     const errMsg = err.response?.data?.message || 'Không thể tạo yêu cầu rút tiền.'
@@ -150,13 +152,19 @@ onMounted(() => {
                 </div>
               </td>
               <td class="py-md px-lg">
-                <span 
+                <span
                   v-if="pr.status === 'pending'"
                   class="inline-flex items-center gap-xs bg-surface-container-highest text-primary px-sm py-xs rounded-full font-label-md text-label-md"
                 >
                   <span class="material-symbols-outlined text-sm">pending</span> Đang duyệt
                 </span>
                 <span 
+                  v-else-if="pr.status === 'approved' || pr.status === 'processing'"
+                  class="inline-flex items-center gap-xs bg-blue-100 text-blue-800 px-sm py-xs rounded-full font-label-md text-label-md"
+                >
+                  <span class="material-symbols-outlined text-sm">sync</span> {{ pr.status === 'approved' ? 'Đã duyệt' : 'Đang chuyển khoản' }}
+                </span>
+                <span
                   v-else-if="pr.status === 'completed'"
                   class="inline-flex items-center gap-xs bg-[#e6f4ea] text-[#137333] px-sm py-xs rounded-full font-label-md text-label-md"
                 >

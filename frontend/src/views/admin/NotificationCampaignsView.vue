@@ -27,8 +27,8 @@ const audienceLabels = {
 const stats = ref({
   total: 0,
   sent: 0,
-  avg_open: 42.5,
-  avg_click: 11.8
+  avg_open: null,
+  avg_click: null
 })
 
 const fetchCampaigns = async () => {
@@ -81,6 +81,19 @@ const handleDeleteCampaign = async (id) => {
     fetchCampaigns()
   } catch (err) {
     toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Xóa chiến dịch thất bại.', life: 3000 })
+  }
+}
+
+const retryCampaign = async (id) => {
+  sendingCampaignId.value = id
+  try {
+    await apiClient.post(`/api/admin/notifications/campaigns/${id}/retry`)
+    toast.add({ severity: 'success', summary: 'Đã xếp hàng lại', detail: 'Các batch thất bại sẽ được thử lại.', life: 3000 })
+    fetchCampaigns()
+  } catch (err) {
+    toast.add({ severity: 'error', summary: 'Không thể thử lại', detail: err.response?.data?.message || 'Vui lòng thử lại.', life: 3000 })
+  } finally {
+    sendingCampaignId.value = null
   }
 }
 
@@ -153,7 +166,7 @@ onMounted(() => {
         </div>
         <div>
           <div class="text-xs text-slate-400 dark:text-zinc-500 uppercase tracking-wider font-semibold">Tỷ lệ Mở Thư</div>
-          <div class="text-2xl font-bold text-slate-800 dark:text-zinc-100 mt-0.5">{{ stats.avg_open }}%</div>
+          <div class="text-sm font-bold text-slate-800 dark:text-zinc-100 mt-1">Chưa có telemetry</div>
         </div>
       </div>
       <!-- Card 4 -->
@@ -163,7 +176,7 @@ onMounted(() => {
         </div>
         <div>
           <div class="text-xs text-slate-400 dark:text-zinc-500 uppercase tracking-wider font-semibold">Tỷ lệ Click Link</div>
-          <div class="text-2xl font-bold text-slate-800 dark:text-zinc-100 mt-0.5">{{ stats.avg_click }}%</div>
+          <div class="text-sm font-bold text-slate-800 dark:text-zinc-100 mt-1">Chưa có telemetry</div>
         </div>
       </div>
     </div>
@@ -248,6 +261,7 @@ onMounted(() => {
                   <div class="min-w-0">
                     <h4 class="font-bold text-slate-800 dark:text-zinc-200 text-sm truncate max-w-xs md:max-w-md">{{ campaign.title }}</h4>
                     <p class="text-xs text-slate-500 dark:text-zinc-400 line-clamp-1 mt-0.5">{{ campaign.message }}</p>
+                    <p v-if="campaign.dispatch_status === 'partial_failed' || campaign.dispatch_status === 'failed'" class="text-[11px] text-rose-600 mt-1">{{ campaign.failed_chunk_count }} batch lỗi · {{ campaign.failed_count }} người nhận lỗi</p>
                   </div>
                 </div>
               </td>
@@ -306,8 +320,16 @@ onMounted(() => {
                     <span class="material-symbols-outlined text-[18px]">bar_chart</span>
                   </router-link>
 
+                  <button
+                    v-if="campaign.dispatch_status === 'partial_failed' || campaign.dispatch_status === 'failed'"
+                    @click="retryCampaign(campaign.id)"
+                    class="p-2 text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
+                    title="Thử lại batch lỗi"
+                  ><span class="material-symbols-outlined text-[18px]">refresh</span></button>
+
                   <!-- Delete -->
                   <button
+                    v-if="campaign.status !== 'sent' && campaign.dispatch_status === 'idle'"
                     @click="handleDeleteCampaign(campaign.id)"
                     class="p-2 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-lg transition-colors flex items-center justify-center"
                     v-tooltip.top="'Xóa chiến dịch'"

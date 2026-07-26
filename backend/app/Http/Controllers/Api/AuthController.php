@@ -9,6 +9,7 @@ use App\Http\Resources\UserResource;
 use App\Models\Author;
 use App\Models\User;
 use App\Models\Vendor;
+use App\Services\AccountSessionService;
 use App\Services\FacebookTokenVerifierInterface;
 use App\Services\GoogleTokenVerifierInterface;
 use Illuminate\Auth\Events\PasswordReset;
@@ -123,19 +124,21 @@ class AuthController extends Controller
                 Author::create([
                     'user_id' => $newUser->id,
                     'pen_name' => $newUser->name,
-                    'bank_account_number' => 'Pending',
-                    'bank_name' => 'Pending',
-                    'bank_holder_name' => strtoupper($newUser->name),
-                    'identity_document' => 'Pending',
+                    'bank_account_number' => null,
+                    'bank_name' => null,
+                    'bank_holder_name' => null,
+                    'identity_document' => null,
                     'status' => 'pending',
+                    'onboarding_status' => 'draft',
                 ]);
             } elseif ($request->desired_role === 'vendor') {
                 Vendor::withoutGlobalScopes()->create([
                     'user_id' => $newUser->id,
-                    'shop_name' => 'Shop '.$newUser->name,
-                    'slug' => Str::slug('Shop '.$newUser->name.'-'.rand(1000, 9999)),
-                    'description' => '',
-                    'status' => 'pending',
+                    'shop_name' => null,
+                    'slug' => null,
+                    'description' => null,
+                    'status' => 'inactive',
+                    'onboarding_status' => 'draft',
                 ]);
             }
 
@@ -145,6 +148,7 @@ class AuthController extends Controller
         Auth::login($user);
         if ($request->hasSession()) {
             $request->session()->regenerate();
+            $request->session()->put('auth.password_confirmed_at', time());
         }
 
         return response()->json([
@@ -186,6 +190,7 @@ class AuthController extends Controller
 
         if ($request->hasSession()) {
             $request->session()->regenerate();
+            $request->session()->put('auth.password_confirmed_at', time());
         }
 
         // Single-device policy clean up tokens nếu có token cũ
@@ -251,6 +256,21 @@ class AuthController extends Controller
         ]);
     }
 
+    public function confirmRecentAuthentication(Request $request): JsonResponse
+    {
+        $request->validate([
+            'current_password' => ['required', 'string', 'current_password'],
+        ]);
+
+        abort_unless($request->hasSession(), 422, 'Yêu cầu xác nhận lại cần phiên đăng nhập trình duyệt.');
+        $request->session()->put('auth.password_confirmed_at', time());
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Đã xác nhận lại danh tính trong 15 phút.',
+        ]);
+    }
+
     // ─── Forgot Password ──────────────────────────────────────────────────────
 
     /**
@@ -289,6 +309,8 @@ class AuthController extends Controller
                     'password' => $password,
                     'remember_token' => Str::random(60),
                 ])->save();
+
+                app(AccountSessionService::class)->revokeOtherSessions($user);
 
                 event(new PasswordReset($user));
             }
@@ -343,12 +365,16 @@ class AuthController extends Controller
             // Liên kết google_id nếu chưa có
             if (empty($user->google_id)) {
                 $user->google_id = $googleId;
-                $user->save();
             }
+            if (($payload['email_verified'] ?? false) && ! $user->email_verified_at) {
+                $user->email_verified_at = now();
+            }
+            $user->save();
 
             Auth::login($user);
             if ($request->hasSession()) {
                 $request->session()->regenerate();
+                $request->session()->put('auth.password_confirmed_at', time());
             }
 
             $user->load(['vendor', 'membershipTier', 'author', 'favoriteCategories']);
@@ -426,12 +452,16 @@ class AuthController extends Controller
         if ($user) {
             if (empty($user->facebook_id)) {
                 $user->facebook_id = $facebookId;
-                $user->save();
             }
+            if ($email && ! $user->email_verified_at) {
+                $user->email_verified_at = now();
+            }
+            $user->save();
 
             Auth::login($user);
             if ($request->hasSession()) {
                 $request->session()->regenerate();
+                $request->session()->put('auth.password_confirmed_at', time());
             }
 
             $user->load(['vendor', 'membershipTier', 'author', 'favoriteCategories']);

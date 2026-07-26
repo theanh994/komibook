@@ -22,6 +22,8 @@ const tabs = [
   { key: 'all', label: 'Tất cả', icon: 'list' },
   { key: 'pending', label: 'Chờ duyệt', icon: 'pending_actions' },
   { key: 'approved', label: 'Đã duyệt', icon: 'check_circle' },
+  { key: 'processing', label: 'Đang chuyển khoản', icon: 'sync' },
+  { key: 'completed', label: 'Hoàn tất', icon: 'payments' },
   { key: 'rejected', label: 'Từ chối', icon: 'cancel' },
 ]
 
@@ -30,6 +32,8 @@ const formatVND = (val) => new Intl.NumberFormat('vi-VN').format(val || 0) + ' �
 const statusConfig = {
   pending: { label: 'Chờ duyệt', bg: 'bg-yellow-100', text: 'text-yellow-800', icon: 'pending' },
   approved: { label: 'Đã duyệt', bg: 'bg-green-100', text: 'text-green-800', icon: 'check_circle' },
+  processing: { label: 'Đang chuyển khoản', bg: 'bg-blue-100', text: 'text-blue-800', icon: 'sync' },
+  completed: { label: 'Hoàn tất', bg: 'bg-emerald-100', text: 'text-emerald-800', icon: 'payments' },
   rejected: { label: 'Từ chối', bg: 'bg-red-100', text: 'text-red-800', icon: 'cancel' },
 }
 
@@ -71,6 +75,29 @@ const rejectItem = async (item) => {
     fetchReconciliations()
   } catch (err) {
     toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Không thể từ chối yêu cầu này.', life: 3000 })
+  }
+}
+
+const transitionItem = async (item, target) => {
+  const payload = { target, idempotency_key: crypto.randomUUID() }
+  if (target === 'approved' || target === 'rejected') {
+    payload.reason = window.prompt(target === 'approved' ? 'Ghi chú duyệt payout:' : 'Lý do từ chối payout:')
+    if (!payload.reason) return
+  }
+  if (target === 'processing' || target === 'completed') {
+    payload.transfer_reference = window.prompt('Mã tham chiếu chuyển khoản:', item.transfer_reference || '')
+    if (!payload.transfer_reference) return
+  }
+  if (target === 'completed') {
+    payload.transfer_evidence = window.prompt('Đường dẫn bằng chứng chuyển khoản:')
+    if (!payload.transfer_evidence) return
+  }
+  try {
+    await apiClient.patch(`/api/admin/reconciliation/payouts/${item.id}/transition`, payload)
+    toast.add({ severity: 'success', summary: 'Đã cập nhật', detail: `Payout #${item.id} đã chuyển sang ${target}.`, life: 3000 })
+    fetchReconciliations()
+  } catch (err) {
+    toast.add({ severity: 'error', summary: 'Không thể chuyển trạng thái', detail: err.response?.data?.message || 'Vui lòng thử lại.', life: 3500 })
   }
 }
 
@@ -179,13 +206,15 @@ onMounted(() => {
               </td>
               <td class="py-3.5 px-lg text-center">
                 <div class="flex items-center justify-center gap-2">
-                  <button v-if="row.status === 'pending'" @click="approveItem(row)" class="text-green-600 hover:bg-green-50 p-1.5 rounded-md transition-colors" title="Duyệt">
+                  <button v-if="row.status === 'pending'" @click="transitionItem(row, 'approved')" class="text-green-600 hover:bg-green-50 p-1.5 rounded-md transition-colors" title="Duyệt">
                     <span class="material-symbols-outlined text-[20px]">check_circle</span>
                   </button>
-                  <button v-if="row.status === 'pending'" @click="rejectItem(row)" class="text-red-600 hover:bg-red-50 p-1.5 rounded-md transition-colors" title="Từ chối">
+                  <button v-if="row.status === 'pending'" @click="transitionItem(row, 'rejected')" class="text-red-600 hover:bg-red-50 p-1.5 rounded-md transition-colors" title="Từ chối">
                     <span class="material-symbols-outlined text-[20px]">cancel</span>
                   </button>
-                  <span v-if="row.status !== 'pending'" class="text-on-surface-variant text-xs">Đã xử lý</span>
+                  <button v-if="row.status === 'approved'" @click="transitionItem(row, 'processing')" class="text-blue-600 hover:bg-blue-50 p-1.5 rounded-md transition-colors" title="Bắt đầu chuyển khoản"><span class="material-symbols-outlined text-[20px]">sync</span></button>
+                  <button v-if="row.status === 'processing'" @click="transitionItem(row, 'completed')" class="text-emerald-600 hover:bg-emerald-50 p-1.5 rounded-md transition-colors" title="Xác nhận hoàn tất"><span class="material-symbols-outlined text-[20px]">payments</span></button>
+                  <span v-if="row.status === 'rejected' || row.status === 'completed'" class="text-on-surface-variant text-xs">Đã xử lý</span>
                 </div>
               </td>
             </tr>

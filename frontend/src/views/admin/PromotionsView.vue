@@ -158,7 +158,10 @@ const openNew = () => {
       title: '',
       start_time: new Date(),
       end_time: new Date(new Date().getTime() + 24 * 60 * 60 * 1000),
-      is_active: true
+      is_active: false,
+      timezone: 'Asia/Ho_Chi_Minh',
+      coupon_stacking_policy: 'deny',
+      priority: 0
     }
     submitted.value = false
     flashSaleDialog.value = true
@@ -218,6 +221,15 @@ const deleteFlashSale = async () => {
   }
 }
 
+const transitionFlashSale = async (sale, toStatus) => {
+  const reason = ['ended', 'cancelled'].includes(toStatus) ? window.prompt('Nhập lý do:') : null
+  if (['ended', 'cancelled'].includes(toStatus) && !reason) return
+  await apiClient.patch(`/api/admin/flash-sales/${sale.id}/transition`, { to_status: toStatus, reason, operation_key: `flash-ui:${sale.id}:${toStatus}:${Date.now()}` })
+  await fetchFlashSales()
+}
+
+const flashActions = (status) => ({ draft: ['enrollment_open', 'cancelled'], enrollment_open: ['active', 'cancelled'], active: ['ended', 'cancelled'], ended: [], cancelled: [] }[status] || [])
+
 // ─── Formatters ───
 const formatDate = (date) => {
   if (!date) return '—'
@@ -237,9 +249,12 @@ const getStatusLabel = (data) => {
 }
 
 const flashStatusConfig = {
+  draft: { label: 'Bản nháp', bg: 'bg-slate-100', text: 'text-slate-700', icon: 'edit' },
+  enrollment_open: { label: 'Mở đăng ký', bg: 'bg-blue-100', text: 'text-blue-800', icon: 'person_add' },
   active: { label: 'Đang diễn ra', bg: 'bg-green-100', text: 'text-green-800', icon: 'flash_on' },
   upcoming: { label: 'Sắp diễn ra', bg: 'bg-blue-100', text: 'text-blue-800', icon: 'schedule' },
   ended: { label: 'Đã kết thúc', bg: 'bg-gray-100', text: 'text-gray-600', icon: 'history' },
+  cancelled: { label: 'Đã hủy', bg: 'bg-red-100', text: 'text-red-700', icon: 'cancel' },
 }
 
 onMounted(() => {
@@ -415,8 +430,9 @@ onMounted(() => {
               </div>
             </div>
             <div class="mt-md pt-md border-t border-outline-variant/30 flex justify-end gap-sm">
-              <button @click="editFlashSale(sale)" class="text-sm text-primary hover:underline font-label-md">Chỉnh sửa</button>
-              <button @click="confirmDeleteFlashSale(sale)" class="text-sm text-red-500 hover:underline font-label-md">Xóa</button>
+              <button v-if="sale.status === 'draft'" @click="editFlashSale(sale)" class="text-sm text-primary hover:underline font-label-md">Chỉnh sửa</button>
+              <button v-for="action in flashActions(sale.status)" :key="action" @click="transitionFlashSale(sale, action)" class="text-sm text-primary hover:underline font-label-md">{{ action }}</button>
+              <button v-if="sale.status === 'draft' && sale.products === 0" @click="confirmDeleteFlashSale(sale)" class="text-sm text-red-500 hover:underline font-label-md">Xóa</button>
             </div>
           </div>
         </div>
@@ -492,6 +508,14 @@ onMounted(() => {
         <div>
           <label class="font-bold text-sm block mb-1">Thời gian kết thúc</label>
           <DatePicker v-model="flashSale.end_time" showTime hourFormat="24" :manualInput="false" />
+        </div>
+        <div>
+          <label class="font-bold text-sm block mb-1">Cho phép cộng dồn coupon</label>
+          <select v-model="flashSale.coupon_stacking_policy" class="w-full rounded-lg border border-outline-variant p-3"><option value="deny">Không</option><option value="allow">Có</option></select>
+        </div>
+        <div>
+          <label class="font-bold text-sm block mb-1">Múi giờ</label>
+          <input v-model="flashSale.timezone" class="w-full rounded-lg border border-outline-variant p-3" readonly />
         </div>
       </div>
       <template #footer>

@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Vendor;
 
+use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -18,38 +19,37 @@ class UpdateBookRequest extends FormRequest
     /**
      * Get the validation rules that apply to the request.
      *
-     * @return array<string, \Illuminate\Contracts\Validation\ValidationRule|array<mixed>|string>
+     * @return array<string, ValidationRule|array<mixed>|string>
      */
     public function rules(): array
     {
         return [
-            'title'                     => ['sometimes', 'required', 'string', 'max:255'],
-            'author'                    => ['sometimes', 'required', 'string', 'max:255'],
-            'translator'                => ['nullable', 'string', 'max:255'],
-            'category_id'               => ['nullable', 'integer', 'exists:categories,id'],
-            'category_ids'              => ['nullable'],
-            'category_ids.*'            => ['integer', 'exists:categories,id'],
-            'series_id'                 => ['nullable', 'integer', 'exists:series,id'],
-            'series_name'               => ['nullable', 'string', 'max:255'],
-            'description'               => ['nullable', 'string', 'max:5000'],
-            'isbn'                      => ['nullable', 'string', 'max:20'],
-            'dimensions'                => ['nullable', 'string', 'max:50'],
-            'cover_format'              => ['nullable', 'string', 'max:50'],
-            'weight'                    => ['nullable', 'string', 'max:50'],
-            'language'                  => ['nullable', 'string', 'max:50'],
-            'target_age'                => ['nullable', 'string', 'max:50'],
-            'pages'                     => ['nullable', 'integer', 'min:1'],
-            'release_date'              => ['nullable', 'string', 'max:50'],
-            'price'                     => ['sometimes', 'required', 'integer', 'min:0'],
-            'sale_price'                => ['nullable', 'integer', 'min:0'],
-            'stock'                     => ['sometimes', 'required', 'integer', 'min:0'],
-            'type'                      => ['sometimes', 'required', Rule::in(['physical', 'ebook'])],
-            'status'                    => ['nullable', Rule::in(['draft', 'published'])],
-            'cover_image'               => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:10240'],
-            'gallery_images'            => ['nullable', 'array'],
-            'gallery_images.*'          => ['image', 'mimes:jpg,jpeg,png,webp', 'max:10240'],
-            'existing_gallery_images'   => ['nullable'],
-            'ebook_file'                => ['nullable', 'file', 'mimes:pdf,epub', 'max:51200'],
+            'title' => ['sometimes', 'required', 'string', 'max:255'],
+            'author' => ['sometimes', 'required', 'string', 'max:255'],
+            'translator' => ['nullable', 'string', 'max:255'],
+            'category_id' => ['nullable', 'integer', 'exists:categories,id'],
+            'category_ids' => ['nullable'],
+            'category_ids.*' => ['integer', 'exists:categories,id'],
+            'series_id' => ['nullable', 'integer', 'exists:series,id'],
+            'series_name' => ['nullable', 'string', 'max:255'],
+            'description' => ['nullable', 'string', 'max:5000'],
+            'isbn' => ['nullable', 'string', 'max:20'],
+            'dimensions' => ['nullable', 'string', 'max:50'],
+            'cover_format' => ['nullable', 'string', 'max:50'],
+            'weight' => ['nullable', 'string', 'max:50'],
+            'language' => ['nullable', 'string', 'max:50'],
+            'target_age' => ['nullable', 'string', 'max:50'],
+            'pages' => ['nullable', 'integer', 'min:1'],
+            'release_date' => ['nullable', 'string', 'max:50'],
+            'price' => ['sometimes', 'required', 'integer', 'min:0'],
+            'sale_price' => ['nullable', 'integer', 'min:0'],
+            'stock' => ['sometimes', 'required', 'integer', 'min:0'],
+            'type' => ['sometimes', 'required', Rule::in(['physical', 'ebook'])],
+            'cover_image' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:10240'],
+            'gallery_images' => ['nullable', 'array'],
+            'gallery_images.*' => ['image', 'mimes:jpg,jpeg,png,webp', 'max:10240'],
+            'existing_gallery_images' => ['nullable'],
+            'ebook_file' => ['nullable', 'file', 'mimes:pdf,epub', 'max:51200'],
         ];
     }
 
@@ -59,15 +59,15 @@ class UpdateBookRequest extends FormRequest
     public function attributes(): array
     {
         return [
-            'title'       => 'Tên sách',
-            'author'      => 'Tác giả',
+            'title' => 'Tên sách',
+            'author' => 'Tác giả',
             'category_id' => 'Danh mục',
-            'price'       => 'Giá',
-            'sale_price'  => 'Giá khuyến mãi',
-            'stock'       => 'Tồn kho',
-            'type'        => 'Loại sách',
+            'price' => 'Giá',
+            'sale_price' => 'Giá khuyến mãi',
+            'stock' => 'Tồn kho',
+            'type' => 'Loại sách',
             'cover_image' => 'Ảnh bìa',
-            'ebook_file'  => 'File E-book',
+            'ebook_file' => 'File E-book',
         ];
     }
 }

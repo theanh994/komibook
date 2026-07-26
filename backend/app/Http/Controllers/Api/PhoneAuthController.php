@@ -172,6 +172,7 @@ class PhoneAuthController extends Controller
             Auth::login($user);
             if ($request->hasSession()) {
                 $request->session()->regenerate();
+                $request->session()->put('auth.password_confirmed_at', time());
             }
 
             $user->load(['vendor', 'membershipTier', 'author']);

@@ -1,6 +1,9 @@
 <?php
 
+use App\Http\Middleware\EnsureActiveVendor;
+use App\Http\Middleware\EnsureRecentAuthentication;
 use App\Http\Middleware\EnsureRole;
+use App\Http\Middleware\EnsureVerifiedEmail;
 use App\Http\Middleware\SecurityHeadersMiddleware;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -22,6 +25,9 @@ return Application::configure(basePath: dirname(__DIR__))
         // Đăng ký middleware kiểm tra role (admin/vendor)
         $middleware->alias([
             'role' => EnsureRole::class,
+            'active-vendor' => EnsureActiveVendor::class,
+            'recent-auth' => EnsureRecentAuthentication::class,
+            'verified-email' => EnsureVerifiedEmail::class,
         ]);
 
         $middleware->redirectGuestsTo(function (Request $request) {
