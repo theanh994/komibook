@@ -23,6 +23,8 @@ class VendorProfileResource extends JsonResource
             'status' => $this->status,
             'onboarding_status' => $status,
             'application_version' => $this->application_version,
+            'business_model' => $this->business_model,
+            'primary_organization_id' => $this->primary_organization_id,
             'last_review_reason' => $this->last_review_reason,
             'terms_accepted_at' => $this->terms_accepted_at?->toISOString(),
             'submitted_at' => $this->submitted_at?->toISOString(),

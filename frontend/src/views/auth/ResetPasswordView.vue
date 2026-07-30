@@ -35,7 +35,7 @@
                   autocomplete="new-password"
                   required
                 />
-                <button @click="showPassword = !showPassword" class="absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-primary cursor-pointer transition-colors p-1" type="button">
+                <button @click="showPassword = !showPassword" class="absolute right-0 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center border-none bg-transparent text-on-surface-variant transition-colors hover:text-primary" type="button" :aria-label="showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'">
                   <span class="material-symbols-outlined" style="font-size: 20px;">{{ showPassword ? 'visibility_off' : 'visibility' }}</span>
                 </button>
               </div>
@@ -101,7 +101,7 @@
 
         <!-- Back Link -->
         <div class="text-center pt-2 border-t border-outline-variant/20">
-          <router-link to="/login" class="inline-flex items-center gap-2 text-sm font-bold text-primary hover:text-secondary transition-colors group">
+          <router-link to="/login" class="inline-flex min-h-11 items-center gap-2 px-2 text-sm font-bold text-primary transition-colors hover:text-secondary group">
             <span class="material-symbols-outlined text-base group-hover:-translate-x-1 transition-transform">arrow_back</span>
             Quay lại Đăng nhập
           </router-link>

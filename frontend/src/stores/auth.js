@@ -9,8 +9,8 @@ export const useAuthStore = defineStore('auth', {
   getters: {
     isAuthenticated: (state) => !!state.user,
     isAdmin: (state) => state.user?.role === 'admin',
-    isAuthor: (state) => state.user?.capabilities?.approved_author === true,
     isVendor: (state) => state.user?.role === 'vendor',
+    isWarehouseManager: (state) => state.user?.capabilities?.warehouse_manager === true,
     isCustomer: (state) => state.user?.role === 'customer',
   },
   actions: {
@@ -39,7 +39,10 @@ export const useAuthStore = defineStore('auth', {
       const response = await apiClient.post('/api/auth/login', credentials)
       
       // 3. Lấy thông tin user ngay sau khi đăng nhập thành công qua Cookie Session
-      await this.fetchUser()
+      await this.fetchUser({ throwOnError: true })
+      if (!this.user) {
+        throw new Error('Không thể xác nhận phiên đăng nhập.')
+      }
       return response.data
     },
 
@@ -81,13 +84,15 @@ export const useAuthStore = defineStore('auth', {
       return response.data
     },
 
-    async fetchUser() {
+    async fetchUser({ throwOnError = false } = {}) {
       try {
         const response = await apiClient.get('/api/auth/me')
         const responseData = response.data.data || response.data
         this.user = responseData.user || responseData
-      } catch {
+        return this.user
+      } catch (error) {
         this.user = null
+        if (throwOnError) throw error
       } finally {
         this.userFetched = true
       }

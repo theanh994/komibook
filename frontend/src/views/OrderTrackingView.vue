@@ -1,5 +1,5 @@
 <template>
-  <div class="min-h-screen bg-background py-xl px-gutter font-inter antialiased">
+  <main class="min-h-screen bg-background py-xl px-gutter font-inter antialiased" aria-labelledby="tracking-title">
     <!-- Dynamic Background Decor -->
     <div class="fixed inset-0 pointer-events-none overflow-hidden opacity-30">
        <div class="absolute top-[-5%] right-[-5%] w-[500px] h-[500px] bg-primary/10 blur-[120px] rounded-full"></div>
@@ -11,22 +11,22 @@
       <!-- Premium Header Section -->
       <div class="flex flex-col lg:flex-row justify-between items-start lg:items-end mb-xxl gap-10 animate-fade-in">
         <div class="space-y-4">
-          <nav class="flex items-center gap-3 text-[10px] font-bold uppercase tracking-[0.3em] text-outline mb-4">
-            <router-link to="/orders" class="hover:text-primary transition-colors">Đơn hàng</router-link>
+          <nav class="flex items-center gap-3 text-xs font-bold text-outline mb-4" aria-label="Đường dẫn">
+            <router-link to="/orders" class="inline-flex min-h-11 items-center hover:text-primary transition-colors">Đơn hàng</router-link>
             <span class="material-symbols-outlined text-[14px] opacity-40">chevron_right</span>
             <span class="text-on-surface">Theo dõi vận chuyển</span>
           </nav>
           
           <div class="flex items-center gap-4">
              <div class="w-2 h-10 bg-primary rounded-full"></div>
-             <h1 class="text-4xl md:text-5xl font-bold text-on-surface tracking-tighter leading-none">Hành trình đơn hàng</h1>
+             <h1 id="tracking-title" class="text-3xl md:text-5xl font-bold text-on-surface tracking-tight leading-tight">Hành trình đơn hàng</h1>
           </div>
           
           <div v-if="order" class="flex flex-wrap items-center gap-4 pt-2">
              <div class="px-5 py-2.5 bg-surface-container-high rounded-2xl border border-outline-variant/10 shadow-sm">
                 <span class="text-xs font-bold text-on-surface select-all">#{{ order.order_code || order.id }}</span>
              </div>
-            <span :class="['px-5 py-2 rounded-2xl text-[10px] font-bold uppercase tracking-widest shadow-lg flex items-center gap-2 border border-white/10', getStatusStyle(order)]">
+            <span :class="['px-5 py-2 rounded-2xl text-xs font-bold tracking-wide shadow-lg flex items-center gap-2 border border-white/10', getStatusStyle(order)]">
                <span class="w-2 h-2 rounded-full bg-current animate-pulse"></span>
               {{ getStatusText(order) }}
              </span>
@@ -34,7 +34,7 @@
         </div>
         
         <div class="flex gap-4 w-full lg:w-auto">
-          <button @click="$router.push('/orders')" class="flex-1 lg:flex-none px-8 py-4 rounded-2xl border border-outline-variant/20 bg-surface-container-lowest text-on-surface font-bold text-xs uppercase tracking-widest hover:bg-surface-container-low transition-all flex items-center justify-center gap-3 cursor-pointer shadow-sm">
+          <button type="button" @click="$router.push('/orders')" class="min-h-11 flex-1 lg:flex-none px-8 py-3 rounded-xl border border-outline-variant/20 bg-surface-container-lowest text-on-surface font-bold text-sm hover:bg-surface-container-low transition-colors flex items-center justify-center gap-3 cursor-pointer shadow-sm">
             <span class="material-symbols-outlined text-[20px]">arrow_back</span>
             Danh sách đơn
           </button>
@@ -42,17 +42,17 @@
       </div>
 
       <!-- Loading State -->
-      <div v-if="loading" class="py-32 flex flex-col items-center gap-8 animate-fade-in">
+      <div v-if="loading" class="py-32 flex flex-col items-center gap-8 animate-fade-in" role="status" aria-live="polite">
         <div class="relative w-20 h-20">
           <div class="absolute inset-0 border-8 border-primary/10 rounded-full"></div>
           <div class="absolute inset-0 border-8 border-t-primary rounded-full animate-spin"></div>
         </div>
-        <p class="text-[11px] font-bold text-outline uppercase tracking-[0.3em] animate-pulse">Đang tải thông tin vận chuyển...</p>
+        <p class="text-sm font-bold text-on-surface-variant">Đang tải thông tin vận chuyển...</p>
       </div>
 
       <!-- Error State -->
-      <div v-else-if="error" class="py-24 flex flex-col items-center text-center gap-6 bg-surface-container-lowest rounded-[48px] border border-outline-variant/10 shadow-2xl animate-fade-in p-8">
-        <div class="w-20 h-20 bg-rose-50 rounded-full flex items-center justify-center text-rose-500">
+      <div v-else-if="error" class="py-20 flex flex-col items-center text-center gap-6 bg-surface-container-lowest rounded-3xl border border-outline-variant/20 shadow-xl animate-fade-in p-8" role="alert">
+        <div class="w-20 h-20 bg-rose-50 rounded-full flex items-center justify-center text-rose-700" aria-hidden="true">
            <span class="material-symbols-outlined text-[48px]">error</span>
         </div>
         <div class="space-y-2">
@@ -60,10 +60,10 @@
           <p class="text-on-surface-variant text-sm max-w-md mx-auto">{{ error }}</p>
         </div>
         <div class="flex flex-col sm:flex-row gap-4 justify-center pt-2">
-          <button @click="fetchOrder" class="px-8 py-4 rounded-2xl bg-rose-600 text-white font-bold text-xs uppercase tracking-widest border-none cursor-pointer">
+          <button type="button" @click="fetchOrder" class="min-h-11 px-8 py-3 rounded-xl bg-rose-700 text-white font-bold text-sm border-none cursor-pointer">
             Thử lại
           </button>
-          <button @click="$router.push('/orders')" class="px-8 py-4 rounded-2xl border border-outline-variant/30 bg-surface-container-low text-on-surface font-bold text-xs uppercase tracking-widest cursor-pointer">
+          <button type="button" @click="$router.push('/orders')" class="min-h-11 px-8 py-3 rounded-xl border border-outline-variant/30 bg-surface-container-low text-on-surface font-bold text-sm cursor-pointer">
             Về danh sách đơn hàng
           </button>
         </div>
@@ -75,7 +75,7 @@
         <div class="lg:col-span-2 space-y-xl">
           
           <!-- Modern Stepper Card -->
-          <div class="bg-surface-container-lowest/60 backdrop-blur-xl rounded-[48px] p-8 md:p-14 border border-outline-variant/10 shadow-2xl relative overflow-hidden">
+          <div class="bg-surface-container-lowest/60 backdrop-blur-xl rounded-3xl p-6 md:p-10 border border-outline-variant/20 shadow-xl relative overflow-hidden">
             <div class="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full -mr-32 -mt-32 blur-3xl"></div>
             
             <h2 class="text-2xl font-bold text-on-surface mb-14 tracking-tight">
@@ -141,7 +141,7 @@
           </div>
 
           <!-- Timeline History Card -->
-          <div class="bg-surface-container-lowest/60 backdrop-blur-xl rounded-[48px] p-8 md:p-14 border border-outline-variant/10 shadow-2xl">
+          <div class="bg-surface-container-lowest/60 backdrop-blur-xl rounded-3xl p-6 md:p-10 border border-outline-variant/20 shadow-xl">
             <div class="flex items-center justify-between mb-12">
                <h3 class="text-2xl font-bold text-on-surface tracking-tight">Lịch sử đơn hàng</h3>
                <div class="px-4 py-2 bg-primary/5 rounded-xl border border-primary/10">
@@ -187,7 +187,7 @@
         <!-- Right Column: Shipping Details & Summary -->
         <div class="space-y-xl">
           <!-- Delivery Info Card -->
-          <div class="bg-surface-container-lowest/60 backdrop-blur-xl rounded-[40px] p-8 border border-outline-variant/10 shadow-2xl flex flex-col gap-8">
+          <div class="bg-surface-container-lowest/60 backdrop-blur-xl rounded-3xl p-6 md:p-8 border border-outline-variant/20 shadow-xl flex flex-col gap-8">
             <h3 class="text-xl font-bold text-on-surface mb-2 flex items-center gap-3">
               <span class="material-symbols-outlined text-primary text-[28px]">local_shipping</span>
               Vận chuyển
@@ -236,12 +236,12 @@
           </div>
 
           <!-- Order Summary Mini Card -->
-          <div class="bg-surface-container-lowest/60 backdrop-blur-xl rounded-[40px] p-8 border border-outline-variant/10 shadow-2xl">
+          <div class="bg-surface-container-lowest/60 backdrop-blur-xl rounded-3xl p-6 md:p-8 border border-outline-variant/20 shadow-xl">
             <h3 class="text-xl font-bold text-on-surface mb-8 tracking-tight">Kiện hàng ({{ order.items?.length || 0 }})</h3>
             <div class="space-y-6 max-h-[400px] overflow-y-auto no-scrollbar pr-2">
               <div v-for="item in order.items" :key="item.id" class="flex gap-5 items-center group cursor-pointer">
-                <div class="w-16 h-20 rounded-2xl overflow-hidden shrink-0 shadow-lg border border-outline-variant/10 transform group-hover:scale-105 transition-all duration-500">
-                  <img v-if="item.book?.cover_image" :src="getCoverUrl(item.book.cover_image)" :alt="item.book.title" class="w-full h-full object-cover" />
+                <div class="w-16 h-24 overflow-hidden shrink-0 shadow-lg border border-outline-variant/10">
+                  <img v-if="item.book?.cover_image" :src="getCoverUrl(item.book.cover_image)" :alt="`Bìa sách ${item.book.title}`" class="w-full h-full object-contain" />
                   <div v-else class="w-full h-full flex items-center justify-center text-outline/30 bg-surface-container-high">
                     <span class="material-symbols-outlined text-2xl">book</span>
                   </div>
@@ -273,7 +273,7 @@
          <p class="text-[11px] font-bold text-outline uppercase tracking-[0.3em] opacity-40">KomiBook Order Tracking System</p>
       </div>
     </div>
-  </div>
+  </main>
 </template>
 
 <script setup>
@@ -423,5 +423,14 @@ onMounted(() => {
 
 .fill-1 {
   font-variation-settings: 'FILL' 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-in,
+  .animate-slide-up,
+  .animate-spin,
+  .animate-pulse {
+    animation: none !important;
+  }
 }
 </style>

@@ -36,18 +36,50 @@ class CommerceFeeService
         ];
     }
 
-    /** @return array{base_amount:int,service_fee_amount:int,commission_amount:int,total_amount:int,commission_rate:float,service_fee_rate:float} */
+    /**
+     * @return array{
+     *   base_amount:int,
+     *   seller_gross:int,
+     *   service_fee_amount:int,
+     *   commission_amount:int,
+     *   total_amount:int,
+     *   customer_pays:int,
+     *   seller_net:int,
+     *   platform_net_before_tax:int,
+     *   tax_rate:float,
+     *   tax_amount:int,
+     *   tax_configured:bool,
+     *   commission_rate:float,
+     *   service_fee_rate:float
+     * }
+     */
     public function calculate(int $baseAmount, array $schedule): array
     {
         $baseAmount = max(0, $baseAmount);
-        $serviceFee = (int) round($baseAmount * (float) $schedule['service_fee_rate'] / 100);
-        $commission = (int) round($baseAmount * (float) $schedule['commission_rate'] / 100);
+        $serviceFee = (int) round(
+            $baseAmount * (float) $schedule['service_fee_rate'] / 100,
+            0,
+            PHP_ROUND_HALF_UP,
+        );
+        $commission = (int) round(
+            $baseAmount * (float) $schedule['commission_rate'] / 100,
+            0,
+            PHP_ROUND_HALF_UP,
+        );
+        $customerPays = $baseAmount + $serviceFee;
 
         return [
             'base_amount' => $baseAmount,
+            'seller_gross' => $baseAmount,
             'service_fee_amount' => $serviceFee,
             'commission_amount' => $commission,
-            'total_amount' => $baseAmount + $serviceFee,
+            'total_amount' => $customerPays,
+            'customer_pays' => $customerPays,
+            'seller_net' => max(0, $baseAmount - $commission),
+            'platform_net_before_tax' => $serviceFee + $commission,
+            'tax_rate' => 0.0,
+            'tax_amount' => 0,
+            'tax_configured' => false,
             'commission_rate' => (float) $schedule['commission_rate'],
             'service_fee_rate' => (float) $schedule['service_fee_rate'],
         ];

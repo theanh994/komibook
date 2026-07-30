@@ -29,6 +29,13 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
+        config([
+            'database.connections' => array_intersect_key(
+                config('database.connections', []),
+                array_flip(['sqlite', 'mysql']),
+            ),
+        ]);
+
         $this->app->bind(FacebookTokenVerifierInterface::class, function () {
             if (app()->environment('testing')) {
                 return new FakeFacebookTokenVerifier;

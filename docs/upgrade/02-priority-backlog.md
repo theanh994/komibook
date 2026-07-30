@@ -1,5 +1,7 @@
 # Danh SÃ¡ch Backlog Æ¯u TiÃªn NÃ¢ng Cáº¥p KomiBook (P0 / P1 / P2)
 
+> **Addendum 2026-07-27:** Backlog sản phẩm sau Giai đoạn 4 và các namespace mới được chuẩn hóa tại `61-phase-5-to-8-revised-roadmap.md`. Warehouse isolation/privacy là P0; các batch source còn lại chỉ bắt đầu sau khi ADR Giai đoạn 5 được duyệt. Các mô tả lịch sử bên dưới không ghi đè quyết định mới.
+
 - **NgÃ y cáº­p nháº­t:** 22/07/2026
 - **Giai Ä‘oáº¡n:** GIAI ÄOáº N 1 â€” SECURITY HARDENING (HOÃ€N THÃ€NH BIÃŠN Táº¬P VÃ€ DUYá»†T Báº°NG CHá»¨NG CORRECTIVE REVIEW)
 - **BÃ¡o cÃ¡o káº¿t quáº£ Giai Ä‘oáº¡n 1:** [03-phase-1-security-report.md](file:///c:/Users/thean/Herd/DoAnTotNGhiep_komibook/docs/upgrade/03-phase-1-security-report.md)
@@ -33,8 +35,6 @@
 - **Test cáº§n bá»• sung:** Feature test verify OTP vá»›i mÃ£ '123456' pháº£i bá»‹ tá»« chá»‘i 422 Unprocessable Entity.
 - **Phá»¥ thuá»™c:** KhÃ´ng.
 - **Æ¯á»›c lÆ°á»£ng:** S
-
----
 
 ### Issue `SEC-02`: Lá»— Há»•ng Stored XSS Táº¡i MÃ´ Táº£ SÃ¡ch Do Render `v-html` KhÃ´ng Sanitize [Tráº¡ng thÃ¡i: VERIFIED]
 

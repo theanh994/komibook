@@ -16,6 +16,7 @@ const toast = useToast()
 // ─── State ───
 const campaigns = ref([])
 const loadingCampaigns = ref(false)
+const campaignError = ref('')
 
 // Books options for registration dropdown
 const publishedBooks = ref([])
@@ -64,10 +65,12 @@ const formatDate = (val) => {
 // ─── API Fetches ───
 const fetchCampaigns = async () => {
   loadingCampaigns.value = true
+  campaignError.value = ''
   try {
     const res = await apiClient.get('/api/vendor/flash-sales')
     campaigns.value = res.data.data || []
   } catch (e) {
+    campaignError.value = 'Không thể tải chiến dịch Flash Sale từ hệ thống. Không có chiến dịch giả được hiển thị.'
     toast.add({
       severity: 'error',
       summary: 'Lỗi',
@@ -250,8 +253,13 @@ onMounted(() => {
       </div>
     </div>
 
+    <div v-if="campaignError" class="mt-6 flex flex-col gap-3 rounded-xl border border-error/30 bg-error-container/30 p-4 text-on-error-container sm:flex-row sm:items-center sm:justify-between" role="alert">
+      <span>{{ campaignError }}</span>
+      <Button label="Thử lại" outlined severity="danger" class="min-h-11" @click="fetchCampaigns" />
+    </div>
+
     <!-- Campaigns List Section -->
-    <div class="table-card mt-6">
+    <div v-if="!campaignError" class="table-card mt-6">
       <div class="card-header border-b border-slate-100 p-5 flex justify-between items-center bg-slate-50/50">
         <div>
           <h2 class="card-title text-lg font-bold text-slate-800">Danh sách Chiến dịch Đang hoạt động</h2>
@@ -259,6 +267,8 @@ onMounted(() => {
         </div>
         <Button 
           icon="pi pi-refresh" 
+          aria-label="Làm mới danh sách chiến dịch"
+          class="min-h-11 min-w-11"
           outlined 
           severity="secondary" 
           size="small" 

@@ -67,7 +67,7 @@
             <div class="flex flex-col gap-4">
               <!-- Email Input -->
               <div class="flex flex-col gap-1.5">
-                <label class="text-[13px] font-semibold text-on-surface-variant ml-0.5 flex items-center gap-2 uppercase tracking-wide" for="email">
+                <label class="text-[13px] font-semibold text-on-surface-variant ml-0.5 flex items-center gap-2 uppercase tracking-wide" for="login-email">
                   <span class="material-symbols-outlined text-[18px] text-primary/80">person</span>
                   Email
                 </label>
@@ -84,7 +84,7 @@
                     <span class="material-symbols-outlined text-[18px] text-primary/80">lock</span>
                     Mật khẩu
                   </label>
-                  <router-link to="/forgot-password" class="text-xs font-semibold text-primary hover:text-secondary transition-colors">Quên mật khẩu?</router-link>
+                  <router-link to="/forgot-password" class="inline-flex min-h-11 items-center px-2 text-xs font-semibold text-primary transition-colors hover:text-secondary">Quên mật khẩu?</router-link>
                 </div>
                 <div class="relative group">
                   <input                    v-model="password"
@@ -92,13 +92,13 @@
                     autocomplete="current-password"
                     required
                   />
-                  <button @click="showPassword = !showPassword" class="absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-primary cursor-pointer transition-colors p-1" type="button">
+                  <button @click="showPassword = !showPassword" class="absolute right-0 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center border-none bg-transparent text-on-surface-variant transition-colors hover:text-primary" type="button" :aria-label="showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'">
                     <span class="material-symbols-outlined" style="font-size: 20px;">{{ showPassword ? 'visibility_off' : 'visibility' }}</span>
                   </button>
                 </div>
               </div>
               <!-- Remember Me -->
-              <div class="flex items-center gap-3 mt-1 px-0.5">
+              <div class="mt-1 flex min-h-11 items-center gap-3 px-0.5">
                 <input                  v-model="remember"
                   class="peer w-5 h-5 rounded-md border border-outline-variant text-primary focus:ring-primary focus:ring-offset-0 bg-surface-container-lowest cursor-pointer transition-all checked:bg-primary checked:border-primary"                  id="remember"                  type="checkbox"
                 />
@@ -123,7 +123,7 @@
           <!-- Footer Links -->
           <div class="text-center mt-2">
             <span class="text-sm text-on-surface-variant">Chưa có tài khoản?</span>
-            <router-link to="/register" class="text-sm font-bold text-primary hover:text-secondary ml-2 underline underline-offset-4 transition-colors">Đăng ký ngay</router-link>
+            <router-link to="/register" class="ml-2 inline-flex min-h-11 items-center text-sm font-bold text-primary underline underline-offset-4 transition-colors hover:text-secondary">Đăng ký ngay</router-link>
           </div>
         </div>
       </div>
@@ -131,11 +131,11 @@
       <!-- Trust indicators / Minimal Footer -->
       <div class="mt-8 text-center flex flex-col items-center gap-4">
         <div class="flex items-center gap-4 text-xs font-semibold text-on-surface-variant/40 uppercase tracking-widest">
-          <a class="hover:text-primary transition-all" href="#">Điều khoản</a>
+          <a class="inline-flex min-h-11 items-center transition-colors hover:text-primary" href="#">Điều khoản</a>
           <span class="w-1 h-1 bg-outline/20 rounded-full"></span>
-          <a class="hover:text-primary transition-all" href="#">Bảo mật</a>
+          <a class="inline-flex min-h-11 items-center transition-colors hover:text-primary" href="#">Bảo mật</a>
           <span class="w-1 h-1 bg-outline/20 rounded-full"></span>
-          <a class="hover:text-primary transition-all" href="#">Trợ giúp</a>
+          <router-link class="inline-flex min-h-11 items-center transition-colors hover:text-primary" to="/help-center">Trợ giúp</router-link>
         </div>
       </div>
     </main>
@@ -209,7 +209,6 @@
             <select              v-model="googleRegForm.desired_role"
               class="w-full h-11 bg-surface-container-lowest border border-outline-variant/60 rounded-xl px-4 text-sm text-on-surface focus:outline-none focus:border-primary transition-all duration-200"            >
               <option value="customer">Độc giả</option>
-              <option value="author">Tác giả</option>
               <option value="vendor">Nhà bán</option>
             </select>
           </div>
@@ -388,7 +387,6 @@
             <select              v-model="phoneRegForm.desired_role"
               class="w-full h-11 bg-surface-container-lowest border border-outline-variant/60 rounded-xl px-4 text-sm text-on-surface focus:outline-none focus:border-primary transition-all duration-200"            >
               <option value="customer">Độc giả</option>
-              <option value="author">Tác giả</option>
               <option value="vendor">Nhà bán</option>
             </select>
           </div>

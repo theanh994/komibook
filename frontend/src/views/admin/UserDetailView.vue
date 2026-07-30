@@ -69,41 +69,41 @@ onMounted(fetchUser)
 <template>
   <div class="pb-xxl w-full pt-6">
     <!-- Breadcrumb + Actions -->
-    <div class="flex items-center justify-between mb-xl animate-fade-in">
-      <div class="flex items-center gap-sm text-on-surface-variant font-body-md text-body-md">
-        <button @click="router.push({ name: 'admin-users' })" class="hover:text-primary transition-colors flex items-center gap-1">
+    <div class="flex flex-col gap-md sm:flex-row sm:items-center sm:justify-between mb-xl animate-fade-in">
+      <div class="flex items-center gap-sm text-on-surface-variant font-body-md text-body-md min-w-0">
+        <button type="button" @click="router.push({ name: 'admin-users' })" class="min-h-11 hover:text-primary transition-colors flex items-center gap-1">
           <span class="material-symbols-outlined text-[18px]">arrow_back</span>
           Quản lý Users
         </button>
         <span class="material-symbols-outlined text-[16px]">chevron_right</span>
         <span class="text-on-surface font-medium">{{ user?.name || 'Chi tiết người dùng' }}</span>
       </div>
-      <div v-if="user" class="flex items-center gap-sm">
-        <button class="px-4 py-2 border border-red-300 text-red-600 rounded-lg font-label-md text-label-md hover:bg-red-50 transition-colors flex items-center gap-sm">
+      <div v-if="user" class="grid grid-cols-1 gap-sm sm:flex sm:items-center">
+        <button type="button" class="min-h-11 px-4 py-2 border border-red-300 text-red-600 rounded-lg font-label-md text-label-md hover:bg-red-50 transition-colors flex items-center justify-center gap-sm">
           <span class="material-symbols-outlined text-[18px]">block</span> Tạm khóa
         </button>
-        <button class="px-4 py-2 bg-primary text-on-primary rounded-lg font-label-md text-label-md hover:bg-primary-container transition-colors flex items-center gap-sm">
+        <button type="button" class="min-h-11 px-4 py-2 bg-primary text-on-primary rounded-lg font-label-md text-label-md hover:bg-primary-container transition-colors flex items-center justify-center gap-sm">
           <span class="material-symbols-outlined text-[18px]">mail</span> Gửi thông báo
         </button>
       </div>
     </div>
 
     <!-- Loading State -->
-    <div v-if="loading" class="p-24 flex justify-center items-center flex-col gap-3">
+    <div v-if="loading" role="status" aria-live="polite" class="p-12 sm:p-24 flex justify-center items-center flex-col gap-3">
       <i class="pi pi-spin pi-spinner text-4xl text-indigo-600"></i>
       <span class="text-sm text-slate-500">Đang tải thông tin người dùng...</span>
     </div>
 
     <!-- Error State -->
-    <div v-else-if="error" class="bg-rose-50 border border-rose-200 rounded-2xl p-8 text-center space-y-4 my-6">
+    <div v-else-if="error" role="alert" class="bg-rose-50 border border-rose-200 rounded-2xl p-6 sm:p-8 text-center space-y-4 my-6">
       <i class="pi pi-exclamation-triangle text-4xl text-rose-500"></i>
-      <h3 class="text-lg font-bold text-rose-800">Không thể tải hồ sơ người dùng</h3>
+      <h1 class="text-xl font-bold text-rose-800">Không thể tải hồ sơ người dùng</h1>
       <p class="text-sm text-rose-600 max-w-md mx-auto">{{ error }}</p>
       <div class="flex justify-center gap-3 pt-2">
-        <button @click="router.push({ name: 'admin-users' })" class="px-4 py-2 border border-slate-300 text-slate-700 rounded-lg font-bold text-xs hover:bg-slate-100">
+        <button type="button" @click="router.push({ name: 'admin-users' })" class="min-h-11 px-4 py-2 border border-slate-300 text-slate-700 rounded-lg font-bold text-xs hover:bg-slate-100">
           Quay lại danh sách
         </button>
-        <button @click="fetchUser" class="px-4 py-2 bg-rose-600 text-white rounded-lg font-bold text-xs hover:bg-rose-700 flex items-center gap-1">
+        <button type="button" @click="fetchUser" class="min-h-11 px-4 py-2 bg-rose-600 text-white rounded-lg font-bold text-xs hover:bg-rose-700 flex items-center gap-1">
           <i class="pi pi-refresh"></i> Thử lại
         </button>
       </div>
@@ -208,7 +208,7 @@ onMounted(fetchUser)
               Lịch sử đơn hàng
             </h3>
           </div>
-          <div class="overflow-x-auto">
+          <div class="overflow-x-auto" role="region" aria-label="Lịch sử đơn hàng của người dùng" tabindex="0">
             <table class="w-full text-left border-collapse">
               <thead>
                 <tr class="bg-surface-container-low text-on-surface-variant font-label-md text-[13px]">
@@ -247,4 +247,12 @@ onMounted(fetchUser)
 .animate-slide-up { opacity: 0; transform: translateY(15px); animation: slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 @keyframes slideUp { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-in,
+  .animate-slide-up {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+}
 </style>

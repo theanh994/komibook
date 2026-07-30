@@ -6,19 +6,18 @@
       <input type="file" ref="avatarInput" class="hidden" accept="image/*" @change="onAvatarSelected" />
 
       <!-- Right Main Content Area -->
-      <main class="flex-1 min-w-0 w-full flex flex-col">
+      <main class="flex-1 min-w-0 w-full flex flex-col" aria-labelledby="profile-title">
         <div class="bg-surface-container-lowest rounded-3xl border border-outline-variant/30 soft-shadow overflow-hidden flex-1 flex flex-col">
           <!-- Header Banner (Clean, no redundant buttons) -->
           <div class="p-lg md:p-xl border-b border-outline-variant/10 bg-gradient-to-r from-surface-container-low to-surface-container-lowest flex items-center justify-between gap-4">
             <div>
               <div class="flex items-center gap-2 mb-1">
-                <h1 class="text-2xl font-black text-on-surface tracking-tight">Thông tin cá nhân</h1>
+                <h1 id="profile-title" class="text-2xl font-black text-on-surface tracking-tight">Thông tin cá nhân</h1>
                 <span                  class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider"
                   :class="{
                     'bg-slate-900 text-amber-300': authStore.isAdmin,
                     'bg-indigo-600 text-white': authStore.isVendor,
-                    'bg-emerald-600 text-white': authStore.isAuthor,
-                    'bg-surface-container-high text-outline': !authStore.isAdmin && !authStore.isVendor && !authStore.isAuthor
+                    'bg-surface-container-high text-outline': !authStore.isAdmin && !authStore.isVendor
                   }"
                 >
                   {{ roleLabel }}
@@ -29,10 +28,14 @@
           </div>
 
           <!-- Navigation Tabs -->
-          <div class="px-md pt-md flex gap-md overflow-x-auto no-scrollbar border-b border-outline-variant/10 shrink-0">
+          <div class="px-md pt-md flex gap-md overflow-x-auto no-scrollbar border-b border-outline-variant/10 shrink-0" role="tablist" aria-label="Nhóm cài đặt tài khoản">
             <button              v-for="tab in tabs"              :key="tab.id"
+              type="button"
+              role="tab"
+              :aria-selected="activeTab === tab.id"
+              :aria-controls="`profile-panel-${tab.id}`"
               @click="switchTab(tab.id)"
-              class="px-lg py-md text-sm font-bold transition-all border-none bg-transparent cursor-pointer relative whitespace-nowrap"
+              class="min-h-11 px-lg py-md text-sm font-bold transition-colors border-none bg-transparent cursor-pointer relative whitespace-nowrap"
               :class="activeTab === tab.id ? 'text-primary' : 'text-outline hover:text-on-surface'"
             >
               {{ tab.label }}
@@ -42,7 +45,7 @@
 
           <div class="p-lg md:p-xl flex-1">
             <!-- TAB 1: THÔNG TIN CHUNG & SỞ THÍCH ĐỌC SÁCH -->
-            <div v-if="activeTab === 'general'" class="animate-fade-in space-y-8">
+            <div v-if="activeTab === 'general'" id="profile-panel-general" role="tabpanel" class="animate-fade-in space-y-8">
               <form @submit.prevent="handleUpdateInfo" class="space-y-8">
                 <!-- KHU VỰC 1: THÔNG TIN CÁ NHÂN CƠ BẢN (Icons removed inside form inputs) -->
                 <div class="space-y-4">
@@ -53,26 +56,26 @@
                   <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <!-- Email (Read-only) -->
                     <div class="space-y-2">
-                      <label class="text-xs font-bold text-on-surface-variant ml-1 uppercase tracking-wider">Email (Không thể chỉnh sửa)</label>
-                      <InputText v-model="infoForm.email" disabled class="w-full !px-4 !rounded-2xl !bg-surface-container-high !border-none !text-outline !h-11 text-sm font-medium" />
+                      <label for="profile-email" class="text-xs font-bold text-on-surface-variant ml-1 uppercase tracking-wider">Email (Không thể chỉnh sửa)</label>
+                      <InputText id="profile-email" v-model="infoForm.email" disabled class="w-full !px-4 !rounded-2xl !bg-surface-container-high !border-none !text-outline !h-11 text-sm font-medium" />
                     </div>
 
                     <!-- Họ và tên -->
                     <div class="space-y-2">
-                      <label class="text-xs font-bold text-on-surface-variant ml-1 uppercase tracking-wider">Họ và tên <span class="text-red-500">*</span></label>
-                      <InputText v-model="infoForm.name" placeholder="Nhập họ và tên..." class="w-full !px-4 !rounded-2xl !border-outline-variant/40 !h-11 text-sm" required />
+                      <label for="profile-name" class="text-xs font-bold text-on-surface-variant ml-1 uppercase tracking-wider">Họ và tên <span class="text-red-500">*</span></label>
+                      <InputText id="profile-name" v-model="infoForm.name" autocomplete="name" placeholder="Nhập họ và tên..." class="w-full !px-4 !rounded-2xl !border-outline-variant/40 !h-11 text-sm" required />
                     </div>
 
                     <!-- Số điện thoại -->
                     <div class="space-y-2">
-                      <label class="text-xs font-bold text-on-surface-variant ml-1 uppercase tracking-wider">Số điện thoại</label>
-                      <InputText v-model="infoForm.phone" placeholder="Ví dụ: 0989999999" class="w-full !px-4 !rounded-2xl !border-outline-variant/40 !h-11 text-sm" />
+                      <label for="profile-phone" class="text-xs font-bold text-on-surface-variant ml-1 uppercase tracking-wider">Số điện thoại</label>
+                      <InputText id="profile-phone" v-model="infoForm.phone" autocomplete="tel" inputmode="tel" placeholder="Ví dụ: 0989999999" class="w-full !px-4 !rounded-2xl !border-outline-variant/40 !h-11 text-sm" />
                     </div>
 
                     <!-- Giới tính -->
                     <div class="space-y-2">
-                      <label class="text-xs font-bold text-on-surface-variant ml-1 uppercase tracking-wider">Giới tính</label>
-                      <select                        v-model="infoForm.gender"                        class="w-full h-11 px-4 bg-surface-container-lowest border border-outline-variant/40 rounded-2xl text-sm text-on-surface focus:outline-none focus:border-primary transition-all cursor-pointer"
+                      <label for="profile-gender" class="text-xs font-bold text-on-surface-variant ml-1 uppercase tracking-wider">Giới tính</label>
+                      <select id="profile-gender" v-model="infoForm.gender" class="w-full h-11 px-4 bg-surface-container-lowest border border-outline-variant/40 rounded-2xl text-sm text-on-surface focus:outline-none focus:border-primary transition-all cursor-pointer"
                       >
                         <option value="male">Nam</option>
                         <option value="female">Nữ</option>
@@ -83,10 +86,10 @@
                     <!-- Ngày sinh (Validation <= Today) -->
                     <div class="space-y-2">
                       <div class="flex justify-between items-center">
-                        <label class="text-xs font-bold text-on-surface-variant ml-1 uppercase tracking-wider">Ngày sinh</label>
-                        <span class="text-[11px] text-outline">Tính độ tuổi cho Thuật toán đề xuất</span>
+                        <label for="profile-birthday" class="text-xs font-bold text-on-surface-variant ml-1 uppercase tracking-wider">Ngày sinh</label>
+                        <span class="text-xs text-outline">Dùng để cá nhân hóa gợi ý sách</span>
                       </div>
-                      <input                        type="date"
+                      <input id="profile-birthday" type="date"
                         v-model="infoForm.birthday"                        :max="todayDate"
                         class="w-full h-11 px-4 bg-surface-container-lowest border border-outline-variant/40 rounded-2xl text-sm text-on-surface focus:outline-none focus:border-primary transition-all cursor-pointer"
                       />
@@ -94,12 +97,12 @@
 
                     <!-- Địa chỉ cá nhân -->
                     <div class="space-y-2 md:col-span-2">
-                      <label class="text-xs font-bold text-on-surface-variant ml-1 uppercase tracking-wider">Địa chỉ cá nhân</label>
-                      <Textarea v-model="infoForm.address" rows="2" placeholder="Nhập địa chỉ nhà của bạn..." class="w-full !px-4 !py-3 !rounded-2xl !border-outline-variant/40 resize-none text-sm" />
+                      <label for="profile-address" class="text-xs font-bold text-on-surface-variant ml-1 uppercase tracking-wider">Địa chỉ cá nhân</label>
+                      <Textarea id="profile-address" v-model="infoForm.address" rows="2" autocomplete="street-address" placeholder="Nhập địa chỉ nhà của bạn..." class="w-full !px-4 !py-3 !rounded-2xl !border-outline-variant/40 resize-none text-sm" />
                     </div>
-                    <div class="md:col-span-2 flex items-start gap-3 p-4 rounded-2xl bg-surface-container-low border border-outline-variant/20">
+                    <div class="md:col-span-2 flex min-h-11 items-center gap-3 p-4 rounded-2xl bg-surface-container-low border border-outline-variant/20">
                       <Checkbox v-model="infoForm.marketing_consent" :binary="true" inputId="marketing_consent" />
-                      <label for="marketing_consent" class="text-xs text-on-surface-variant leading-relaxed cursor-pointer"><strong class="text-on-surface">Nhận thông tin ưu đãi</strong><br>KomiBook chỉ đưa tài khoản vào chiến dịch marketing khi bạn chủ động đồng ý. Bạn có thể rút lại lựa chọn này bất cứ lúc nào.</label>
+                      <label for="marketing_consent" class="flex min-h-11 flex-col justify-center text-sm text-on-surface-variant leading-relaxed cursor-pointer"><strong class="text-on-surface">Nhận thông tin ưu đãi</strong>KomiBook chỉ đưa tài khoản vào chiến dịch marketing khi bạn chủ động đồng ý. Bạn có thể rút lại lựa chọn này bất cứ lúc nào.</label>
                     </div>
                   </div>
                 </div>
@@ -131,7 +134,7 @@
                       :key="cat.id"
                       type="button"
                       @click="toggleCategoryPreference(cat.id)"
-                      class="px-3.5 py-2 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer flex items-center gap-1.5 border"
+                      class="min-h-11 px-3.5 py-2 rounded-xl text-sm font-bold transition-colors duration-200 cursor-pointer flex items-center gap-1.5 border"
                       :class="selectedCategoryIds.includes(cat.id)
                         ? 'bg-gradient-to-r from-primary to-secondary text-white border-transparent shadow-md scale-[1.03]'
                         : 'bg-white text-slate-700 border-slate-200 hover:border-primary/50 hover:bg-slate-50'"
@@ -156,7 +159,7 @@
             </div>
 
             <!-- TAB 2: HẠNG VIP & QUYỀN LỢI -->
-            <div v-if="activeTab === 'membership'" class="animate-fade-in space-y-lg">
+            <div v-if="activeTab === 'membership'" id="profile-panel-membership" role="tabpanel" class="animate-fade-in space-y-lg">
               <div class="p-6 rounded-3xl text-white relative overflow-hidden shadow-xl"
                 :class="authStore.user?.membership_tier ? 'bg-gradient-to-br from-amber-500 via-yellow-600 to-amber-700' : 'bg-gradient-to-br from-slate-600 to-slate-800'"
               >
@@ -203,10 +206,10 @@
             </div>
 
             <!-- TAB 3: KHU VỰC 4 - QUẢN LÝ SỔ ĐỊA CHỈ -->
-            <div v-if="activeTab === 'addresses'" class="animate-fade-in space-y-md">
+            <div v-if="activeTab === 'addresses'" id="profile-panel-addresses" role="tabpanel" class="animate-fade-in space-y-md">
               <div class="flex justify-between items-center mb-lg">
                 <h3 class="text-lg font-bold text-on-surface">Sổ địa chỉ nhận hàng</h3>
-                <button @click="openAddressModal()" class="bg-primary text-on-primary px-4 py-2.5 rounded-xl font-bold text-xs hover:opacity-90 transition-all border-none cursor-pointer shadow-xs">
+                <button type="button" @click="openAddressModal()" class="min-h-11 bg-primary text-on-primary px-4 py-2.5 rounded-xl font-bold text-sm hover:opacity-90 transition-colors border-none cursor-pointer shadow-xs">
                   Thêm địa chỉ mới
                 </button>
               </div>
@@ -230,23 +233,23 @@
                         {{ addr.phone }}
                       </span>
                     </div>
-                    <div class="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button @click="openAddressModal(addr)" class="px-2.5 py-1 rounded-lg bg-surface-container-high text-xs font-bold text-on-surface-variant hover:text-primary transition-all border-none cursor-pointer">
+                    <div class="flex gap-2 opacity-100">
+                      <button type="button" @click="openAddressModal(addr)" class="min-h-11 px-3 py-2 rounded-lg bg-surface-container-high text-sm font-bold text-on-surface-variant hover:text-primary transition-colors border-none cursor-pointer">
                         Sửa
                       </button>
-                      <button v-if="!addr.is_default" @click="confirmDeleteAddress(addr.id)" class="px-2.5 py-1 rounded-lg bg-surface-container-high text-xs font-bold text-on-surface-variant hover:text-error transition-all border-none cursor-pointer">
+                      <button v-if="!addr.is_default" type="button" @click="confirmDeleteAddress(addr.id)" class="min-h-11 px-3 py-2 rounded-lg bg-surface-container-high text-sm font-bold text-on-surface-variant hover:text-error transition-colors border-none cursor-pointer">
                         Xóa
                       </button>
                     </div>
                   </div>
                   <p class="text-sm text-on-surface-variant leading-relaxed line-clamp-2">{{ addr.address }}</p>
-                  <button v-if="!addr.is_default" @click="setDefaultAddress(addr.id)" class="mt-md text-[11px] font-black uppercase text-secondary hover:underline bg-transparent border-none cursor-pointer">Đặt làm mặc định</button>
+                  <button v-if="!addr.is_default" type="button" @click="setDefaultAddress(addr.id)" class="mt-md min-h-11 text-sm font-bold text-secondary hover:underline bg-transparent border-none cursor-pointer">Đặt làm mặc định</button>
                 </div>
               </div>
             </div>
 
             <!-- TAB 4: KHU VỰC 5 - ĐỔI MẬT KHẨU BẢO MẬT (Strict Anti-Autofill & Empty Defaults) -->
-            <div v-if="activeTab === 'security'" class="w-full block">
+            <div v-if="activeTab === 'security'" id="profile-panel-security" role="tabpanel" class="w-full block">
               <div class="animate-fade-in py-lg flex flex-col items-center">
                 <div class="w-full max-w-[480px]">
                   <div class="text-center mb-xl space-y-1">
@@ -262,24 +265,24 @@
 
                     <!-- Mật khẩu hiện tại -->
                     <div class="flex flex-col gap-2">
-                      <label class="text-xs font-bold text-on-surface-variant ml-1 uppercase tracking-wider">Mật khẩu hiện tại <span class="text-red-500">*</span></label>
-                      <Password                        v-model="passwordForm.current_password"                        toggleMask                        autocomplete="new-password"
+                      <label for="current-password" class="text-xs font-bold text-on-surface-variant ml-1 uppercase tracking-wider">Mật khẩu hiện tại <span class="text-red-500">*</span></label>
+                      <Password inputId="current-password" v-model="passwordForm.current_password" toggleMask autocomplete="current-password"
                         placeholder="Nhập mật khẩu hiện tại"                        class="w-full"                        inputClass="w-full !rounded-2xl !border-outline-variant/40 !py-3 !px-4 text-sm"                        :feedback="false"                        required
                       />
                     </div>
 
                     <!-- Mật khẩu mới -->
                     <div class="flex flex-col gap-2">
-                      <label class="text-xs font-bold text-on-surface-variant ml-1 uppercase tracking-wider">Mật khẩu mới <span class="text-red-500">*</span></label>
-                      <Password                        v-model="passwordForm.new_password"                        toggleMask                        autocomplete="new-password"
+                      <label for="new-password" class="text-xs font-bold text-on-surface-variant ml-1 uppercase tracking-wider">Mật khẩu mới <span class="text-red-500">*</span></label>
+                      <Password inputId="new-password" v-model="passwordForm.new_password" toggleMask autocomplete="new-password"
                         placeholder="Tối thiểu 8 ký tự"                        class="w-full"                        inputClass="w-full !rounded-2xl !border-outline-variant/40 !py-3 !px-4 text-sm"                        required
                       />
                     </div>
 
                     <!-- Xác nhận mật khẩu mới -->
                     <div class="flex flex-col gap-2">
-                      <label class="text-xs font-bold text-on-surface-variant ml-1 uppercase tracking-wider">Xác nhận mật khẩu mới <span class="text-red-500">*</span></label>
-                      <Password                        v-model="passwordForm.new_password_confirmation"                        toggleMask                        autocomplete="new-password"
+                      <label for="confirm-password" class="text-xs font-bold text-on-surface-variant ml-1 uppercase tracking-wider">Xác nhận mật khẩu mới <span class="text-red-500">*</span></label>
+                      <Password inputId="confirm-password" v-model="passwordForm.new_password_confirmation" toggleMask autocomplete="new-password"
                         placeholder="Nhập lại mật khẩu mới"                        class="w-full"                        inputClass="w-full !rounded-2xl !border-outline-variant/40 !py-3 !px-4 text-sm"                        :feedback="false"                        required
                       />
                     </div>
@@ -329,20 +332,20 @@
     <Dialog v-model:visible="addressDialog" :header="isEditAddress ? 'Cập nhật địa chỉ' : 'Thêm địa chỉ mới'" :modal="true" class="!rounded-3xl !border-none !shadow-2xl" :style="{width: '450px'}">
       <div class="flex flex-col gap-6 mt-4">
         <div class="space-y-2">
-          <label class="text-sm font-bold text-on-surface-variant ml-1">Tên người nhận</label>
-          <InputText v-model="addressForm.receiver_name" placeholder="Ví dụ: Nguyễn Văn A" class="w-full !rounded-xl !border-outline-variant/40" autofocus />
+          <label for="address-receiver-name" class="text-sm font-bold text-on-surface-variant ml-1">Tên người nhận</label>
+          <InputText id="address-receiver-name" v-model="addressForm.receiver_name" autocomplete="name" placeholder="Ví dụ: Nguyễn Văn A" class="w-full !min-h-11 !rounded-xl !border-outline-variant/40" autofocus />
         </div>
         <div class="space-y-2">
-          <label class="text-sm font-bold text-on-surface-variant ml-1">Số điện thoại</label>
-          <InputText v-model="addressForm.phone" placeholder="Ví dụ: 0901234567" class="w-full !rounded-xl !border-outline-variant/40" />
+          <label for="address-phone" class="text-sm font-bold text-on-surface-variant ml-1">Số điện thoại</label>
+          <InputText id="address-phone" v-model="addressForm.phone" autocomplete="tel" inputmode="tel" placeholder="Ví dụ: 0901234567" class="w-full !min-h-11 !rounded-xl !border-outline-variant/40" />
         </div>
         <div class="space-y-2">
-          <label class="text-sm font-bold text-on-surface-variant ml-1">Địa chỉ chi tiết</label>
-          <Textarea v-model="addressForm.address" rows="3" placeholder="Số nhà, Tên đường..." class="w-full !rounded-xl !border-outline-variant/40 resize-none" />
+          <label for="address-detail" class="text-sm font-bold text-on-surface-variant ml-1">Địa chỉ chi tiết</label>
+          <Textarea id="address-detail" v-model="addressForm.address" rows="3" autocomplete="street-address" placeholder="Số nhà, Tên đường..." class="w-full !rounded-xl !border-outline-variant/40 resize-none" />
         </div>
-        <div class="flex items-center gap-3 p-md bg-surface-container-low rounded-2xl border border-outline-variant/20">
+        <div class="flex min-h-11 items-center gap-3 p-md bg-surface-container-low rounded-2xl border border-outline-variant/20">
           <Checkbox v-model="addressForm.is_default" :binary="true" inputId="is_default" />
-          <label for="is_default" class="text-sm font-bold text-on-surface cursor-pointer">Đặt làm địa chỉ mặc định</label>
+          <label for="is_default" class="flex min-h-11 items-center text-sm font-bold text-on-surface cursor-pointer">Đặt làm địa chỉ mặc định</label>
         </div>
       </div>
       <template #footer>
@@ -448,7 +451,6 @@ const todayDate = computed(() => {
 const roleLabel = computed(() => {
   if (authStore.isAdmin) return 'Admin'
   if (authStore.isVendor) return 'Vendor'
-  if (authStore.isAuthor) return 'Tác Giả'
   return 'Độc Giả'
 })
 
@@ -841,4 +843,14 @@ const confirmAvatarUpload = async () => {
 }
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+button:not([tabindex="-1"]) {
+  min-height: 44px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-in {
+    animation: none !important;
+  }
+}
 </style>

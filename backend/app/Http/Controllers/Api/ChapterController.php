@@ -19,8 +19,7 @@ class ChapterController extends Controller
      */
     public function index($bookId)
     {
-        $vendor = Auth::user()->vendor;
-        $book = Book::withoutGlobalScopes()->where('vendor_id', $vendor->id)->findOrFail($bookId);
+        $book = $this->manageableBook($bookId);
         $chapters = $book->chapters;
 
         return response()->json([
@@ -37,15 +36,17 @@ class ChapterController extends Controller
         $request->validate([
             'title' => 'required|string|max:255',
             'content' => 'nullable|string',
-            'order' => 'nullable|integer',
+            'order' => 'nullable|integer|min:1',
+            'chapter_number' => 'nullable|integer|min:1',
             'is_free' => 'nullable|boolean',
             'status' => 'nullable|in:draft,published',
         ]);
 
-        $vendor = Auth::user()->vendor;
-        $book = Book::withoutGlobalScopes()->where('vendor_id', $vendor->id)->findOrFail($bookId);
+        $book = $this->manageableBook($bookId);
 
-        $order = $request->order ?? ($book->chapters()->max('order') + 1);
+        $order = $request->input('order')
+            ?? $request->input('chapter_number')
+            ?? ((int) $book->chapters()->max('order') + 1);
 
         $chapter = BookChapter::create([
             'book_id' => $book->id,
@@ -72,19 +73,19 @@ class ChapterController extends Controller
         $request->validate([
             'title' => 'required|string|max:255',
             'content' => 'nullable|string',
-            'order' => 'nullable|integer',
+            'order' => 'nullable|integer|min:1',
+            'chapter_number' => 'nullable|integer|min:1',
             'is_free' => 'nullable|boolean',
             'status' => 'nullable|in:draft,published',
         ]);
 
-        $vendor = Auth::user()->vendor;
-        $book = Book::withoutGlobalScopes()->where('vendor_id', $vendor->id)->findOrFail($bookId);
+        $book = $this->manageableBook($bookId);
         $chapter = $book->chapters()->findOrFail($chapterId);
 
         $chapter->update([
             'title' => $request->title,
             'content' => $request->content,
-            'order' => $request->order ?? $chapter->order,
+            'order' => $request->input('order') ?? $request->input('chapter_number') ?? $chapter->order,
             'is_free' => $request->is_free ?? $chapter->is_free,
             'status' => $request->status ?? $chapter->status,
         ]);
@@ -102,8 +103,7 @@ class ChapterController extends Controller
      */
     public function destroy($bookId, $chapterId)
     {
-        $vendor = Auth::user()->vendor;
-        $book = Book::withoutGlobalScopes()->where('vendor_id', $vendor->id)->findOrFail($bookId);
+        $book = $this->manageableBook($bookId);
         $chapter = $book->chapters()->findOrFail($chapterId);
 
         $chapter->delete();
@@ -120,7 +120,7 @@ class ChapterController extends Controller
             'title' => 'required|string|max:255', 'content' => 'nullable|string',
             'is_free' => 'nullable|boolean', 'expected_revision' => 'required|integer|min:0',
         ]);
-        $book = $this->vendorBook($bookId);
+        $book = $this->manageableBook($bookId);
         $chapter = $book->chapters()->findOrFail($chapterId);
         if ($chapter->current_revision !== $validated['expected_revision']) {
             throw ValidationException::withMessages(['expected_revision' => 'A newer chapter revision exists.']);
@@ -139,7 +139,7 @@ class ChapterController extends Controller
 
     public function restore(Request $request, $bookId, $chapterId, $revision)
     {
-        $book = $this->vendorBook($bookId);
+        $book = $this->manageableBook($bookId);
         $chapter = $book->chapters()->findOrFail($chapterId);
         $snapshot = $chapter->revisions()->where('revision', $revision)->firstOrFail();
         DB::transaction(function () use ($chapter, $snapshot, $request) {
@@ -153,7 +153,7 @@ class ChapterController extends Controller
     public function reorder(Request $request, $bookId)
     {
         $validated = $request->validate(['chapter_ids' => 'required|array|min:1', 'chapter_ids.*' => 'required|integer|distinct']);
-        $book = $this->vendorBook($bookId);
+        $book = $this->manageableBook($bookId);
         $ids = collect($validated['chapter_ids']);
         if ($book->chapters()->whereIn('id', $ids)->count() !== $ids->count()) {
             abort(403);
@@ -169,7 +169,7 @@ class ChapterController extends Controller
             'chapters' => 'required|array|min:1|max:100', 'chapters.*.title' => 'required|string|max:255',
             'chapters.*.content' => 'nullable|string', 'chapters.*.is_free' => 'nullable|boolean',
         ]);
-        $book = $this->vendorBook($bookId);
+        $book = $this->manageableBook($bookId);
         DB::transaction(function () use ($book, $validated, $request) {
             $next = (int) $book->chapters()->max('order') + 1;
             foreach ($validated['chapters'] as $item) {
@@ -191,9 +191,18 @@ class ChapterController extends Controller
         return response()->json(['status' => 'success', 'data' => $chapter->only(['id', 'title', 'content', 'order', 'is_free'])]);
     }
 
-    private function vendorBook($bookId): Book
+    private function manageableBook($bookId): Book
     {
-        return Book::withoutGlobalScopes()->where('vendor_id', Auth::user()->vendor->id)->findOrFail($bookId);
+        $user = Auth::user();
+        $book = Book::withoutGlobalScopes()->findOrFail($bookId);
+
+        if ($user->role === 'vendor' && $user->vendor) {
+            abort_unless($book->vendor_id === $user->vendor->id, 404);
+
+            return $book;
+        }
+
+        abort(403);
     }
 
     private function recordRevision(BookChapter $chapter, Request $request, string $source): BookChapterRevision

@@ -21,7 +21,7 @@ class ProfileController extends Controller
     {
         $user = $request->user();
 
-        // Chỉ update các trường cá nhân cơ bản (tuyệt đối không làm ảnh hưởng dữ liệu vendor/author)
+        // Chỉ cập nhật thông tin cá nhân, không làm thay đổi hồ sơ nghiệp vụ.
         $user->update($request->only(['name', 'phone', 'gender', 'birthday', 'address']));
 
         if ($request->has('marketing_consent')) {
@@ -37,7 +37,7 @@ class ProfileController extends Controller
             $user->favoriteCategories()->sync($catIds);
         }
 
-        $user->load(['membershipTier', 'author', 'vendor', 'favoriteCategories']);
+        $user->load(['membershipTier', 'vendor', 'usedBookSellerProfile', 'favoriteCategories']);
 
         return response()->json([
             'status' => 'success',

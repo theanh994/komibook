@@ -22,9 +22,7 @@ export function evaluateRouteGuard(to, { isAuthenticated, userRole, capabilities
   }
 
   if (to.meta?.capability && !capabilities[to.meta.capability]) {
-    return to.meta.capability === 'approved_author'
-      ? { name: 'author-register' }
-      : { name: 'home' }
+    return { name: 'home' }
   }
 
   return true
@@ -48,6 +46,16 @@ export async function runRouteGuard(to, authStore) {
   const capabilities = authStore.user?.capabilities || {}
 
   return evaluateRouteGuard(to, { isAuthenticated, userRole, capabilities })
+}
+
+/**
+ * Resolve the default management channel for the active account capabilities.
+ */
+export function getDashboardRedirect({ isAdmin, isActiveVendor, isWarehouseManager = false }) {
+  if (isAdmin) return { name: 'admin-dashboard' }
+  if (isActiveVendor) return { name: 'vendor-dashboard' }
+  if (isWarehouseManager) return { name: 'warehouse-manager-dashboard' }
+  return { name: 'home' }
 }
 
 /**

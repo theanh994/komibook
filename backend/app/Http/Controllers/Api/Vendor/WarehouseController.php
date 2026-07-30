@@ -6,9 +6,11 @@ use App\Http\Controllers\Controller;
 use App\Models\Book;
 use App\Models\Warehouse;
 use App\Models\WarehouseStock;
+use App\Support\PublicMediaUrl;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Redis;
 
 class WarehouseController extends Controller
 {
@@ -17,13 +19,17 @@ class WarehouseController extends Controller
      */
     public function index(Request $request)
     {
-        $vendor = Auth::user()->vendor;
-        if (!$vendor) {
+        $vendor = $request->user()->vendor;
+        if (! $vendor) {
             return response()->json(['message' => 'Vendor profile not found'], 404);
         }
 
         // 1. Danh sách kho hàng
-        $warehouses = Warehouse::orderBy('id', 'asc')->get();
+        $warehouses = Warehouse::withoutGlobalScopes()
+            ->where('vendor_id', $vendor->id)
+            ->orderBy('id', 'asc')
+            ->get();
+        $warehouseIds = $warehouses->pluck('id');
 
         // 2. Danh sách sách và phân bổ tồn kho
         $booksQuery = Book::withoutGlobalScopes()
@@ -31,7 +37,8 @@ class WarehouseController extends Controller
 
         // Áp dụng filters
         if ($request->filled('warehouse_id') && $request->warehouse_id !== 'Tất cả kho') {
-            $warehouseId = $request->warehouse_id;
+            $warehouseId = (int) $request->warehouse_id;
+            abort_unless($warehouseIds->contains($warehouseId), 403, 'Kho không thuộc gian hàng hiện tại.');
             $booksQuery->whereHas('stocks', function ($q) use ($warehouseId) {
                 $q->where('warehouse_id', $warehouseId);
             });
@@ -55,6 +62,14 @@ class WarehouseController extends Controller
 
         // Phân trang
         $books = $booksQuery->orderBy('id', 'desc')->paginate(10);
+        $pageBookIds = $books->getCollection()->pluck('id');
+        $stocksByBook = $pageBookIds->isEmpty()
+            ? collect()
+            : WarehouseStock::whereIn('book_id', $pageBookIds)
+                ->whereIn('warehouse_id', $warehouseIds)
+                ->with('warehouse')
+                ->get()
+                ->groupBy('book_id');
 
         $stocksData = [];
         foreach ($books as $book) {
@@ -62,14 +77,12 @@ class WarehouseController extends Controller
             $mainLocation = 'Digital Server';
 
             if ($book->type === 'physical') {
-                $stocks = WarehouseStock::where('book_id', $book->id)
-                    ->with('warehouse')
-                    ->get();
+                $stocks = $stocksByBook->get($book->id, collect());
 
                 $mainLocation = 'Chưa phân bổ';
                 if ($stocks->isNotEmpty()) {
                     $firstStock = $stocks->first();
-                    $mainLocation = $firstStock->warehouse->name . ' - ' . ($firstStock->shelf_location ?: 'Chưa rõ kệ');
+                    $mainLocation = $firstStock->warehouse->name.' - '.($firstStock->shelf_location ?: 'Chưa rõ kệ');
                 }
 
                 // Đảm bảo trả về đủ breakdown cho tất cả các kho của Vendor này
@@ -79,7 +92,7 @@ class WarehouseController extends Controller
                         'warehouse_id' => $wh->id,
                         'warehouse_name' => $wh->name,
                         'shelf_location' => $stockInWh ? $stockInWh->shelf_location : '-',
-                        'quantity' => $stockInWh ? $stockInWh->quantity : 0
+                        'quantity' => $stockInWh ? $stockInWh->quantity : 0,
                     ];
                 }
             }
@@ -94,14 +107,14 @@ class WarehouseController extends Controller
 
             $stocksData[] = [
                 'id' => $book->id,
-                'sku' => $book->isbn ?: 'SKU-' . str_pad($book->id, 4, '0', STR_PAD_LEFT),
+                'sku' => $book->isbn ?: 'SKU-'.str_pad($book->id, 4, '0', STR_PAD_LEFT),
                 'title' => $book->title,
-                'cover_image' => $book->cover_image,
+                'cover_image' => PublicMediaUrl::storage($book->cover_image),
                 'type' => $book->type === 'ebook' ? 'Ebook' : 'Sách vật lý',
                 'stock' => $book->stock,
                 'main_location' => $mainLocation,
                 'status' => $stockStatus,
-                'breakdown' => $breakdown
+                'breakdown' => $breakdown,
             ];
         }
 
@@ -115,7 +128,7 @@ class WarehouseController extends Controller
                 'last_page' => $books->lastPage(),
                 'from' => $books->firstItem(),
                 'to' => $books->lastItem(),
-            ]
+            ],
         ]);
     }
 
@@ -131,25 +144,14 @@ class WarehouseController extends Controller
             'status' => 'nullable|string',
         ]);
 
-        $user = Auth::user();
-        $vendor = $user->vendor;
-        if (!$vendor) {
+        $vendor = $request->user()->vendor;
+        if (! $vendor) {
             return response()->json(['message' => 'Vendor profile not found'], 404);
-        }
-
-        // Ràng buộc tác giả đối tác chỉ được sở hữu duy nhất 1 kho hàng
-        if ($user->author) {
-            $existingCount = Warehouse::where('vendor_id', $vendor->id)->count();
-            if ($existingCount >= 1) {
-                return response()->json([
-                    'status' => 'error',
-                    'message' => 'Tác giả đối tác chỉ được sở hữu và đăng ký tối đa 1 nhà kho duy nhất.'
-                ], 422);
-            }
         }
 
         $warehouse = Warehouse::create([
             'vendor_id' => $vendor->id,
+            'author_fulfillment_address_id' => null,
             'name' => $request->name,
             'address' => $request->address,
             'capacity' => $request->capacity ?: '0%',
@@ -158,7 +160,7 @@ class WarehouseController extends Controller
 
         return response()->json([
             'message' => 'Tạo kho hàng thành công',
-            'warehouse' => $warehouse
+            'warehouse' => $warehouse,
         ], 201);
     }
 
@@ -176,17 +178,32 @@ class WarehouseController extends Controller
             'shelf_location' => 'nullable|string',
         ]);
 
-        $book = Book::withoutGlobalScopes()->findOrFail($request->book_id);
-        
+        $vendor = $request->user()->vendor;
+        abort_unless($vendor, 404, 'Vendor profile not found');
+
+        $book = Book::withoutGlobalScopes()
+            ->where('vendor_id', $vendor->id)
+            ->findOrFail($request->book_id);
+        $sourceWarehouse = Warehouse::withoutGlobalScopes()
+            ->where('vendor_id', $vendor->id)
+            ->findOrFail($request->source_warehouse_id);
+        $targetWarehouse = null;
+        if ($request->input('type') === 'transfer') {
+            $targetWarehouse = Warehouse::withoutGlobalScopes()
+                ->where('vendor_id', $vendor->id)
+                ->findOrFail($request->target_warehouse_id);
+            abort_if($sourceWarehouse->is($targetWarehouse), 422, 'Kho nguồn và kho đích phải khác nhau.');
+        }
+
         DB::beginTransaction();
         try {
             if ($request->type === 'adjust') {
                 // Điều chỉnh tăng/giảm tồn kho tại 1 kho cụ thể
                 $stock = WarehouseStock::firstOrNew([
-                    'warehouse_id' => $request->source_warehouse_id,
-                    'book_id' => $book->id
+                    'warehouse_id' => $sourceWarehouse->id,
+                    'book_id' => $book->id,
                 ]);
-                
+
                 $stock->quantity = $request->quantity;
                 if ($request->filled('shelf_location')) {
                     $stock->shelf_location = $request->shelf_location;
@@ -194,11 +211,13 @@ class WarehouseController extends Controller
                 $stock->save();
             } else {
                 // Điều chuyển từ kho A sang kho B
-                $sourceStock = WarehouseStock::where('warehouse_id', $request->source_warehouse_id)
+                $sourceStock = WarehouseStock::where('warehouse_id', $sourceWarehouse->id)
                     ->where('book_id', $book->id)
                     ->first();
 
-                if (!$sourceStock || $sourceStock->quantity < $request->quantity) {
+                if (! $sourceStock || $sourceStock->quantity < $request->quantity) {
+                    DB::rollBack();
+
                     return response()->json(['message' => 'Số lượng tồn kho nguồn không đủ để điều chuyển'], 400);
                 }
 
@@ -208,8 +227,8 @@ class WarehouseController extends Controller
 
                 // Cộng kho đích
                 $targetStock = WarehouseStock::firstOrNew([
-                    'warehouse_id' => $request->target_warehouse_id,
-                    'book_id' => $book->id
+                    'warehouse_id' => $targetWarehouse->id,
+                    'book_id' => $book->id,
                 ]);
                 $targetStock->quantity += $request->quantity;
                 if ($request->filled('shelf_location')) {
@@ -219,31 +238,38 @@ class WarehouseController extends Controller
             }
 
             // Đồng bộ lại tổng tồn kho (stock) trong bảng books
-            $totalStock = WarehouseStock::where('book_id', $book->id)->sum('quantity');
+            $ownedWarehouseIds = Warehouse::withoutGlobalScopes()
+                ->where('vendor_id', $vendor->id)
+                ->pluck('id');
+            $totalStock = WarehouseStock::where('book_id', $book->id)
+                ->whereIn('warehouse_id', $ownedWarehouseIds)
+                ->sum('quantity');
             $book->update(['stock' => $totalStock]);
 
             // Xoá key cache tồn kho trên Redis để đồng bộ tồn kho mới nhất
             try {
-                \Illuminate\Support\Facades\Redis::del("book_stock:{$book->id}");
+                Redis::del("book_stock:{$book->id}");
             } catch (\Exception $ex) {
-                \Illuminate\Support\Facades\Log::warning("Failed to clear Redis stock cache: " . $ex->getMessage());
+                Log::warning('Failed to clear Redis stock cache: '.$ex->getMessage());
             }
 
             DB::commit();
+
             return response()->json(['message' => 'Cập nhật tồn kho thành công', 'total_stock' => $totalStock]);
         } catch (\Exception $e) {
             DB::rollBack();
-            return response()->json(['message' => 'Lỗi hệ thống: ' . $e->getMessage()], 500);
+
+            return response()->json(['message' => 'Lỗi hệ thống: '.$e->getMessage()], 500);
         }
     }
 
     /**
      * Lấy các chỉ số thống kê kho.
      */
-    public function stats()
+    public function stats(Request $request)
     {
-        $vendor = Auth::user()->vendor;
-        if (!$vendor) {
+        $vendor = $request->user()->vendor;
+        if (! $vendor) {
             return response()->json(['message' => 'Vendor profile not found'], 404);
         }
 

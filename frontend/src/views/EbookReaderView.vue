@@ -1,14 +1,17 @@
 <template>
-  <div 
+  <div
     class="h-screen w-full flex flex-col md:flex-row transition-all duration-700 overflow-hidden font-inter select-none" 
     :class="[themeClasses[currentTheme].bg, themeClasses[currentTheme].text]"
     @contextmenu.prevent
+    role="application"
+    aria-label="Trình đọc ebook KomiBook"
   >
     <Toast />
     <!-- ─── PREMIUM DESKTOP SIDEBAR ─── -->
-    <nav 
+    <nav
       v-show="!focusMode"
       class="hidden md:flex flex-col h-full py-xl w-72 bg-surface-container-low dark:bg-surface-container border-r border-outline-variant/50 shadow-[4px_0_24px_rgba(0,0,0,0.1)] z-50 flex-shrink-0 transition-all duration-500 ease-in-out"
+      aria-label="Công cụ trình đọc"
     >
       <!-- Brand & Header -->
       <div class="px-8 mb-xl flex items-center gap-4 group cursor-pointer" @click="$router.push('/')">
@@ -17,7 +20,7 @@
         </div>
         <div>
           <h1 class="text-2xl font-bold text-on-surface tracking-tighter leading-none">KomiBook</h1>
-          <p class="text-[9px] uppercase tracking-[0.2em] text-primary font-bold mt-1.5 opacity-80">Premium Reader v2.0</p>
+          <p class="text-xs text-primary font-bold mt-1.5">Trình đọc ebook</p>
         </div>
       </div>
 
@@ -26,6 +29,8 @@
         <button 
           v-for="tab in tabs" 
           :key="tab.id"
+          type="button"
+          :aria-pressed="activeTab === tab.id"
           @click="selectTab(tab.id)"
           class="w-full flex items-center gap-4 px-5 py-4 rounded-[22px] transition-all duration-300 group relative overflow-hidden"
           :class="[activeTab === tab.id ? 'bg-primary text-on-primary shadow-xl shadow-primary/20 scale-[1.02]' : 'text-on-surface-variant hover:bg-primary/5 hover:text-primary']"
@@ -38,15 +43,38 @@
 
       <!-- Footer Info -->
       <div class="px-6 mt-auto">
+        <div
+          v-if="ebookVersions.length"
+          class="bg-surface-container-high/40 p-4 rounded-[22px] border border-outline-variant/10 mb-4"
+        >
+          <label for="reader-version" class="block text-sm font-bold text-primary mb-2">
+            Phiên bản đang đọc
+          </label>
+          <select
+            id="reader-version"
+            v-model.number="selectedEbookVersionId"
+            :disabled="switchingVersion || ebookVersions.length === 1"
+            class="min-h-11 w-full rounded-xl border border-outline-variant/30 bg-surface-container-lowest px-3 py-2 text-sm font-bold text-on-surface disabled:opacity-70"
+            @change="switchEbookVersion"
+          >
+            <option v-for="version in ebookVersions" :key="version.id" :value="version.id">
+              Phiên bản {{ version.version }}
+            </option>
+          </select>
+          <p class="mt-2 text-sm leading-relaxed text-on-surface-variant">
+            Quyền đọc bắt đầu từ phiên bản {{ purchaseVersionNumber }}. Các bản cập nhật mới hơn được giữ lại cùng bản đã mua.
+          </p>
+        </div>
+
         <div class="bg-surface-container-high/40 backdrop-blur-md p-lg rounded-[28px] border border-outline-variant/10 mb-6 group hover:border-primary/20 transition-all duration-500">
           <div class="flex justify-between items-center mb-3">
-            <span class="text-[10px] font-bold uppercase text-primary tracking-widest">Tiến độ đọc</span>
+            <span class="text-xs font-bold text-primary">Tiến độ đọc</span>
             <span class="text-sm font-bold text-primary">{{ readingProgress }}%</span>
           </div>
           <div class="w-full h-2 bg-surface-container-highest/50 rounded-full overflow-hidden p-[2px]">
             <div class="h-full bg-primary rounded-full transition-all duration-1000 ease-out shadow-[0_0_12px_rgba(var(--primary-rgb),0.4)]" :style="{ width: readingProgress + '%' }"></div>
           </div>
-          <p class="text-[9px] text-on-surface-variant mt-3 text-center font-bold uppercase tracking-tighter opacity-50">Bạn đang đọc trang {{ currentPage }} của {{ totalPages }}</p>
+          <p class="text-xs text-on-surface-variant mt-3 text-center font-bold">Bạn đang đọc trang {{ currentPage }} của {{ totalPages }}</p>
         </div>
 
         <button @click="$router.push('/my-library')" class="w-full flex items-center justify-center gap-3 py-4.5 rounded-[22px] bg-on-surface text-surface font-bold text-xs uppercase tracking-widest hover:opacity-90 active:scale-95 transition-all shadow-xl">
@@ -59,17 +87,37 @@
     <!-- ─── MOBILE PREMIUM HEADER ─── -->
     <header class="md:hidden flex justify-between items-center px-6 w-full h-20 bg-surface-container-low/95 backdrop-blur-xl border-b border-outline-variant/30 z-50 sticky top-0 transition-all duration-300">
       <div class="flex items-center gap-4">
-        <button @click="$router.push('/my-library')" class="w-10 h-10 rounded-full bg-surface-container-high flex items-center justify-center text-on-surface-variant active:scale-90 transition-all">
+        <button type="button" aria-label="Về Tủ sách" @click="$router.push('/my-library')" class="w-11 h-11 rounded-full bg-surface-container-high flex items-center justify-center text-on-surface-variant transition-colors">
           <span class="material-symbols-outlined text-[22px]">arrow_back</span>
         </button>
         <span class="font-bold text-xl tracking-tighter text-on-surface">Komibook</span>
       </div>
       <div class="flex gap-3">
-        <button @click="showSettings = true" class="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary active:scale-90 transition-all">
-          <span class="material-symbols-outlined text-[22px]">settings_nightight</span>
+        <button type="button" aria-label="Mở cài đặt đọc" @click="showSettings = true" class="w-11 h-11 rounded-full bg-primary/10 flex items-center justify-center text-primary transition-colors">
+          <span class="material-symbols-outlined text-[22px]">settings</span>
         </button>
       </div>
     </header>
+
+    <div v-if="ebookVersions.length" class="md:hidden w-full bg-surface-container-low px-4 py-3 border-b border-outline-variant/20">
+      <label for="reader-version-mobile" class="block text-sm font-bold text-primary mb-1">
+        Phiên bản đang đọc
+      </label>
+      <select
+        id="reader-version-mobile"
+        v-model.number="selectedEbookVersionId"
+        :disabled="switchingVersion || ebookVersions.length === 1"
+        class="min-h-11 w-full rounded-xl border border-outline-variant/30 bg-surface-container-lowest px-3 py-2 text-sm font-bold text-on-surface disabled:opacity-70"
+        @change="switchEbookVersion"
+      >
+        <option v-for="version in ebookVersions" :key="version.id" :value="version.id">
+          Phiên bản {{ version.version }}
+        </option>
+      </select>
+      <p class="mt-1 text-sm text-on-surface-variant">
+        Quyền đọc từ phiên bản {{ purchaseVersionNumber }} trở đi.
+      </p>
+    </div>
 
     <!-- ─── MAIN CONTENT AREA ─── -->
     <main class="flex-1 flex flex-col h-full overflow-hidden relative transition-all duration-500">
@@ -129,13 +177,13 @@
             </div>
 
             <!-- Error State -->
-            <div v-if="error" class="bg-surface-container-lowest/80 backdrop-blur-xl p-xxl rounded-[40px] shadow-2xl border border-error/20 text-center animate-fade-in">
+            <div v-if="error" class="bg-surface-container-lowest/90 backdrop-blur-xl p-8 md:p-12 rounded-3xl shadow-xl border border-error/20 text-center animate-fade-in" role="alert">
               <div class="w-24 h-24 bg-error/10 rounded-full flex items-center justify-center mx-auto mb-xl">
                 <span class="material-symbols-outlined text-[56px] text-error">error_medley</span>
               </div>
-              <h2 class="text-3xl font-bold text-on-surface mb-md tracking-tight">Opps! Sách bị kẹt rồi</h2>
+              <h2 class="text-3xl font-bold text-on-surface mb-md tracking-tight">Không thể mở ebook</h2>
               <p class="text-on-surface-variant mb-xl max-w-md mx-auto leading-relaxed">{{ error }}</p>
-              <button @click="fetchEbookData" class="bg-error text-on-error px-12 py-4 rounded-2xl font-bold shadow-xl shadow-error/20 hover:scale-105 active:scale-95 transition-all">Thử mở lại</button>
+              <button type="button" @click="fetchEbookData" class="min-h-11 bg-error text-on-error px-10 py-3 rounded-xl text-sm font-bold shadow-lg shadow-error/20 transition-colors">Thử mở lại</button>
             </div>
 
             <!-- The PDF Content -->
@@ -179,7 +227,7 @@
                  <div class="h-1.5 w-32 bg-primary/20 rounded-full overflow-hidden">
                     <div class="h-full bg-primary animate-progress-loading"></div>
                  </div>
-                 <p class="text-[10px] font-bold uppercase tracking-[0.3em] text-outline opacity-40">Mẹo: Vuốt hoặc nhấn đúp chuột để chuyển trang</p>
+                 <p class="text-xs font-bold text-on-surface-variant">Mẹo: Vuốt hoặc dùng phím mũi tên để chuyển trang</p>
               </div>
             </div>
           </div>
@@ -278,7 +326,7 @@
                 </div>
                 <div>
                   <span class="text-base font-bold text-on-surface group-hover:text-primary transition-colors block leading-tight">{{ item.title }}</span>
-                  <span class="text-[9px] font-bold uppercase text-outline opacity-40 group-hover:opacity-100 transition-all tracking-[0.2em] mt-1 block">Chương tác phẩm</span>
+                  <span class="text-xs font-bold text-outline mt-1 block">Chương tác phẩm</span>
                 </div>
               </div>
               <div class="w-8 h-8 flex-shrink-0 rounded-full border border-outline-variant/30 flex items-center justify-center group-hover:bg-primary group-hover:border-primary group-hover:translate-x-1 transition-all duration-300">
@@ -331,9 +379,9 @@
                    <div class="w-8 h-8 rounded-full bg-surface-container-high flex items-center justify-center">
                       <span class="material-symbols-outlined text-sm text-primary">auto_stories</span>
                    </div>
-                   <span class="text-[10px] font-bold uppercase tracking-widest text-on-surface">Trang {{ note.page }}</span>
+                  <span class="text-xs font-bold text-on-surface">Trang {{ note.page }}</span>
                 </div>
-                <span class="text-[9px] font-bold text-outline uppercase tracking-tighter">{{ formatDate(note.created_at) }}</span>
+                <span class="text-xs font-bold text-outline">{{ formatDate(note.created_at) }}</span>
               </div>
 
               <blockquote v-if="note.highlighted_text" class="font-literata text-base text-on-surface italic pl-5 border-l-4 border-outline-variant/20 my-1 leading-relaxed opacity-80 group-hover:opacity-100 transition-opacity">
@@ -360,12 +408,12 @@
           <div class="flex flex-col gap-8 mb-12 animate-fade-in">
             <div class="w-32 lg:w-40 flex-shrink-0 mx-auto">
                <div class="aspect-[2/3] rounded-3xl overflow-hidden shadow-xl border border-outline-variant/10 bg-white">
-                  <img v-if="book?.cover_image" :src="book.cover_image" :alt="book.title" class="w-full h-full object-cover" />
+                  <img v-if="book?.cover_image" :src="book.cover_image" :alt="`Bìa sách ${book.title}`" class="w-full h-full object-contain" />
                </div>
             </div>
 
             <div class="text-center space-y-4">
-              <span class="inline-block px-3 py-1 bg-primary/10 text-primary text-[9px] font-bold uppercase tracking-widest rounded-full border border-primary/20">Digital Edition</span>
+              <span class="inline-block px-3 py-1 bg-primary/10 text-primary text-xs font-bold rounded-full border border-primary/20">Ebook</span>
               <h1 class="text-3xl font-bold text-on-surface leading-tight tracking-tight">{{ book?.title }}</h1>
               <p class="text-base text-on-surface-variant font-bold tracking-tight">Bởi {{ book?.author }}</p>
             </div>
@@ -412,7 +460,7 @@
         >
           <span class="material-symbols-outlined text-[28px]" :style="{ 'font-variation-settings': activeTab === tab.id ? `'FILL' 1` : `'FILL' 0` }">{{ tab.icon }}</span>
         </div>
-        <span class="text-[9px] font-bold uppercase tracking-widest mt-2">{{ tab.label }}</span>
+        <span class="text-xs font-bold mt-2">{{ tab.label }}</span>
         <div v-if="activeTab === tab.id" class="absolute -top-2 w-1.5 h-1.5 bg-primary rounded-full animate-bounce"></div>
       </button>
     </nav>
@@ -431,7 +479,7 @@
       <div class="flex flex-col gap-12 py-8">
         <!-- Themes -->
         <div>
-          <h3 class="text-[10px] font-bold uppercase tracking-[0.3em] text-primary mb-8 flex items-center gap-2">
+          <h3 class="text-sm font-bold text-primary mb-8 flex items-center gap-2">
              <span>Không gian đọc</span>
              <div class="h-px flex-1 bg-primary/20"></div>
           </h3>
@@ -444,7 +492,7 @@
               :class="[currentTheme === key ? 'border-primary bg-primary/5 shadow-xl' : 'border-outline-variant/10 hover:border-primary/20 bg-surface-container-low']"
             >
               <div class="w-12 h-12 rounded-2xl shadow-inner border border-black/5" :class="theme.bg"></div>
-              <span class="text-[10px] font-bold uppercase tracking-widest text-on-surface">{{ theme.name }}</span>
+              <span class="text-xs font-bold text-on-surface">{{ theme.name }}</span>
               <div v-if="currentTheme === key" class="absolute top-2 right-2">
                  <span class="material-symbols-outlined text-primary text-sm">check_circle</span>
               </div>
@@ -454,7 +502,7 @@
 
         <!-- Typography -->
         <div>
-          <h3 class="text-[10px] font-bold uppercase tracking-[0.3em] text-primary mb-8 flex items-center gap-2">
+          <h3 class="text-sm font-bold text-primary mb-8 flex items-center gap-2">
              <span>Phông chữ & Cỡ chữ</span>
              <div class="h-px flex-1 bg-primary/20"></div>
           </h3>
@@ -467,7 +515,7 @@
                    </button>
                    <div class="text-center">
                       <p class="text-4xl font-bold text-primary tracking-tighter">{{ Math.round(scale * 100) }}%</p>
-                      <p class="text-[9px] font-bold uppercase tracking-widest opacity-40 mt-1">Độ phóng đại</p>
+                      <p class="text-xs font-bold text-on-surface-variant mt-1">Độ phóng đại</p>
                    </div>
                    <button @click="zoomIn" class="w-14 h-14 rounded-2xl bg-white dark:bg-white/10 flex items-center justify-center text-on-surface shadow-sm hover:bg-primary hover:text-on-primary transition-all">
                       <span class="material-symbols-outlined">text_increase</span>
@@ -503,7 +551,7 @@
           <div>
             <h4 class="font-bold text-indigo-900 uppercase tracking-wider text-[11px]">Cam kết Quyền Tác Giả</h4>
             <p class="mt-1">
-              Tác phẩm này được đăng ký bản quyền số và thuộc sở hữu trí tuệ hợp pháp của Tác giả/NXB.
+              Tác phẩm này được đăng ký bản quyền số và thuộc sở hữu trí tuệ hợp pháp của chủ sở hữu quyền hoặc Nhà xuất bản.
             </p>
           </div>
         </div>
@@ -526,7 +574,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, defineAsyncComponent, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useToast } from 'primevue/usetoast'
 import Toast from 'primevue/toast'
@@ -534,7 +582,8 @@ import Drawer from 'primevue/drawer'
 import Dialog from 'primevue/dialog'
 import apiClient from '@/services/axios'
 import { readApiData } from '@/services/apiContract'
-import VuePdfEmbed from 'vue-pdf-embed'
+
+const VuePdfEmbed = defineAsyncComponent(() => import('vue-pdf-embed'))
 
 const route = useRoute()
 const toast = useToast()
@@ -543,6 +592,10 @@ const activeTab = ref('reader')
 const loading = ref(true)
 const pdfUrl = ref(null)
 const error = ref(null)
+const ebookVersions = ref([])
+const selectedEbookVersionId = ref(null)
+const purchaseVersionId = ref(null)
+const switchingVersion = ref(false)
 const scale = ref(1.0)
 const scrollContainer = ref(null)
 const book = ref(null)
@@ -644,6 +697,9 @@ const tabs = [
 ]
 
 const activeTabInfo = computed(() => tabs.find(t => t.id === activeTab.value))
+const purchaseVersionNumber = computed(() => {
+  return ebookVersions.value.find(version => version.id === purchaseVersionId.value)?.version ?? 'đã mua'
+})
 
 const currentTheme = ref(localStorage.getItem('readerTheme') || 'light')
 const themeClasses = {
@@ -766,6 +822,80 @@ const jumpToPage = () => {
   scrollContainer.value?.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
+const normalizeReaderUrl = (rawUrl) => {
+  if (!rawUrl) return null
+
+  if (rawUrl.includes('127.0.0.1:8000')) {
+    return rawUrl.replace('http://127.0.0.1:8000', window.location.origin)
+  }
+  if (rawUrl.includes('localhost:8000')) {
+    return rawUrl.replace('http://localhost:8000', window.location.origin)
+  }
+  if (rawUrl.includes('api.komibook.id.vn')) {
+    return rawUrl.replace('https://api.komibook.id.vn', window.location.origin)
+  }
+
+  try {
+    const urlObj = new URL(rawUrl, window.location.origin)
+    return urlObj.origin === window.location.origin ? urlObj.href : urlObj.pathname + urlObj.search
+  } catch {
+    return rawUrl
+  }
+}
+
+const applyReaderAccess = (accessData) => {
+  purchaseVersionId.value = accessData.purchase_version_id || null
+  const authorizedVersions = Array.isArray(accessData.available_versions)
+    ? accessData.available_versions
+    : []
+  const purchaseVersion = authorizedVersions.find(version =>
+    Number(version.id) === Number(purchaseVersionId.value) || version.is_purchase_version
+  )
+  ebookVersions.value = purchaseVersion
+    ? authorizedVersions.filter(version => Number(version.version) >= Number(purchaseVersion.version))
+    : authorizedVersions
+  selectedEbookVersionId.value = ebookVersions.value.some(version => Number(version.id) === Number(accessData.version_id))
+    ? accessData.version_id
+    : (ebookVersions.value[0]?.id || null)
+  pdfUrl.value = normalizeReaderUrl(accessData.url)
+
+  try {
+    const urlObj = new URL(pdfUrl.value, window.location.origin)
+    watermarkEmail.value = urlObj.searchParams.get('email') || ''
+    watermarkName.value = urlObj.searchParams.get('name') || ''
+  } catch (parseError) {
+    console.warn('Could not parse query parameters for watermark', parseError)
+  }
+}
+
+const switchEbookVersion = async () => {
+  const { orderId, bookId } = route.params
+  if (!selectedEbookVersionId.value || switchingVersion.value) return
+  if (!ebookVersions.value.some(version => Number(version.id) === Number(selectedEbookVersionId.value))) {
+    error.value = 'Phiên bản này không thuộc quyền đọc của bạn.'
+    return
+  }
+
+  switchingVersion.value = true
+  loading.value = true
+  error.value = null
+  currentPage.value = 1
+  inputPage.value = 1
+  totalPages.value = 0
+
+  try {
+    const response = await apiClient.get(`/api/orders/${orderId}/ebooks/${bookId}/generate-link`, {
+      params: { version_id: selectedEbookVersionId.value }
+    })
+    applyReaderAccess(readApiData(response.data))
+  } catch (switchError) {
+    error.value = switchError.response?.data?.message || 'Không thể chuyển phiên bản ebook.'
+    loading.value = false
+  } finally {
+    switchingVersion.value = false
+  }
+}
+
 const fetchEbookData = async () => {
   const { orderId, bookId } = route.params
   console.log('[Reader] Fetching data for:', { orderId, bookId })
@@ -790,7 +920,7 @@ const fetchEbookData = async () => {
       apiClient.get(`/api/books/${bookId}/reading-progress`).catch(() => ({ data: { data: null } }))
     ])
 
-    pdfUrl.value = readApiData(urlRes.data).url
+    applyReaderAccess(readApiData(urlRes.data))
     console.log('[Reader] PDF URL received:', pdfUrl.value)
     
     book.value = bookRes.data.data || bookRes.data
@@ -798,34 +928,7 @@ const fetchEbookData = async () => {
     progressVersion.value = progressRes.data.data?.version ?? null
     savedPage.value = progressRes.data.data?.current_page ?? null
     
-    // Điều hướng toàn bộ cuộc gọi API lấy PDF qua domain/origin hiện tại của frontend 
-    // để được xử lý thông qua proxy của Vite (local) hoặc nginx/Vercel (production).
-    // Điều này khắc phục triệt để CORS và Mixed Content.
-    if (pdfUrl.value) {
-      if (pdfUrl.value.includes('127.0.0.1:8000')) {
-        pdfUrl.value = pdfUrl.value.replace('http://127.0.0.1:8000', window.location.origin)
-      } else if (pdfUrl.value.includes('localhost:8000')) {
-        pdfUrl.value = pdfUrl.value.replace('http://localhost:8000', window.location.origin)
-      } else if (pdfUrl.value.includes('api.komibook.id.vn')) {
-        pdfUrl.value = pdfUrl.value.replace('https://api.komibook.id.vn', window.location.origin)
-      } else {
-        try {
-          const urlObj = new URL(pdfUrl.value)
-          pdfUrl.value = urlObj.pathname + urlObj.search
-        } catch {
-          // Bỏ qua
-        }
-      }
-      console.log('[Reader] PDF URL adjusted to:', pdfUrl.value)
-    }
-
-    try {
-      const urlObj = new URL(pdfUrl.value)
-      watermarkEmail.value = urlObj.searchParams.get('email') || ''
-      watermarkName.value = urlObj.searchParams.get('name') || ''
-    } catch (e) {
-      console.warn('Could not parse query parameters for watermark', e)
-    }
+    console.log('[Reader] PDF URL adjusted to:', pdfUrl.value)
   } catch (err) {
     console.error('[Reader] fetchEbookData Error:', err)
     error.value = err.response?.data?.message || 'Có lỗi xảy ra khi xác thực sách. Vui lòng kiểm tra lại quyền truy cập.'
@@ -921,8 +1024,6 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-@import url('https://fonts.googleapis.com/css2?family=Literata:ital,wght@0,400;0,700;1,400;1,700&display=swap');
-
 .pdf-wrapper {
   user-select: none;
   -webkit-user-select: none;
@@ -930,7 +1031,7 @@ onUnmounted(() => {
 
 
 .font-literata {
-  font-family: 'Literata', serif;
+  font-family: Georgia, 'Times New Roman', serif;
 }
 
 .perspective-1000 {
@@ -1014,5 +1115,20 @@ onUnmounted(() => {
 
 .animate-page-flip-prev {
   animation: page-flip-prev 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+button,
+select {
+  min-height: 44px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-in,
+  .animate-slide-up,
+  .animate-progress-loading,
+  .animate-page-flip-next,
+  .animate-page-flip-prev {
+    animation: none !important;
+  }
 }
 </style>

@@ -47,8 +47,8 @@ class ArticleWorkflowService
             $locked->update($updates);
             ArticleEvent::create(['article_id' => $locked->id, 'actor_id' => $actor?->id, 'from_status' => $from->value, 'to_status' => $target->value, 'reason' => $reason, 'operation_key' => $operationKey]);
             UserNotification::firstOrCreate(
-                ['operation_key' => "notification:{$operationKey}:{$locked->author_id}"],
-                ['user_id' => $locked->author_id, 'title' => 'Cập nhật bài viết', 'content' => 'Bài viết đã chuyển sang '.$target->value.($reason ? '. Lý do: '.$reason : '.'), 'type' => 'system', 'data' => ['article_id' => $locked->id, 'status' => $target->value]],
+                ['operation_key' => "notification:{$operationKey}:{$locked->created_by}"],
+                ['user_id' => $locked->created_by, 'title' => 'Cập nhật bài viết', 'content' => 'Bài viết đã chuyển sang '.$target->value.($reason ? '. Lý do: '.$reason : '.'), 'type' => 'system', 'data' => ['article_id' => $locked->id, 'status' => $target->value]],
             );
 
             return $locked->fresh(['category', 'tags', 'books', 'events']);

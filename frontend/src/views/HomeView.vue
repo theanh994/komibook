@@ -30,34 +30,207 @@
       </div>
     </Transition>
 
-    <!-- ═══ HERO SECTION ═══ -->
-    <section class="w-full px-gutter mx-auto py-xxl">
-      <div class="relative rounded-xl overflow-hidden soft-shadow h-[420px] md:h-[500px] flex items-center justify-center bg-primary-container">
+    <!-- ═══ HERO CAROUSEL ═══ -->
+    <section class="mx-auto w-full max-w-[1440px] px-4 py-8 md:px-gutter md:py-12" aria-labelledby="home-hero-title">
+      <div
+        class="relative isolate flex min-h-[420px] items-end overflow-hidden rounded-2xl bg-primary shadow-elevated md:min-h-[500px]"
+        aria-roledescription="carousel"
+        aria-label="Sự kiện nổi bật"
+      >
         <img
-          alt="Komibook hero"
-          class="absolute inset-0 w-full h-full object-cover opacity-30 mix-blend-overlay"
-          src="https://images.unsplash.com/photo-1507842217343-583bb7270b66?ixlib=rb-1.2.1&auto=format&fit=crop&w=2000&q=80"
+          v-if="activeHero.cover_image"
+          :src="getCoverUrl(activeHero.cover_image)"
+          :alt="activeHero.title"
+          class="absolute inset-0 h-full w-full object-cover"
         />
-        <div class="relative z-10 text-center max-w-2xl px-md">
-          <h1 class="font-inter text-4xl md:text-5xl font-bold text-on-primary mb-md tracking-tight leading-tight">
-            Khám phá thế giới sách
-          </h1>
-          <p class="font-inter text-lg text-primary-fixed-dim mb-lg leading-relaxed">
-            Trải nghiệm đọc sách cao cấp, không gian tĩnh lặng và bộ sưu tập được tuyển chọn kỹ lưỡng dành riêng cho bạn.
-          </p>
+        <div class="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/70 to-primary/20"></div>
+
+        <div class="relative z-10 max-w-3xl p-6 text-white md:p-12 lg:p-16">
+          <p class="mb-3 text-sm font-bold uppercase tracking-[0.18em] text-indigo-200">{{ activeHero.eyebrow }}</p>
+          <h1 id="home-hero-title" class="text-3xl font-bold leading-tight tracking-tight md:text-5xl">{{ activeHero.title }}</h1>
+          <p class="mt-4 max-w-2xl text-base leading-7 text-slate-200 md:text-lg">{{ activeHero.excerpt }}</p>
           <router-link
-            to="/catalog"
-            class="inline-flex items-center gap-2 bg-secondary text-on-secondary px-xl py-sm rounded-lg text-sm font-medium hover:bg-secondary-container transition-colors shadow-sm no-underline"
+            :to="activeHero.to"
+            class="mt-7 inline-flex min-h-11 items-center gap-2 rounded-lg bg-secondary px-5 py-3 text-sm font-bold text-on-secondary no-underline transition-colors hover:bg-secondary-container"
           >
-            Bắt đầu khám phá
-            <span class="material-symbols-outlined text-[18px]">arrow_forward</span>
+            {{ activeHero.cta }}
+            <span class="material-symbols-outlined text-[18px]" aria-hidden="true">arrow_forward</span>
           </router-link>
+          <p v-if="heroError" class="mt-4 text-sm text-slate-300" role="status">
+            Tin nổi bật chưa tải được; nội dung giới thiệu KomiBook đang được hiển thị.
+          </p>
+        </div>
+
+        <template v-if="heroSlides.length > 1">
+          <button type="button" class="absolute left-3 top-1/2 z-20 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-slate-950/60 text-white transition-colors hover:bg-slate-950" aria-label="Nội dung nổi bật trước" @click="previousHero">
+            <span class="material-symbols-outlined" aria-hidden="true">chevron_left</span>
+          </button>
+          <button type="button" class="absolute right-3 top-1/2 z-20 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-slate-950/60 text-white transition-colors hover:bg-slate-950" aria-label="Nội dung nổi bật tiếp theo" @click="nextHero">
+            <span class="material-symbols-outlined" aria-hidden="true">chevron_right</span>
+          </button>
+          <div class="absolute bottom-4 right-4 z-20 flex gap-2" aria-label="Chọn nội dung nổi bật">
+            <button
+              v-for="(slide, index) in heroSlides"
+              :key="slide.key"
+              type="button"
+              class="h-11 w-11 rounded-full border-0 bg-transparent p-3"
+              :aria-label="`Hiển thị nội dung ${index + 1}: ${slide.title}`"
+              :aria-current="currentHeroIndex === index ? 'true' : undefined"
+              @click="currentHeroIndex = index"
+            >
+              <span class="block h-2.5 w-2.5 rounded-full border border-white" :class="currentHeroIndex === index ? 'bg-white' : 'bg-white/30'"></span>
+            </button>
+          </div>
+        </template>
+      </div>
+    </section>
+
+    <!-- ═══ RECOMMENDATION ═══ -->
+    <section class="mx-auto w-full max-w-[1280px] px-4 py-8 md:px-gutter md:py-xl" aria-labelledby="recommendation-title">
+      <div class="mb-6 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p class="text-sm font-bold uppercase tracking-[0.16em] text-secondary">Đề xuất đọc tiếp</p>
+          <h2 id="recommendation-title" class="mt-2 text-2xl font-bold tracking-tight text-primary md:text-3xl">Gợi ý dành riêng cho bạn</h2>
+          <p class="mt-2 text-sm text-on-surface-variant">{{ recommendationExplanation }}</p>
+        </div>
+        <router-link to="/catalog" class="inline-flex min-h-11 items-center gap-1 text-sm font-bold text-primary no-underline">
+          Xem thêm <span class="material-symbols-outlined text-[18px]" aria-hidden="true">chevron_right</span>
+        </router-link>
+      </div>
+
+      <div v-if="loadingRecommendations" class="grid grid-cols-2 gap-4 md:grid-cols-4 lg:grid-cols-5" role="status" aria-label="Đang tải gợi ý sách">
+        <div v-for="i in 5" :key="i" class="overflow-hidden rounded-xl border border-outline-variant/30 bg-surface-container-lowest">
+          <Skeleton height="240px" borderRadius="0" />
+          <div class="space-y-3 p-4"><Skeleton height="16px" /><Skeleton height="14px" width="65%" /></div>
+        </div>
+      </div>
+      <div v-else-if="recommendationError" class="ui-state-panel" role="alert">
+        <span class="material-symbols-outlined text-3xl text-error" aria-hidden="true">error</span>
+        <p class="mt-2 font-bold">Chưa thể tải gợi ý sách</p>
+        <button type="button" class="ui-button ui-button-secondary mt-4" @click="fetchRecommendations">Thử lại</button>
+      </div>
+      <div v-else-if="recommendations.length === 0" class="ui-state-panel">
+        <span class="material-symbols-outlined text-3xl text-outline" aria-hidden="true">auto_stories</span>
+        <p class="mt-2 font-bold">Chưa có sách phù hợp để gợi ý</p>
+        <router-link to="/catalog" class="ui-button ui-button-secondary mt-4 no-underline">Khám phá danh mục</router-link>
+      </div>
+      <div v-else class="recommendation-grid">
+        <div v-for="book in recommendations" :key="book.id" class="recommendation-item min-w-0">
+          <BookCard
+          :book="book"
+          show-wishlist
+          :is-favorite="wishlistStore.isFavorite(book.id)"
+          @quick-view="openQuickView"
+          @add-to-cart="addToCart"
+          @buy-now="buyNow"
+          @toggle-wishlist="toggleWishlist"
+          />
         </div>
       </div>
     </section>
 
+    <!-- ═══ VENDOR FEED ═══ -->
+    <section class="mx-auto w-full max-w-[1280px] px-4 py-8 md:px-gutter md:py-xl" aria-labelledby="vendor-feed-title">
+      <div class="mb-6 flex items-end justify-between gap-4">
+        <div>
+          <p class="text-sm font-bold uppercase tracking-[0.16em] text-secondary">Từ cộng đồng xuất bản</p>
+          <h2 id="vendor-feed-title" class="mt-2 text-2xl font-bold tracking-tight text-primary md:text-3xl">Bản tin mới từ NXB &amp; Nhà bán</h2>
+        </div>
+        <router-link to="/blog" class="inline-flex min-h-11 shrink-0 items-center gap-1 text-sm font-bold text-primary no-underline">
+          Xem tất cả <span class="material-symbols-outlined text-[18px]" aria-hidden="true">chevron_right</span>
+        </router-link>
+      </div>
+
+      <div v-if="loadingVendorFeed" class="grid gap-5 md:grid-cols-2 lg:grid-cols-3" role="status" aria-label="Đang tải bản tin">
+        <div v-for="i in 3" :key="i" class="overflow-hidden rounded-2xl border border-outline-variant/30 bg-surface-container-lowest">
+          <Skeleton height="180px" borderRadius="0" />
+          <div class="space-y-3 p-5"><Skeleton height="16px" width="40%" /><Skeleton height="24px" /><Skeleton height="14px" /></div>
+        </div>
+      </div>
+      <div v-else-if="vendorFeedError" class="ui-state-panel" role="alert">
+        <span class="material-symbols-outlined text-3xl text-error" aria-hidden="true">newspaper</span>
+        <p class="mt-2 font-bold">Chưa thể tải bản tin</p>
+        <button type="button" class="ui-button ui-button-secondary mt-4" @click="fetchVendorFeed">Thử lại</button>
+      </div>
+      <div v-else-if="vendorArticles.length === 0" class="ui-state-panel">
+        <span class="material-symbols-outlined text-3xl text-outline" aria-hidden="true">article</span>
+        <p class="mt-2 font-bold">Chưa có bản tin đã xuất bản</p>
+        <p class="mt-2 text-sm text-on-surface-variant">Bài viết chỉ xuất hiện sau khi hoàn tất kiểm duyệt.</p>
+      </div>
+      <div v-else class="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+        <article v-for="article in vendorArticles" :key="article.id" class="overflow-hidden rounded-2xl border border-outline-variant/30 bg-surface-container-lowest shadow-sm">
+          <div class="flex aspect-[16/9] items-center justify-center bg-primary-container">
+            <img v-if="article.cover_image" :src="getCoverUrl(article.cover_image)" :alt="article.title" class="h-full w-full object-cover" loading="lazy" />
+            <span v-else class="material-symbols-outlined text-5xl text-on-primary-container" aria-hidden="true">auto_stories</span>
+          </div>
+          <div class="p-5">
+            <div class="flex flex-wrap items-center gap-2 text-sm text-on-surface-variant">
+              <span class="font-bold text-primary">{{ articlePublisher(article) }}</span>
+              <span aria-hidden="true">•</span>
+              <span>{{ article.category?.name || 'Bản tin' }}</span>
+            </div>
+            <h3 class="mt-3 text-xl font-bold leading-snug text-on-surface">{{ article.title }}</h3>
+            <p class="mt-3 line-clamp-3 text-sm leading-6 text-on-surface-variant">{{ article.excerpt }}</p>
+            <router-link :to="`/blog/${article.slug}`" class="mt-5 inline-flex min-h-11 items-center gap-1 font-bold text-primary no-underline">
+              Đọc bài viết <span class="material-symbols-outlined text-[18px]" aria-hidden="true">arrow_forward</span>
+            </router-link>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <!-- ═══ COMMERCE & CONTENT FEED ═══ -->
+    <section class="mx-auto w-full max-w-[1280px] px-4 py-8 md:px-gutter md:py-xl" aria-labelledby="commerce-feed-title">
+      <div class="mb-8">
+        <p class="text-sm font-bold uppercase tracking-[0.16em] text-secondary">Khám phá theo nhu cầu</p>
+        <h2 id="commerce-feed-title" class="mt-2 text-2xl font-bold tracking-tight text-primary md:text-3xl">Sách nổi bật trên KomiBook</h2>
+      </div>
+
+      <div class="space-y-12">
+        <section v-for="group in commerceGroups" :key="group.key" :aria-labelledby="`home-${group.key}`">
+          <div class="mb-5 flex items-end justify-between gap-4">
+            <div>
+              <h3 :id="`home-${group.key}`" class="text-xl font-bold text-on-surface md:text-2xl">{{ group.title }}</h3>
+              <p class="mt-1 text-sm text-on-surface-variant">{{ group.subtitle }}</p>
+            </div>
+            <router-link :to="group.to" class="inline-flex min-h-11 shrink-0 items-center gap-1 text-sm font-bold text-primary no-underline">
+              Xem thêm <span class="material-symbols-outlined text-[18px]" aria-hidden="true">chevron_right</span>
+            </router-link>
+          </div>
+
+          <div v-if="commerceState[group.key].loading" class="grid grid-cols-2 gap-4 md:grid-cols-4 lg:grid-cols-5" role="status" :aria-label="`Đang tải ${group.title}`">
+            <div v-for="i in 5" :key="i" class="overflow-hidden rounded-xl border border-outline-variant/30 bg-surface-container-lowest">
+              <Skeleton height="220px" borderRadius="0" />
+              <div class="space-y-3 p-4"><Skeleton height="16px" /><Skeleton height="14px" width="60%" /></div>
+            </div>
+          </div>
+          <div v-else-if="commerceState[group.key].error" class="ui-state-panel" role="alert">
+            <p class="font-bold">Chưa thể tải {{ group.title.toLowerCase() }}</p>
+            <button type="button" class="ui-button ui-button-secondary mt-4" @click="fetchCommerceGroup(group)">Thử lại</button>
+          </div>
+          <div v-else-if="commerceState[group.key].items.length === 0" class="ui-state-panel">
+            <p class="font-bold">Chưa có {{ group.title.toLowerCase() }}</p>
+            <p class="mt-2 text-sm text-on-surface-variant">Nội dung sẽ xuất hiện khi có sách đủ điều kiện.</p>
+          </div>
+          <div v-else class="grid grid-cols-2 gap-4 md:grid-cols-4 lg:grid-cols-5">
+            <BookCard
+              v-for="book in commerceState[group.key].items"
+              :key="book.id"
+              :book="book"
+              show-wishlist
+              :is-favorite="wishlistStore.isFavorite(book.id)"
+              @quick-view="openQuickView"
+              @add-to-cart="addToCart"
+              @buy-now="buyNow"
+              @toggle-wishlist="toggleWishlist"
+            />
+          </div>
+        </section>
+      </div>
+    </section>
+
     <!-- ═══ TOP SELLING SECTION ═══ -->
-    <section class="w-full px-gutter max-w-[1280px] mx-auto py-xl">
+    <section v-if="false" class="w-full px-gutter max-w-[1280px] mx-auto py-xl">
       <div class="flex justify-between items-end mb-lg">
         <router-link to="/catalog" class="font-inter text-3xl font-semibold text-primary tracking-tight hover:text-[#00b14f] transition-all duration-200 no-underline uppercase">
           SÁCH BÁN CHẠY
@@ -87,6 +260,9 @@
           <div class="relative pt-[140%] bg-surface-variant/30">
             <img v-if="book.cover_image" :src="getCoverUrl(book.cover_image)" :alt="book.title" class="absolute inset-0 w-full h-full object-cover p-2 rounded-t-lg transition-transform duration-500 group-hover:scale-105" loading="lazy" />
             <div v-else class="absolute inset-0 flex items-center justify-center"><span class="material-symbols-outlined text-outline text-4xl">image</span></div>
+            <span v-if="book.type === 'ebook'" class="absolute bottom-2 left-2 bg-primary/90 text-on-primary text-[10px] font-bold px-2 py-1 rounded-md shadow-sm z-10">
+              Ebook · Phiên bản {{ book.latest_ebook_version?.version || 1 }}
+            </span>
             
             <!-- Wishlist Button -->
             <button 
@@ -135,6 +311,7 @@
           <!-- Info -->
           <div class="p-md flex flex-col justify-between flex-grow">
             <h3 class="text-center text-sm font-medium text-on-surface line-clamp-2 leading-snug mb-1 group-hover:text-primary transition-colors">{{ book.title }}</h3>
+            <p v-if="book.type === 'ebook'" class="text-center text-[11px] font-bold text-primary mb-1">Phiên bản {{ book.latest_ebook_version?.version || 1 }}</p>
             <div class="text-center text-sm font-bold text-[#00b14f] flex items-center justify-center gap-1.5 mt-auto">
               <span>{{ formatCurrency(book.sale_price || book.price) }}</span>
               <span v-if="book.sale_price && book.price > book.sale_price" class="text-xs text-outline line-through font-normal">{{ formatCurrency(book.price) }}</span>
@@ -145,7 +322,7 @@
     </section>
 
     <!-- ═══ SÁCH MỚI NHẤT ═══ -->
-    <section class="w-full px-gutter max-w-[1280px] mx-auto py-xl">
+    <section v-if="false" class="w-full px-gutter max-w-[1280px] mx-auto py-xl">
       <div class="flex justify-between items-end mb-lg">
         <router-link to="/catalog" class="font-inter text-3xl font-semibold text-primary tracking-tight hover:text-[#00b14f] transition-all duration-200 no-underline uppercase">
           SÁCH MỚI NHẤT
@@ -185,6 +362,9 @@
             <div class="relative pt-[140%] bg-surface-variant/30">
               <img v-if="book.cover_image" :src="getCoverUrl(book.cover_image)" :alt="book.title" class="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" loading="lazy" />
               <div v-else class="absolute inset-0 flex items-center justify-center"><span class="material-symbols-outlined text-outline text-4xl">image</span></div>
+              <span v-if="book.type === 'ebook'" class="absolute bottom-2 left-2 bg-primary/90 text-on-primary text-[10px] font-bold px-2 py-1 rounded-md shadow-sm z-10">
+                Ebook · Phiên bản {{ book.latest_ebook_version?.version || 1 }}
+              </span>
               
               <!-- Wishlist Button -->
               <button 
@@ -234,6 +414,7 @@
             <!-- Info -->
             <div class="p-md flex flex-col justify-between flex-grow">
               <h3 class="text-center text-sm font-medium text-on-surface line-clamp-2 leading-snug mb-1 group-hover:text-primary transition-colors">{{ book.title }}</h3>
+              <p v-if="book.type === 'ebook'" class="text-center text-[11px] font-bold text-primary mb-1">Phiên bản {{ book.latest_ebook_version?.version || 1 }}</p>
               <div class="text-center text-sm font-bold text-[#00b14f] flex items-center justify-center gap-1.5 mt-auto">
                 <span>{{ formatCurrency(book.sale_price || book.price) }}</span>
                 <span v-if="book.sale_price && book.price > book.sale_price" class="text-xs text-outline line-through font-normal">{{ formatCurrency(book.price) }}</span>
@@ -374,7 +555,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import apiClient from '@/services/axios'
 import { readApiList } from '@/services/apiContract'
@@ -383,11 +564,95 @@ import { useToast } from 'primevue/usetoast'
 import Skeleton from 'primevue/skeleton'
 import Dialog from 'primevue/dialog'
 import { useWishlistStore } from '@/stores/wishlist'
+import BookCard from '@/components/BookCard.vue'
+import bookshelfHero from '@/assets/komibook-bookshelf-hero.webp'
 
 const router = useRouter()
 const cartStore = useCartStore()
 const wishlistStore = useWishlistStore()
 const toast = useToast()
+
+const heroArticles = ref([])
+const heroError = ref(false)
+const currentHeroIndex = ref(0)
+const fallbackHero = {
+  key: 'komibook-intro',
+  eyebrow: 'KomiBook · Không gian đọc dành cho bạn',
+  title: 'Khám phá thế giới sách',
+  excerpt: 'Tìm ebook, sách giấy và những tác phẩm được tuyển chọn trong một trải nghiệm đọc rõ ràng, yên tĩnh.',
+  cover_image: bookshelfHero,
+  to: '/catalog',
+  cta: 'Bắt đầu khám phá',
+}
+const heroSlides = computed(() => {
+  if (heroArticles.value.length === 0) return [fallbackHero]
+
+  return heroArticles.value.map((article) => ({
+    key: `article-${article.id}`,
+    eyebrow: article.category?.name || 'Bản tin KomiBook',
+    title: article.title,
+    excerpt: article.excerpt || 'Khám phá nội dung mới từ cộng đồng xuất bản KomiBook.',
+    cover_image: article.cover_image,
+    to: `/blog/${article.slug}`,
+    cta: 'Đọc bài viết',
+  }))
+})
+const activeHero = computed(() => heroSlides.value[currentHeroIndex.value] || heroSlides.value[0])
+
+const recommendations = ref([])
+const loadingRecommendations = ref(true)
+const recommendationError = ref(false)
+const recommendationExplanation = ref('Đang chuẩn bị gợi ý phù hợp…')
+const vendorArticles = ref([])
+const loadingVendorFeed = ref(true)
+const vendorFeedError = ref(false)
+const commerceGroups = [
+  {
+    key: 'bestselling-ebook',
+    title: 'Ebook bán chạy',
+    subtitle: 'Nội dung số được độc giả lựa chọn nhiều.',
+    params: { type: 'ebook', sort: 'popular', per_page: 5 },
+    to: { name: 'catalog', query: { type: 'ebook', sort: 'popular' } },
+  },
+  {
+    key: 'bestselling-physical',
+    title: 'Sách vật lý bán chạy',
+    subtitle: 'Những đầu sách giấy nổi bật trên toàn sàn.',
+    params: { type: 'physical', sort: 'popular', per_page: 5 },
+    to: { name: 'catalog', query: { type: 'physical', sort: 'popular' } },
+  },
+  {
+    key: 'newest-ebook',
+    title: 'Ebook mới nhất',
+    subtitle: 'Phiên bản số vừa được phát hành.',
+    params: { type: 'ebook', per_page: 5 },
+    to: { name: 'catalog', query: { type: 'ebook' } },
+  },
+  {
+    key: 'newest-physical',
+    title: 'Sách vật lý mới nhất',
+    subtitle: 'Các ấn phẩm giấy mới lên kệ.',
+    params: { type: 'physical', per_page: 5 },
+    to: { name: 'catalog', query: { type: 'physical' } },
+  },
+  {
+    key: 'ebook-samples',
+    title: 'Góc ebook đọc thử',
+    subtitle: 'Đọc một phần nội dung trước khi quyết định.',
+    params: { type: 'ebook', has_sample: 1, per_page: 5 },
+    to: { name: 'catalog', query: { type: 'ebook' } },
+  },
+  {
+    key: 'used-books',
+    title: 'Sách cũ giá tốt',
+    subtitle: 'Sách vật lý đã qua sử dụng, được mô tả tình trạng rõ ràng.',
+    params: { type: 'physical', provenance: 'used_resale', sort: 'price_asc', per_page: 5 },
+    to: { name: 'catalog', query: { provenance: 'used_resale' } },
+  },
+]
+const commerceState = ref(Object.fromEntries(
+  commerceGroups.map((group) => [group.key, { items: [], loading: true, error: false }]),
+))
 
 // ─── State ──────────────────────────────────────────────────────────
 const activeFlashSale = ref(null)
@@ -407,17 +672,81 @@ const quickViewVersion = ref('standard')
 const quickViewQty = ref(1)
 
 // ─── Fetch API ──────────────────────────────────────────────────────
-const fetchBooks = async () => {
-  loadingBooks.value = true
+const fetchHeroArticles = async () => {
+  heroError.value = false
   try {
-    const params = { per_page: 15 }
-    const response = await apiClient.get('/api/books', { params })
-    books.value = readApiList(response.data).slice(0, 15)
-  } catch (error) {
-    console.error('Lỗi tải sách:', error)
-  } finally {
-    loadingBooks.value = false
+    const response = await apiClient.get('/api/articles', {
+      params: { home_featured: 1, per_page: 5 },
+    })
+    heroArticles.value = response.data?.data?.data || []
+    currentHeroIndex.value = 0
+  } catch {
+    heroError.value = true
+    heroArticles.value = []
   }
+}
+
+const fetchRecommendations = async () => {
+  loadingRecommendations.value = true
+  recommendationError.value = false
+  try {
+    const response = await apiClient.get('/api/books/recommendations')
+    recommendations.value = readApiList(response.data).slice(0, 5)
+    recommendationExplanation.value = response.data?.recommendation?.explanation || 'Sách nổi bật trên KomiBook'
+  } catch {
+    recommendationError.value = true
+    recommendations.value = []
+    recommendationExplanation.value = 'Gợi ý được tải độc lập với các nội dung khác.'
+  } finally {
+    loadingRecommendations.value = false
+  }
+}
+
+const previousHero = () => {
+  currentHeroIndex.value = (currentHeroIndex.value - 1 + heroSlides.value.length) % heroSlides.value.length
+}
+
+const nextHero = () => {
+  currentHeroIndex.value = (currentHeroIndex.value + 1) % heroSlides.value.length
+}
+
+const fetchVendorFeed = async () => {
+  loadingVendorFeed.value = true
+  vendorFeedError.value = false
+  try {
+    const response = await apiClient.get('/api/articles', { params: { per_page: 6 } })
+    vendorArticles.value = response.data?.data?.data || []
+  } catch {
+    vendorFeedError.value = true
+    vendorArticles.value = []
+  } finally {
+    loadingVendorFeed.value = false
+  }
+}
+
+const articlePublisher = (article) => {
+  return article.creator?.vendor?.shop_name
+    || article.creator?.name
+    || 'KomiBook'
+}
+
+const fetchCommerceGroup = async (group) => {
+  const state = commerceState.value[group.key]
+  state.loading = true
+  state.error = false
+  try {
+    const response = await apiClient.get('/api/books', { params: group.params })
+    state.items = readApiList(response.data).slice(0, 5)
+  } catch {
+    state.items = []
+    state.error = true
+  } finally {
+    state.loading = false
+  }
+}
+
+const fetchCommerceFeed = () => {
+  commerceGroups.forEach((group) => fetchCommerceGroup(group))
 }
 
 const fetchFlashSales = async () => {
@@ -462,18 +791,6 @@ const startCountdown = (endTime) => {
   countdownInterval = setInterval(update, 1000)
 }
 
-const fetchTopSellingBooks = async () => {
-  loadingTopSelling.value = true
-  try {
-    const response = await apiClient.get('/api/books/top-selling')
-    topSellingBooks.value = readApiList(response.data).slice(0, 5)
-  } catch (error) {
-    console.error('Lỗi tải sách bán chạy:', error)
-  } finally {
-    loadingTopSelling.value = false
-  }
-}
-
 // ─── User Actions ───────────────────────────────────────────────────
 const cleanDescriptionText = (html) => {
   if (!html) return ''
@@ -495,6 +812,7 @@ const getBookTags = (book) => {
   }
   if (book.type === 'ebook') {
     tags.push('E-book')
+    tags.push(`Phiên bản ${book.latest_ebook_version?.version || 1}`)
   } else {
     tags.push(book.cover_format || 'Sách giấy')
   }
@@ -536,6 +854,7 @@ const getCoverUrl = (path) => {
   if (path.startsWith('http://') || path.startsWith('https://')) return path
   if (path.startsWith('/storage/')) return path
   if (path.includes('/storage/')) return path.substring(path.indexOf('/storage/'))
+  if (path.startsWith('/')) return path
   return `/storage/${path}`
 }
 
@@ -581,9 +900,11 @@ const quickViewAddToCart = () => {
 
 // ─── Init ───────────────────────────────────────────────────────────
 onMounted(() => {
+  fetchHeroArticles()
+  fetchRecommendations()
+  fetchVendorFeed()
+  fetchCommerceFeed()
   fetchFlashSales()
-  fetchTopSellingBooks()
-  fetchBooks()
   wishlistStore.fetchWishlistIds()
 })
 </script>
@@ -627,4 +948,27 @@ onMounted(() => {
 /* ═══ Animations ═══ */
 .slide-down-enter-active, .slide-down-leave-active { transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1); }
 .slide-down-enter-from, .slide-down-leave-to { transform: translateY(-100%); opacity: 0; }
+
+.recommendation-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.recommendation-item:nth-child(n + 3) { display: none; }
+
+@media (min-width: 640px) {
+  .recommendation-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .recommendation-item:nth-child(3) { display: block; }
+}
+
+@media (min-width: 768px) {
+  .recommendation-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .recommendation-item:nth-child(4) { display: block; }
+}
+
+@media (min-width: 1024px) {
+  .recommendation-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  .recommendation-item:nth-child(5) { display: block; }
+}
 </style>

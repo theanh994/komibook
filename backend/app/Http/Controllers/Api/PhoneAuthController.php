@@ -165,17 +165,13 @@ class PhoneAuthController extends Controller
         $user = User::where('phone', $phone)->first();
 
         if ($user) {
-            $user->author()
-                ->whereNull('phone_verified_at')
-                ->update(['phone_verified_at' => now()]);
-
             Auth::login($user);
             if ($request->hasSession()) {
                 $request->session()->regenerate();
                 $request->session()->put('auth.password_confirmed_at', time());
             }
 
-            $user->load(['vendor', 'membershipTier', 'author']);
+            $user->load(['vendor', 'membershipTier', 'usedBookSellerProfile']);
 
             return response()->json([
                 'status' => 'success',

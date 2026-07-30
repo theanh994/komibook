@@ -6,6 +6,8 @@ use App\Traits\MultiVendorScoped;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class PayoutRequest extends Model
 {
@@ -35,5 +37,20 @@ class PayoutRequest extends Model
     public function vendor(): BelongsTo
     {
         return $this->belongsTo(Vendor::class);
+    }
+
+    public function ledgerEntries(): HasMany
+    {
+        return $this->hasMany(PayoutLedgerEntry::class);
+    }
+
+    public function transitions(): HasMany
+    {
+        return $this->hasMany(PayoutTransition::class);
+    }
+
+    public function latestTransition(): HasOne
+    {
+        return $this->hasOne(PayoutTransition::class)->latestOfMany();
     }
 }

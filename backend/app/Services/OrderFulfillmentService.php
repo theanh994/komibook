@@ -349,7 +349,10 @@ class OrderFulfillmentService
                 throw new LogicException("Physical or mixed order ID {$order->id} cannot be completed via ebook fulfillment.");
             }
 
-            return $this->executeOrderCompletion($order, null, null, $actorType, $actorId, $opKey, true);
+            $completed = $this->executeOrderCompletion($order, null, null, $actorType, $actorId, $opKey, true);
+            app(EbookEntitlementService::class)->grantForOrder($completed);
+
+            return $completed;
         });
     }
 

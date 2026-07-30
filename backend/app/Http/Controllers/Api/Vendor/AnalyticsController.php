@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Book;
 use App\Models\Order;
 use App\Models\OrderItem;
+use App\Support\PublicMediaUrl;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -21,7 +22,7 @@ class AnalyticsController extends Controller
     {
         $vendor = $request->user()->vendor;
 
-        if (!$vendor) {
+        if (! $vendor) {
             return response()->json(['message' => 'Bạn chưa được cấp quyền gian hàng'], 403);
         }
 
@@ -30,11 +31,18 @@ class AnalyticsController extends Controller
             ->join('books', 'order_items.book_id', '=', 'books.id')
             ->where('orders.vendor_id', $vendor->id)
             ->where('orders.status', 'completed')
-            ->select('books.id', 'books.title', DB::raw('SUM(order_items.quantity) as total_sold'), DB::raw('SUM(order_items.subtotal) as total_revenue'))
-            ->groupBy('books.id', 'books.title')
+            ->select('books.id', 'books.title', 'books.cover_image', DB::raw('SUM(order_items.quantity) as total_sold'), DB::raw('SUM(order_items.price * order_items.quantity) as total_revenue'))
+            ->groupBy('books.id', 'books.title', 'books.cover_image')
             ->orderByDesc('total_sold')
             ->limit(5)
-            ->get();
+            ->get()
+            ->map(function ($book) {
+                $book->cover_image = PublicMediaUrl::storage($book->cover_image);
+                $book->total_sold = (int) $book->total_sold;
+                $book->total_revenue = (int) $book->total_revenue;
+
+                return $book;
+            });
 
         // ── 2. Top độc giả (khách hàng chi tiêu nhiều nhất) ───────────────
         $topReaders = Order::where('vendor_id', $vendor->id)
@@ -68,10 +76,10 @@ class AnalyticsController extends Controller
         return response()->json([
             'status' => 'success',
             'data' => [
-                'top_selling_books'  => $topSellingBooks,
-                'top_readers'        => $topReaders,
-                'sales_by_category'  => $salesByCategory,
-                'reviews_stats'      => $reviewsStats,
+                'top_selling_books' => $topSellingBooks,
+                'top_readers' => $topReaders,
+                'sales_by_category' => $salesByCategory,
+                'reviews_stats' => $reviewsStats,
             ],
         ]);
     }

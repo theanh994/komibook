@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import Avatar from 'primevue/avatar'
@@ -9,6 +9,7 @@ const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
 const sidebarCollapsed = ref(false)
+const isMobile = ref(false)
 const userMenu = ref()
 
 // ─── Menu động theo Role ───────────────────────────────────────────────────
@@ -45,6 +46,21 @@ const vendorMenuItems = [
     route: '/vendor/warehouses',
   },
   {
+    label: 'Nhân sự kho',
+    icon: 'pi pi-users',
+    route: '/vendor/warehouse-managers',
+  },
+  {
+    label: 'Phiếu nhập / xuất kho',
+    icon: 'pi pi-file',
+    route: '/vendor/warehouse-documents',
+  },
+  {
+    label: 'NXB & Nhà cung cấp',
+    icon: 'pi pi-building',
+    route: '/vendor/organizations',
+  },
+  {
     label: 'Quản lý Đơn hàng',
     icon: 'pi pi-shopping-bag',
     route: '/vendor/orders',
@@ -68,6 +84,7 @@ const vendorMenuItems = [
 
 const expandedSubmenus = ref({
   'Quản lý Sách': true,
+  'Sách cũ & Kho': true,
 })
 
 const adminMenuItems = [
@@ -143,67 +160,39 @@ const adminMenuItems = [
     route: '/admin/system-config',
   },
   {
-    label: 'Commission & phí',
-    icon: 'pi pi-percentage',
-    route: '/admin/fee-schedules',
+    label: 'Tổ chức & cung ứng',
+    icon: 'pi pi-building',
+    route: '/admin/organization-reviews',
   },
 ]
 
-const authorMenuItems = [
+const warehouseManagerMenuItems = [
   {
-    label: 'Dashboard Tác giả',
-    icon: 'pi pi-pencil',
-    route: '/vendor/author-dashboard',
+    label: 'Tổng quan',
+    icon: 'pi pi-th-large',
+    route: '/warehouse-manager/dashboard',
   },
   {
-    label: 'Viết Chương Mới',
-    icon: 'pi pi-file-edit',
-    route: '/vendor/editor',
-  },
-  {
-    label: 'Bản quyền & DRM',
-    icon: 'pi pi-shield',
-    route: '/vendor/drm-settings',
-  },
-  {
-    label: 'Giá & Đọc Thử',
-    icon: 'pi pi-dollar',
-    route: '/vendor/book-chapters',
-  },
-  {
-    label: 'Quản lý Sách',
-    icon: 'pi pi-book',
-    route: '/vendor/books',
-  },
-  {
-    label: 'Kho Tác Giả',
+    label: 'Tồn kho & vị trí kệ',
     icon: 'pi pi-box',
-    route: '/vendor/warehouses',
+    route: '/warehouse-manager/inventory',
   },
   {
-    label: 'Đơn Hàng Sách Cũ',
-    icon: 'pi pi-shopping-bag',
-    route: '/vendor/orders',
-  },
-  {
-    label: 'Trả hàng & Hoàn tiền',
-    icon: 'pi pi-replay',
-    route: '/vendor/returns',
-  },
-  {
-    label: 'Doanh thu & Rút tiền',
-    icon: 'pi pi-wallet',
-    route: '/vendor/finance',
+    label: 'Phiếu nhập / xuất kho',
+    icon: 'pi pi-file',
+    route: '/warehouse-manager/documents',
   },
 ]
 
 const menuItems = computed(() => {
   if (authStore.isAdmin) return adminMenuItems
+  if (route.path.startsWith('/warehouse-manager')) return warehouseManagerMenuItems
   return vendorMenuItems
 })
 
 const panelLabel = computed(() => {
   if (authStore.isAdmin) return 'Admin Panel'
+  if (route.path.startsWith('/warehouse-manager')) return 'Kênh Quản lý kho'
   return 'Vendor Panel'
 })
 
@@ -229,17 +218,24 @@ const isActive = (item) => {
   return false
 }
 
-const navigateTo = (item) => {
-  if (item.children) {
-    toggleSubmenu(item.label)
-  } else if (item.route) {
-    router.push(item.route)
-  }
-}
-
 const toggleSidebar = () => {
   sidebarCollapsed.value = !sidebarCollapsed.value
 }
+
+const closeMobileSidebar = () => {
+  if (isMobile.value) sidebarCollapsed.value = true
+}
+
+const handleGlobalKeydown = (event) => {
+  if (event.key === 'Escape') closeMobileSidebar()
+}
+
+const syncViewport = () => {
+  isMobile.value = window.innerWidth <= 1024
+  if (isMobile.value) sidebarCollapsed.value = true
+}
+
+watch(() => route.fullPath, closeMobileSidebar)
 
 const userMenuItems = ref([
   {
@@ -279,25 +275,37 @@ const userAvatarUrl = computed(() => {
 })
 
 onMounted(() => {
-  if (window.innerWidth <= 768) {
-    sidebarCollapsed.value = true
-  }
+  syncViewport()
+  window.addEventListener('keydown', handleGlobalKeydown)
+  window.addEventListener('resize', syncViewport)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleGlobalKeydown)
+  window.removeEventListener('resize', syncViewport)
 })
 </script>
 
 <template>
   <div class="admin-layout">
+    <a class="skip-link" href="#management-content">Bỏ qua điều hướng quản lý</a>
+
     <!-- Mobile Sidebar Backdrop -->
     <div
       v-if="!sidebarCollapsed"
       class="sidebar-backdrop"
+      aria-hidden="true"
       @click="sidebarCollapsed = true"
     ></div>
 
     <!-- ═══ SIDEBAR ═══ -->
     <aside
+      id="management-sidebar"
       class="admin-sidebar"
       :class="{ 'sidebar-collapsed': sidebarCollapsed }"
+      aria-label="Điều hướng trang quản lý"
+      :aria-hidden="isMobile && sidebarCollapsed"
+      :inert="isMobile && sidebarCollapsed"
     >
       <!-- Sidebar Header -->
       <div class="sidebar-header">
@@ -321,25 +329,32 @@ onMounted(() => {
           <ul class="nav-list">
             <template v-for="item in menuItems" :key="item.label || item.route">
               <!-- Regular Item -->
-              <li
-                v-if="!item.children"
-                class="nav-item"
-                :class="{ active: isActive(item) }"
-                @click="navigateTo(item)"
-              >
-                <div class="nav-indicator"></div>
-                <i :class="item.icon" class="nav-icon"></i>
-                <Transition name="fade">
-                  <span v-if="!sidebarCollapsed" class="nav-text">{{ item.label }}</span>
-                </Transition>
+              <li v-if="!item.children">
+                <router-link
+                  :to="item.route"
+                  class="nav-item"
+                  :class="{ active: isActive(item) }"
+                  :aria-label="item.label"
+                  :aria-current="isActive(item) ? 'page' : undefined"
+                  @click="closeMobileSidebar"
+                >
+                  <div class="nav-indicator"></div>
+                  <i :class="item.icon" class="nav-icon"></i>
+                  <Transition name="fade">
+                    <span v-if="!sidebarCollapsed" class="nav-text">{{ item.label }}</span>
+                  </Transition>
+                </router-link>
               </li>
 
               <!-- Item with Children Submenu -->
               <li v-else class="nav-group-wrapper">
-                <div
+                <button
+                  type="button"
                   class="nav-item nav-parent-item"
                   :class="{ active: isActive(item) }"
-                  @click="navigateTo(item)"
+                  :aria-label="item.label"
+                  :aria-expanded="expandedSubmenus[item.label]"
+                  @click="toggleSubmenu(item.label)"
                 >
                   <div class="nav-indicator"></div>
                   <i :class="item.icon" class="nav-icon"></i>
@@ -352,7 +367,7 @@ onMounted(() => {
                       ></i>
                     </div>
                   </Transition>
-                </div>
+                </button>
 
                 <!-- Submenu Items -->
                 <ul
@@ -362,13 +377,19 @@ onMounted(() => {
                   <li
                     v-for="child in item.children"
                     :key="child.route"
-                    class="nav-item sub-nav-item"
-                    :class="{ active: isActive(child) }"
-                    @click.stop="navigateTo(child)"
                   >
-                    <div class="nav-indicator"></div>
-                    <i :class="child.icon" class="nav-icon sub-nav-icon"></i>
-                    <span class="nav-text text-xs font-medium">{{ child.label }}</span>
+                    <router-link
+                      :to="child.route"
+                      class="nav-item sub-nav-item"
+                      :class="{ active: isActive(child) }"
+                      :aria-label="child.label"
+                      :aria-current="isActive(child) ? 'page' : undefined"
+                      @click="closeMobileSidebar"
+                    >
+                      <div class="nav-indicator"></div>
+                      <i :class="child.icon" class="nav-icon sub-nav-icon"></i>
+                      <span class="nav-text text-sm font-medium">{{ child.label }}</span>
+                    </router-link>
                   </li>
                 </ul>
               </li>
@@ -384,13 +405,18 @@ onMounted(() => {
           <li
             v-for="item in bottomItems"
             :key="item.route"
-            class="nav-item nav-item-bottom"
-            @click="navigateTo(item)"
           >
-            <i :class="item.icon" class="nav-icon"></i>
-            <Transition name="fade">
-              <span v-if="!sidebarCollapsed" class="nav-text">{{ item.label }}</span>
-            </Transition>
+            <router-link
+              :to="item.route"
+              class="nav-item nav-item-bottom"
+              :aria-label="item.label"
+              @click="closeMobileSidebar"
+            >
+              <i :class="item.icon" class="nav-icon"></i>
+              <Transition name="fade">
+                <span v-if="!sidebarCollapsed" class="nav-text">{{ item.label }}</span>
+              </Transition>
+            </router-link>
           </li>
         </ul>
       </div>
@@ -401,7 +427,14 @@ onMounted(() => {
       <!-- Topbar -->
       <header class="admin-topbar">
         <div class="topbar-left">
-          <button class="toggle-btn" @click="toggleSidebar">
+          <button
+            class="toggle-btn"
+            type="button"
+            :aria-label="sidebarCollapsed ? 'Mở thanh điều hướng' : 'Đóng thanh điều hướng'"
+            :aria-expanded="!sidebarCollapsed"
+            aria-controls="management-sidebar"
+            @click="toggleSidebar"
+          >
             <i :class="sidebarCollapsed ? 'pi pi-bars' : 'pi pi-times'"></i>
           </button>
           <div class="breadcrumb">
@@ -411,16 +444,23 @@ onMounted(() => {
 
         <div class="topbar-right">
           <!-- Notifications Button -->
-          <button class="topbar-icon-btn" @click="router.push('/notifications')" title="Thông báo">
+          <button
+            class="topbar-icon-btn"
+            type="button"
+            aria-label="Thông báo"
+            @click="router.push('/notifications')"
+          >
             <i class="pi pi-bell"></i>
             <span class="notification-dot"></span>
           </button>
 
           <!-- User Profile -->
-          <div
+          <button
+            type="button"
             class="topbar-user"
             @click="toggleUserMenu"
-            aria-haspopup="true"
+            aria-label="Mở menu tài khoản"
+            aria-haspopup="menu"
             aria-controls="admin_user_menu"
           >
             <div v-if="userAvatarUrl" class="w-8 h-8 rounded-full overflow-hidden border border-slate-200 shadow-xs shrink-0 bg-slate-100 flex items-center justify-center">
@@ -437,13 +477,13 @@ onMounted(() => {
               <span class="user-role">{{ shopName }}</span>
             </div>
             <i class="pi pi-chevron-down user-chevron"></i>
-          </div>
+          </button>
           <Menu ref="userMenu" id="admin_user_menu" :model="userMenuItems" :popup="true" />
         </div>
       </header>
 
       <!-- Page Content -->
-      <main class="admin-content">
+      <main id="management-content" class="admin-content" data-route-focus tabindex="-1">
         <RouterView />
       </main>
     </div>
@@ -455,7 +495,7 @@ onMounted(() => {
 .admin-layout {
   display: flex;
   min-height: 100vh;
-  background: #f8fafc;
+  background: var(--color-background);
 }
 
 /* ═══ SIDEBAR ═══ */
@@ -524,7 +564,7 @@ onMounted(() => {
 }
 
 .brand-sub {
-  font-size: 10px;
+  font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.15em;
   color: #64748b;
@@ -545,7 +585,7 @@ onMounted(() => {
 .nav-label {
   display: block;
   padding: 8px 12px;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.12em;
@@ -563,15 +603,23 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: 12px;
+  min-height: 44px;
   padding: 10px 12px;
   margin: 2px 0;
   border-radius: 10px;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition:
+    background-color var(--ui-duration-normal) var(--ui-ease-standard),
+    color var(--ui-duration-normal) var(--ui-ease-standard);
   color: #94a3b8;
   font-size: 14px;
   font-weight: 500;
   white-space: nowrap;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  text-decoration: none;
 }
 
 .nav-item:hover {
@@ -607,8 +655,8 @@ onMounted(() => {
 }
 
 .sub-nav-item {
-  padding: 8px 12px;
-  font-size: 13px;
+  padding: 10px 12px;
+  font-size: 14px;
 }
 
 .sub-nav-icon {
@@ -649,7 +697,9 @@ onMounted(() => {
   flex: 1;
   margin-left: 260px;
   width: calc(100% - 260px);
+  max-width: 100%;
   min-width: 0;
+  overflow-x: clip;
   transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1), width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   display: flex;
   flex-direction: column;
@@ -683,8 +733,8 @@ onMounted(() => {
 }
 
 .toggle-btn {
-  width: 36px;
-  height: 36px;
+  width: 44px;
+  height: 44px;
   border-radius: 8px;
   border: 1px solid #e2e8f0;
   background: white;
@@ -693,7 +743,10 @@ onMounted(() => {
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition:
+    background-color var(--ui-duration-normal) var(--ui-ease-standard),
+    border-color var(--ui-duration-normal) var(--ui-ease-standard),
+    color var(--ui-duration-normal) var(--ui-ease-standard);
 }
 
 .toggle-btn:hover {
@@ -716,8 +769,8 @@ onMounted(() => {
 
 .topbar-icon-btn {
   position: relative;
-  width: 36px;
-  height: 36px;
+  width: 44px;
+  height: 44px;
   border-radius: 8px;
   border: none;
   background: transparent;
@@ -726,7 +779,9 @@ onMounted(() => {
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition:
+    background-color var(--ui-duration-normal) var(--ui-ease-standard),
+    color var(--ui-duration-normal) var(--ui-ease-standard);
 }
 
 .topbar-icon-btn:hover {
@@ -752,7 +807,11 @@ onMounted(() => {
   padding: 6px 12px;
   border-radius: 10px;
   cursor: pointer;
-  transition: all 0.2s ease;
+  min-height: 44px;
+  background: transparent;
+  transition:
+    background-color var(--ui-duration-normal) var(--ui-ease-standard),
+    border-color var(--ui-duration-normal) var(--ui-ease-standard);
   border: 1px solid transparent;
 }
 
@@ -782,7 +841,7 @@ onMounted(() => {
 }
 
 .user-role {
-  font-size: 11px;
+  font-size: 12px;
   color: #64748b;
 }
 
@@ -842,7 +901,7 @@ onMounted(() => {
   }
 }
 
-@media (max-width: 768px) {
+@media (max-width: 1024px) {
   .sidebar-backdrop {
     display: block;
     position: fixed;
@@ -884,6 +943,18 @@ onMounted(() => {
   .nav-text,
   .nav-label {
     display: block !important;
+  }
+
+  .admin-topbar {
+    padding-inline: 12px;
+  }
+
+  .breadcrumb-text {
+    display: block;
+    max-width: 12rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 }
 </style>

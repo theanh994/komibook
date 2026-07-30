@@ -159,7 +159,7 @@ describe('Phase 3 Vendor Views Final Runtime Correction Tests', () => {
     expect(setupState.transfers.value).toEqual([])
   })
 
-  it('LiveEditorView sets honest empty state when chapters array is empty', async () => {
+  it('LiveEditorView turns an empty chapter response into one honest unsaved draft', async () => {
     vi.spyOn(apiClient, 'get').mockImplementation((url) => {
       if (url.includes('/chapters')) return Promise.resolve({ data: { status: 'success', data: [] } })
       if (url.includes('/api/vendor/books/')) return Promise.resolve({ data: { data: { title: 'Sách mới' } } })
@@ -171,7 +171,13 @@ describe('Phase 3 Vendor Views Final Runtime Correction Tests', () => {
 
     expect(setupState.loading.value).toBe(false)
     expect(setupState.error.value).toBeNull()
-    expect(setupState.chapters.value).toEqual([])
+    expect(setupState.chapters.value).toHaveLength(1)
+    expect(setupState.chapters.value[0]).toMatchObject({
+      id: null,
+      order: 1,
+      is_free: false,
+    })
+    expect(setupState.activeChapterIndex.value).toBe(0)
   })
 
   it('MultiDevicePreviewView sets honest empty state when chapters array is empty', async () => {

@@ -1,15 +1,14 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createSSRApp, h } from 'vue'
 import { renderToString } from 'vue/server-renderer'
-import { createPinia, setActivePinia } from 'pinia'
 
 import OtpCodeInput from '../components/auth/OtpCodeInput.vue'
-import AccountVerificationView from '../views/auth/AccountVerificationView.vue'
-import { useAuthStore } from '../stores/auth'
 
-const { routerPush, toastAdd } = vi.hoisted(() => ({
+const { routerPush, toastAdd, apiGet, apiPost } = vi.hoisted(() => ({
   routerPush: vi.fn(),
-  toastAdd: vi.fn()
+  toastAdd: vi.fn(),
+  apiGet: vi.fn(),
+  apiPost: vi.fn(),
 }))
 
 vi.mock('vue-router', () => ({
@@ -18,6 +17,13 @@ vi.mock('vue-router', () => ({
 
 vi.mock('primevue/usetoast', () => ({
   useToast: () => ({ add: toastAdd })
+}))
+
+vi.mock('@/services/axios', () => ({
+  default: {
+    get: apiGet,
+    post: apiPost,
+  },
 }))
 
 async function createSetupState(modelValue = '') {
@@ -73,35 +79,4 @@ describe('Phase 3 eight-digit OTP input', () => {
     expect(emit).toHaveBeenCalledWith('update:modelValue', '1234567')
   })
 
-  it('uses the real phone OTP store flow in account verification', async () => {
-    const pinia = createPinia()
-    setActivePinia(pinia)
-    const authStore = useAuthStore()
-    authStore.user = { id: 1, phone: '0989999999' }
-    const sendSpy = vi.spyOn(authStore, 'sendPhoneOtp').mockResolvedValue({ status: 'success' })
-    const verifySpy = vi.spyOn(authStore, 'verifyPhoneOtp').mockResolvedValue({ status: 'success' })
-    let setupState = null
-
-    const app = createSSRApp({
-      setup(props, context) {
-        setupState = AccountVerificationView.setup(props, context)
-        return () => null
-      }
-    })
-    app.use(pinia)
-    await renderToString(app)
-
-    await setupState.sendOtp()
-    expect(sendSpy).toHaveBeenCalledWith('0989999999')
-    expect(setupState.otpSent.value).toBe(true)
-
-    setupState.otpInput.value = '1234567'
-    await setupState.verifyOtp()
-    expect(verifySpy).not.toHaveBeenCalled()
-
-    setupState.otpInput.value = '12345678'
-    await setupState.verifyOtp()
-    expect(verifySpy).toHaveBeenCalledWith('0989999999', '12345678')
-    expect(routerPush).toHaveBeenCalledWith({ name: 'author-register' })
-  })
 })

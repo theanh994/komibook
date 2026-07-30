@@ -20,6 +20,7 @@ const toast = useToast()
 const flashSaleId = route.params.id
 const flashSale = ref(null)
 const loading = ref(false)
+const error = ref('')
 
 const itemDialog = ref(false)
 const deleteItemDialog = ref(false)
@@ -36,11 +37,14 @@ const selectedCategory = ref(null)
 
 const fetchFlashSale = async () => {
   loading.value = true
+  error.value = ''
   try {
     const res = await apiClient.get(`/api/admin/flash-sales/${flashSaleId}`)
     flashSale.value = res.data.data
   } catch (e) {
-    toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Không thể tải Flash Sale', life: 3000 })
+    flashSale.value = null
+    error.value = e.response?.data?.message || 'Không thể tải Flash Sale.'
+    toast.add({ severity: 'error', summary: 'Lỗi', detail: error.value, life: 3000 })
   } finally {
     loading.value = false
   }
@@ -213,12 +217,22 @@ onMounted(() => {
 
 <template>
   <div class="pb-xxl w-full pt-6">
-    <button @click="router.back()" class="text-on-surface-variant hover:text-primary transition-colors flex items-center gap-1 mb-md text-sm font-medium">
+    <button type="button" @click="router.back()" class="min-h-11 text-on-surface-variant hover:text-primary transition-colors flex items-center gap-1 mb-md text-sm font-medium">
       <span class="material-symbols-outlined text-[18px]">arrow_back</span>
       Quay lại danh sách
     </button>
 
-    <div class="flex flex-col md:flex-row md:items-center justify-between gap-md mb-xl animate-fade-in" v-if="flashSale">
+    <div v-if="loading && !flashSale" role="status" aria-live="polite" class="rounded-xl border border-outline-variant/30 bg-surface-container-lowest p-10 text-center text-on-surface-variant">
+      Đang tải chi tiết Flash Sale...
+    </div>
+
+    <div v-else-if="error" role="alert" class="rounded-xl border border-error/20 bg-error/5 p-6 text-center">
+      <h1 class="text-xl font-bold text-error">Không thể tải Flash Sale</h1>
+      <p class="mt-2 text-sm text-on-surface-variant">{{ error }}</p>
+      <button type="button" class="mt-4 min-h-11 rounded-xl bg-error px-5 font-bold text-white" @click="fetchFlashSale">Thử lại</button>
+    </div>
+
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-md mb-xl animate-fade-in" v-else-if="flashSale">
       <div>
         <h1 class="font-headline-lg text-headline-lg text-on-surface font-bold">{{ flashSale.title }}</h1>
         <p class="font-body-md text-body-md text-on-surface-variant mt-xs">
@@ -229,14 +243,16 @@ onMounted(() => {
         <button
           v-if="selectedItems.length > 0"
           @click="deleteMultipleDialog = true"
-          class="bg-error text-on-error font-label-md text-label-md px-lg py-sm rounded-lg hover:opacity-90 transition-opacity flex items-center gap-sm shadow-sm whitespace-nowrap"
+          type="button"
+          class="min-h-11 bg-error text-on-error font-label-md text-label-md px-lg py-sm rounded-lg hover:opacity-90 transition-opacity flex items-center gap-sm shadow-sm whitespace-nowrap"
         >
           <span class="material-symbols-outlined text-[18px]">delete</span>
           Xóa đã chọn ({{ selectedItems.length }})
         </button>
         <button
           @click="openNewItem"
-          class="bg-primary text-on-primary font-label-md text-label-md px-lg py-sm rounded-lg hover:opacity-90 transition-opacity flex items-center gap-sm shadow-sm whitespace-nowrap"
+          type="button"
+          class="min-h-11 bg-primary text-on-primary font-label-md text-label-md px-lg py-sm rounded-lg hover:opacity-90 transition-opacity flex items-center gap-sm shadow-sm whitespace-nowrap"
         >
           <span class="material-symbols-outlined text-[18px]">add</span>
           Thêm sản phẩm
@@ -439,4 +455,12 @@ onMounted(() => {
 .animate-slide-up { opacity: 0; transform: translateY(15px); animation: slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 @keyframes slideUp { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-in,
+  .animate-slide-up {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+}
 </style>

@@ -8,12 +8,23 @@
           <p class="text-base text-on-surface-variant">Khám phá bộ sưu tập sách được tuyển chọn kỹ lưỡng.</p>
         </div>
         <!-- Sort Control -->
-        <div class="flex items-center gap-sm">
+        <div class="flex flex-wrap items-center gap-sm">
+          <button
+            type="button"
+            class="ui-button ui-button-secondary !min-h-11 lg:hidden"
+            :aria-expanded="filtersOpen"
+            aria-controls="catalog-filters"
+            @click="filtersOpen = true"
+          >
+            <span class="material-symbols-outlined text-[18px]" aria-hidden="true">tune</span>
+            Bộ lọc
+          </button>
           <span class="text-sm text-on-surface-variant">Sắp xếp:</span>
           <select
             v-model="sortBy"
             @change="applyFilters"
-            class="px-md py-2 bg-surface-container-lowest border border-outline-variant rounded-lg text-sm text-on-surface focus:border-primary focus:ring-1 focus:ring-primary-fixed-dim transition-all cursor-pointer"
+            aria-label="Sắp xếp sách"
+            class="min-h-11 cursor-pointer rounded-lg border border-outline-variant bg-surface-container-lowest px-md py-2 text-sm text-on-surface focus:border-primary focus:ring-1 focus:ring-primary-fixed-dim"
           >
             <option value="newest">Mới nhất</option>
             <option value="price_asc">Giá thấp → cao</option>
@@ -29,8 +40,22 @@
       <div class="grid grid-cols-1 lg:grid-cols-4 gap-xl">
 
         <!-- ─── SIDEBAR ─── -->
-        <aside class="lg:col-span-1">
-          <div class="bg-surface-container-lowest rounded-xl soft-shadow border border-outline-variant/20 p-lg sticky top-24">
+        <div v-if="filtersOpen" class="fixed inset-0 z-[70] bg-slate-950/50 lg:hidden" aria-hidden="true" @click="filtersOpen = false"></div>
+        <aside
+          id="catalog-filters"
+          class="fixed inset-y-0 left-0 z-[80] w-[min(90vw,22rem)] overflow-y-auto bg-surface-container-lowest transition-transform lg:static lg:z-auto lg:col-span-1 lg:block lg:w-auto lg:overflow-visible lg:bg-transparent"
+          :class="filtersOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'"
+          :aria-hidden="!filtersOpen && isMobileFilters"
+          :inert="!filtersOpen && isMobileFilters"
+          aria-label="Bộ lọc danh mục"
+        >
+          <div class="min-h-full border border-outline-variant/20 bg-surface-container-lowest p-lg soft-shadow lg:sticky lg:top-24 lg:min-h-0 lg:rounded-xl">
+            <div class="mb-5 flex items-center justify-between lg:hidden">
+              <h2 class="text-lg font-bold text-on-surface">Bộ lọc</h2>
+              <button type="button" class="ui-icon-button !h-11 !w-11 !min-h-11 !min-w-11" aria-label="Đóng bộ lọc" @click="filtersOpen = false">
+                <span class="material-symbols-outlined" aria-hidden="true">close</span>
+              </button>
+            </div>
             <!-- Categories -->
             <h2 class="text-sm font-semibold text-on-surface tracking-tight mb-md">
               Thể loại
@@ -40,42 +65,44 @@
             </div>
             <ul v-else class="flex flex-col gap-0.5 mb-lg">
               <li>
-                <button @click="selectCategory(null)" :class="catClass(null)">Tất cả</button>
+                <button @click="selectCategory(null)" :class="catClass(null)" :aria-pressed="selectedCategoryId === null">Tất cả</button>
               </li>
               <li v-for="category in categories" :key="category.id">
-                <button @click="selectCategory(category.id)" :class="catClass(category.id)">{{ category.name }}</button>
+                <button @click="selectCategory(category.id)" :class="catClass(category.id)" :aria-pressed="selectedCategoryId === category.id">{{ category.name }}</button>
               </li>
             </ul>
 
             <!-- Loại sách -->
             <div class="border-t border-outline-variant/30 pt-lg mb-lg">
               <h3 class="text-sm font-semibold text-on-surface mb-md">Định dạng</h3>
-              <div class="flex flex-col gap-2">
-                <div class="flex items-center">
-                  <RadioButton v-model="filterType" inputId="ft1" name="ftype" value="all" @change="applyFilters" />
-                  <label for="ft1" class="ml-2 text-sm text-on-surface-variant cursor-pointer">Tất cả</label>
-                </div>
-                <div class="flex items-center">
-                  <RadioButton v-model="filterType" inputId="ft2" name="ftype" value="physical" @change="applyFilters" />
-                  <label for="ft2" class="ml-2 text-sm text-on-surface-variant cursor-pointer">Sách giấy</label>
-                </div>
-                <div class="flex items-center">
-                  <RadioButton v-model="filterType" inputId="ft3" name="ftype" value="ebook" @change="applyFilters" />
-                  <label for="ft3" class="ml-2 text-sm text-on-surface-variant cursor-pointer">E-book</label>
-                </div>
+              <div class="grid grid-cols-2 gap-2">
+                <button v-for="option in productOptions" :key="option.value" type="button" :class="filterButtonClass(filterProduct === option.value)" :aria-pressed="filterProduct === option.value" @click="filterProduct = option.value; applyFilters()">
+                  {{ option.label }}
+                </button>
+              </div>
+            </div>
+
+            <!-- Lứa tuổi -->
+            <div class="border-t border-outline-variant/30 pt-lg mb-lg">
+              <h3 class="text-sm font-semibold text-on-surface mb-md">Lứa tuổi</h3>
+              <div class="grid grid-cols-2 gap-2">
+                <button v-for="option in ageOptions" :key="option.value" type="button" :class="filterButtonClass(filterAge === option.value)" :aria-pressed="filterAge === option.value" @click="filterAge = option.value; applyFilters()">
+                  {{ option.label }}
+                </button>
               </div>
             </div>
 
             <!-- Khoảng giá -->
             <div class="border-t border-outline-variant/30 pt-lg">
               <h3 class="text-sm font-semibold text-on-surface mb-md">Khoảng giá</h3>
-              <div class="flex items-center gap-2">
-                <InputNumber v-model="filterMinPrice" placeholder="Từ" class="flex-1" inputClass="w-full text-sm !rounded-lg" @keyup.enter="applyFilters" />
-                <span class="text-outline-variant">-</span>
-                <InputNumber v-model="filterMaxPrice" placeholder="Đến" class="flex-1" inputClass="w-full text-sm !rounded-lg" @keyup.enter="applyFilters" />
+              <div class="grid gap-2">
+                <button type="button" :class="filterButtonClass(filterPrice === '')" :aria-pressed="filterPrice === ''" @click="filterPrice = ''; applyFilters()">Tất cả mức giá</button>
+                <button v-for="band in priceBands" :key="band.value" type="button" :class="filterButtonClass(filterPrice === band.value)" :aria-pressed="filterPrice === band.value" @click="filterPrice = band.value; applyFilters()">
+                  {{ band.label }}
+                </button>
               </div>
-              <button @click="applyFilters" class="w-full mt-md py-2 px-md rounded-lg border border-primary text-primary text-sm font-medium hover:bg-surface-container-low transition-colors">
-                Áp dụng lọc
+              <button @click="resetFilters" class="mt-md min-h-11 w-full rounded-lg border border-primary px-md py-2 text-sm font-medium text-primary transition-colors hover:bg-surface-container-low">
+                Xóa bộ lọc
               </button>
             </div>
           </div>
@@ -115,69 +142,17 @@
           <!-- Book Grid -->
           <div v-else>
             <div class="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-gutter">
-              <div
+              <BookCard
                 v-for="book in books"
                 :key="book.id"
-                class="group bg-surface-container-lowest rounded-lg soft-shadow overflow-hidden cursor-pointer border border-outline-variant/30 transition-all duration-300 hover:-translate-y-1 hover:shadow-card-hover flex flex-col h-full"
-                @click="goToDetail(book.slug)"
-              >
-                <!-- Cover -->
-                <div class="relative pt-[140%] bg-surface-variant/30">
-                  <img v-if="book.cover_image" :src="getCoverUrl(book.cover_image)" :alt="book.title" class="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" loading="lazy" />
-                  <div v-else class="absolute inset-0 flex items-center justify-center"><span class="material-symbols-outlined text-outline text-4xl">image</span></div>
-                  
-                  <!-- Wishlist Button -->
-                  <button 
-                    @click.stop="toggleWishlist(book.id)"
-                    class="absolute top-2.5 right-2.5 flex items-center justify-center transition-all hover:scale-120 active:scale-90 z-10 bg-transparent border-none cursor-pointer p-0"
-                    :class="wishlistStore.isFavorite(book.id) ? 'text-error' : 'text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.6)] hover:text-error'"
-                  >
-                    <span class="material-symbols-outlined text-[22px]" :class="wishlistStore.isFavorite(book.id) ? 'fill-1' : ''">favorite</span>
-                  </button>
-                  <span v-if="book.sale_price && book.price > book.sale_price" class="absolute top-2 left-2 bg-secondary text-on-secondary text-[11px] font-bold px-2 py-0.5 rounded-md shadow-sm z-10">
-                    -{{ Math.round((1 - book.sale_price / book.price) * 100) }}%
-                  </span>
-
-                  <!-- Cover Hover Buttons (Quick View, Add to Cart, Buy Now) -->
-                  <div class="absolute bottom-3 right-3 flex flex-col gap-2 z-20 opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0 transition-all duration-300">
-                    <!-- Xem nhanh -->
-                    <button
-                      type="button"
-                      @click.stop="openQuickView(book)"
-                      title="Xem nhanh"
-                      class="w-9 h-9 rounded-full bg-[#00b14f] text-white flex items-center justify-center shadow-md hover:bg-[#009e46] hover:scale-115 active:scale-95 transition-all cursor-pointer border-none"
-                    >
-                      <span class="material-symbols-outlined text-[20px]">visibility</span>
-                    </button>
-                    <!-- Thêm vào giỏ hàng -->
-                    <button
-                      type="button"
-                      @click.stop="addToCart(book)"
-                      title="Thêm vào giỏ hàng"
-                      class="w-9 h-9 rounded-full bg-[#00b14f] text-white flex items-center justify-center shadow-md hover:bg-[#009e46] hover:scale-115 active:scale-95 transition-all cursor-pointer border-none"
-                    >
-                      <span class="material-symbols-outlined text-[20px]">shopping_bag</span>
-                    </button>
-                    <!-- Mua ngay -->
-                    <button
-                      type="button"
-                      @click.stop="buyNow(book)"
-                      title="Mua ngay"
-                      class="w-9 h-9 rounded-full bg-[#00b14f] text-white flex items-center justify-center shadow-md hover:bg-[#009e46] hover:scale-115 active:scale-95 transition-all cursor-pointer border-none"
-                    >
-                      <span class="material-symbols-outlined text-[20px]">shopping_cart</span>
-                    </button>
-                  </div>
-                </div>
-                <!-- Info -->
-                <div class="p-md flex flex-col justify-between flex-grow">
-                  <h3 class="text-center text-sm font-medium text-on-surface line-clamp-2 leading-snug mb-1 group-hover:text-primary transition-colors">{{ book.title }}</h3>
-                  <div class="text-center text-sm font-bold text-[#00b14f] flex items-center justify-center gap-1.5 mt-auto">
-                    <span>{{ formatCurrency(book.sale_price || book.price) }}</span>
-                    <span v-if="book.sale_price && book.price > book.sale_price" class="text-xs text-outline line-through font-normal">{{ formatCurrency(book.price) }}</span>
-                  </div>
-                </div>
-              </div>
+                :book="book"
+                show-wishlist
+                :is-favorite="wishlistStore.isFavorite(book.id)"
+                @quick-view="openQuickView"
+                @add-to-cart="addToCart"
+                @buy-now="buyNow"
+                @toggle-wishlist="toggleWishlist"
+              />
             </div>
 
             <!-- Pagination -->
@@ -319,7 +294,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import apiClient from '@/services/axios'
 import { readApiList, readApiPagination } from '@/services/apiContract'
@@ -327,10 +302,9 @@ import { useCartStore } from '@/stores/cart'
 import { useToast } from 'primevue/usetoast'
 import Skeleton from 'primevue/skeleton'
 import Paginator from 'primevue/paginator'
-import RadioButton from 'primevue/radiobutton'
-import InputNumber from 'primevue/inputnumber'
 import Dialog from 'primevue/dialog'
 import { useWishlistStore } from '@/stores/wishlist'
+import BookCard from '@/components/BookCard.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -347,10 +321,39 @@ const searchQuery = ref('')
 const totalRecords = ref(0)
 const first = ref(0)
 const currentPage = ref(1)
-const filterType = ref('all')
-const filterMinPrice = ref(null)
-const filterMaxPrice = ref(null)
+const filterProduct = ref('all')
+const filterAge = ref('')
+const filterPrice = ref('')
 const sortBy = ref('newest')
+const filtersOpen = ref(false)
+const isMobileFilters = ref(false)
+
+const productOptions = [
+  { value: 'all', label: 'Tất cả' },
+  { value: 'physical', label: 'Sách giấy' },
+  { value: 'ebook', label: 'Ebook' },
+  { value: 'used_resale', label: 'Sách cũ' },
+]
+
+const ageOptions = [
+  { value: '', label: 'Mọi lứa tuổi' },
+  { value: 'Nhà trẻ - mẫu giáo (0 - 6)', label: 'Nhà trẻ - mẫu giáo (0 - 6)' },
+  { value: 'Nhi đồng (6 - 11)', label: 'Nhi đồng (6 - 11)' },
+  { value: 'Thiếu niên (11 - 15)', label: 'Thiếu niên (11 - 15)' },
+  { value: 'Tuổi mới lớn (15 - 18)', label: 'Tuổi mới lớn (15 - 18)' },
+  { value: 'Tuổi trưởng thành (Trên 18 tuổi)', label: 'Tuổi trưởng thành (Trên 18 tuổi)' },
+]
+
+const priceBands = [
+  { value: 'under-50000', label: 'Dưới 50.000đ', min: null, max: 49999 },
+  { value: '50000-100000', label: '50.000–100.000đ', min: 50000, max: 100000 },
+  { value: '100000-200000', label: '100.000–200.000đ', min: 100001, max: 200000 },
+  { value: '200000-300000', label: '200.000–300.000đ', min: 200001, max: 300000 },
+  { value: '300000-500000', label: '300.000–500.000đ', min: 300001, max: 500000 },
+  { value: 'over-500000', label: 'Trên 500.000đ', min: 500001, max: null },
+]
+
+const selectedPriceBand = computed(() => priceBands.find((band) => band.value === filterPrice.value))
 
 // Quick View State
 const quickViewVisible = ref(false)
@@ -359,6 +362,7 @@ const quickViewVersion = ref('standard')
 const quickViewQty = ref(1)
 
 const activeTitle = computed(() => {
+  if (filterProduct.value === 'used_resale') return 'Sách cũ'
   if (searchQuery.value) return `Kết quả tìm kiếm`
   if (selectedCategoryId.value) {
     const cat = categories.value.find(c => c.id === selectedCategoryId.value)
@@ -368,10 +372,17 @@ const activeTitle = computed(() => {
 })
 
 const catClass = (id) => [
-  'w-full text-left px-md py-2.5 rounded-lg text-sm font-medium transition-all duration-200',
+  'min-h-11 w-full rounded-lg px-md py-2.5 text-left text-sm font-medium transition-colors duration-200',
   selectedCategoryId.value === id
     ? 'bg-surface-variant text-primary font-bold'
     : 'text-on-surface-variant hover:bg-surface-container-low hover:text-primary'
+]
+
+const filterButtonClass = (active) => [
+  'min-h-11 rounded-lg border px-3 py-2 text-left text-sm font-semibold transition-colors',
+  active
+    ? 'border-primary bg-primary text-on-primary'
+    : 'border-outline-variant/50 bg-surface-container-lowest text-on-surface-variant hover:border-primary hover:text-primary',
 ]
 
 const fetchCategories = async () => {
@@ -391,9 +402,11 @@ const fetchBooks = async () => {
       per_page: 12, // 12 items per page means exactly 3 rows of 4 items!
       ...(selectedCategoryId.value && { category_id: selectedCategoryId.value }),
       ...(searchQuery.value.trim() && { search: searchQuery.value.trim() }),
-      ...(filterType.value !== 'all' && { type: filterType.value }),
-      ...(filterMinPrice.value !== null && { min_price: filterMinPrice.value }),
-      ...(filterMaxPrice.value !== null && { max_price: filterMaxPrice.value }),
+      ...(['physical', 'ebook'].includes(filterProduct.value) && { type: filterProduct.value }),
+      ...(filterProduct.value === 'used_resale' && { type: 'physical', provenance: 'used_resale' }),
+      ...(filterAge.value && { target_age: filterAge.value }),
+      ...(selectedPriceBand.value?.min !== null && selectedPriceBand.value?.min !== undefined && { min_price: selectedPriceBand.value.min }),
+      ...(selectedPriceBand.value?.max !== null && selectedPriceBand.value?.max !== undefined && { max_price: selectedPriceBand.value.max }),
       ...(sortBy.value !== 'newest' && { sort: sortBy.value }),
     }
     const res = await apiClient.get('/api/books', { params })
@@ -406,15 +419,52 @@ const fetchBooks = async () => {
 const selectCategory = (id) => {
   selectedCategoryId.value = id
   currentPage.value = 1; first.value = 0
-  fetchBooks()
+  updateRouteQuery()
 }
-const applyFilters = () => { currentPage.value = 1; first.value = 0; fetchBooks() }
-const clearSearch = () => { searchQuery.value = ''; applyFilters() }
+const applyFilters = () => {
+  currentPage.value = 1
+  first.value = 0
+  filtersOpen.value = false
+  updateRouteQuery()
+}
+const clearSearch = () => {
+  searchQuery.value = ''
+  applyFilters()
+}
+const resetFilters = () => {
+  selectedCategoryId.value = null
+  filterProduct.value = 'all'
+  filterAge.value = ''
+  filterPrice.value = ''
+  applyFilters()
+}
 const onPageChange = (event) => {
   first.value = event.first
   currentPage.value = event.page + 1
-  fetchBooks()
+  updateRouteQuery()
   window.scrollTo({ top: 0, behavior: 'smooth' })
+}
+
+const catalogQuery = () => ({
+  ...(searchQuery.value.trim() && { search: searchQuery.value.trim() }),
+  ...(selectedCategoryId.value && { category_id: String(selectedCategoryId.value) }),
+  ...(['physical', 'ebook'].includes(filterProduct.value) && { type: filterProduct.value }),
+  ...(filterProduct.value === 'used_resale' && { provenance: 'used_resale' }),
+  ...(filterAge.value && { target_age: filterAge.value }),
+  ...(filterPrice.value && { price: filterPrice.value }),
+  ...(sortBy.value !== 'newest' && { sort: sortBy.value }),
+  ...(currentPage.value > 1 && { page: String(currentPage.value) }),
+})
+
+const updateRouteQuery = () => {
+  const nextQuery = catalogQuery()
+  const current = JSON.stringify(route.query)
+  const next = JSON.stringify(nextQuery)
+  if (current === next) {
+    fetchBooks()
+    return
+  }
+  router.push({ name: 'catalog', query: nextQuery })
 }
 
 const cleanDescriptionText = (html) => {
@@ -437,6 +487,7 @@ const getBookTags = (book) => {
   }
   if (book.type === 'ebook') {
     tags.push('E-book')
+    tags.push(`Phiên bản ${book.latest_ebook_version?.version || 1}`)
   } else {
     tags.push(book.cover_format || 'Sách giấy')
   }
@@ -516,20 +567,40 @@ const quickViewAddToCart = () => {
 
 // Handle search and category_id queries from navigation/tags
 watch(() => route.query, (query) => {
-  if (query.search) {
-    searchQuery.value = query.search
-  }
-  if (query.category_id) {
-    selectedCategoryId.value = Number(query.category_id)
-  }
-  currentPage.value = 1
-  first.value = 0
+  searchQuery.value = typeof query.search === 'string' ? query.search : ''
+  selectedCategoryId.value = query.category_id ? Number(query.category_id) : null
+  filterProduct.value = query.provenance === 'used_resale'
+    ? 'used_resale'
+    : (['physical', 'ebook'].includes(query.type) ? query.type : 'all')
+  filterAge.value = ageOptions.some((option) => option.value === query.target_age) ? query.target_age : ''
+  filterPrice.value = priceBands.some((band) => band.value === query.price) ? query.price : ''
+  sortBy.value = ['price_asc', 'price_desc', 'popular'].includes(query.sort) ? query.sort : 'newest'
+  currentPage.value = Math.max(Number(query.page) || 1, 1)
+  first.value = (currentPage.value - 1) * 12
+  filtersOpen.value = false
   fetchBooks()
 }, { immediate: true, deep: true })
+
+const syncFilterViewport = () => {
+  isMobileFilters.value = window.innerWidth < 1024
+  if (!isMobileFilters.value) filtersOpen.value = false
+}
+
+const handleCatalogKeydown = (event) => {
+  if (event.key === 'Escape') filtersOpen.value = false
+}
 
 onMounted(() => {
   fetchCategories()
   wishlistStore.fetchWishlistIds()
+  syncFilterViewport()
+  window.addEventListener('resize', syncFilterViewport)
+  window.addEventListener('keydown', handleCatalogKeydown)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('resize', syncFilterViewport)
+  window.removeEventListener('keydown', handleCatalogKeydown)
 })
 </script>
 
@@ -537,6 +608,6 @@ onMounted(() => {
 :deep(.p-paginator) { gap: 0.25rem; }
 :deep(.p-paginator .p-paginator-page),
 :deep(.p-paginator .p-paginator-prev),
-:deep(.p-paginator .p-paginator-next) { border-radius: 0.5rem; font-size: 0.875rem; min-width: 36px; height: 36px; }
+:deep(.p-paginator .p-paginator-next) { border-radius: 0.5rem; font-size: 0.875rem; min-width: 44px; height: 44px; }
 :deep(.p-paginator .p-paginator-page.p-highlight) { background-color: #002442; color: white; border-color: #002442; }
 </style>

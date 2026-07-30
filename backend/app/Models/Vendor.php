@@ -27,6 +27,8 @@ class Vendor extends Model
         'status',
         'rejection_reason',
         'onboarding_status',
+        'business_model',
+        'primary_organization_id',
         'application_version',
         'legal_name',
         'tax_code',
@@ -151,6 +153,26 @@ class Vendor extends Model
     public function onboardingEvents(): HasMany
     {
         return $this->hasMany(VendorOnboardingEvent::class);
+    }
+
+    public function organizationRelationships(): HasMany
+    {
+        return $this->hasMany(VendorOrganizationRelationship::class);
+    }
+
+    public function warehouseManagerAssignments(): HasMany
+    {
+        return $this->hasMany(WarehouseManagerAssignment::class);
+    }
+
+    public function warehouseDocuments(): HasMany
+    {
+        return $this->hasMany(WarehouseDocument::class);
+    }
+
+    public function primaryOrganization(): BelongsTo
+    {
+        return $this->belongsTo(Organization::class, 'primary_organization_id');
     }
 
     // ─── Helper Methods ───────────────────────────────────────────────────────

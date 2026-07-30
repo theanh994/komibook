@@ -44,6 +44,11 @@ class Book extends Model
         'stock',
         'views',
         'type',
+        'format',
+        'provenance',
+        'condition',
+        'fulfillment_mode',
+        'return_policy_version_id',
         'status',
         'file_path',
         'publishing_status',
@@ -94,6 +99,11 @@ class Book extends Model
     public function vendor(): BelongsTo
     {
         return $this->belongsTo(Vendor::class);
+    }
+
+    public function returnPolicyVersion(): BelongsTo
+    {
+        return $this->belongsTo(ReturnPolicyVersion::class);
     }
 
     /**
@@ -160,16 +170,6 @@ class Book extends Model
         return $this->hasMany(InventoryReservation::class);
     }
 
-    public function authorRelations(): HasMany
-    {
-        return $this->hasMany(BookAuthor::class);
-    }
-
-    public function copyrightClaims(): HasMany
-    {
-        return $this->hasMany(CopyrightClaim::class);
-    }
-
     public function publishingEvents(): HasMany
     {
         return $this->hasMany(BookPublishingEvent::class);
@@ -180,9 +180,14 @@ class Book extends Model
         return $this->hasMany(BookPublishedRevision::class);
     }
 
-    public function royaltyAgreements(): HasMany
+    public function ebookVersions(): HasMany
     {
-        return $this->hasMany(RoyaltyAgreement::class);
+        return $this->hasMany(EbookVersion::class)->orderBy('version');
+    }
+
+    public function latestEbookVersion(): HasOne
+    {
+        return $this->hasOne(EbookVersion::class)->ofMany('version', 'max');
     }
 
     /**
@@ -191,6 +196,19 @@ class Book extends Model
     public function warehouseStocks(): HasMany
     {
         return $this->hasMany(WarehouseStock::class);
+    }
+
+    public function commercialParties(): HasMany
+    {
+        return $this->hasMany(BookCommercialParty::class);
+    }
+
+    public function activeCommercialParties(): HasMany
+    {
+        return $this->hasMany(BookCommercialParty::class)
+            ->where('active_slot', 'active')
+            ->where('status', 'verified')
+            ->whereNull('ended_at');
     }
 
     // ─── Helper Methods ───────────────────────────────────────────────────────

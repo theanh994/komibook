@@ -19,15 +19,18 @@ const submitting = ref(false)
 const selectedOrderId = ref(null)
 const quantities = ref({})
 const reason = ref('')
+const error = ref('')
 
 const eligibleOrders = computed(() => orders.value.filter((order) =>
   order.status === 'completed'
   && order.shipping_status === 'delivered'
-  && order.items?.some((item) => item.book?.type === 'physical')
+  && order.items?.some((item) => item.book?.type === 'physical' && item.book?.provenance === 'used_resale')
   && !['refunding', 'refunded'].includes(order.refund_status)
 ))
 const selectedOrder = computed(() => eligibleOrders.value.find((order) => Number(order.id) === Number(selectedOrderId.value)))
-const physicalItems = computed(() => selectedOrder.value?.items?.filter((item) => item.book?.type === 'physical') || [])
+const physicalItems = computed(() => selectedOrder.value?.items?.filter((item) =>
+  item.book?.type === 'physical' && item.book?.provenance === 'used_resale'
+) || [])
 const selectedItems = computed(() => physicalItems.value
   .map((item) => ({ order_item_id: item.id, quantity: Number(quantities.value[item.id] || 0) }))
   .filter((item) => item.quantity > 0))
@@ -42,6 +45,7 @@ const selectOrder = (value) => {
 
 const fetchData = async () => {
   loading.value = true
+  error.value = ''
   try {
     const [returnsResponse, ordersResponse] = await Promise.all([
       apiClient.get('/api/returns'),
@@ -53,8 +57,12 @@ const fetchData = async () => {
     if (requestedOrder && eligibleOrders.value.some((order) => Number(order.id) === requestedOrder)) {
       selectOrder(requestedOrder)
     }
-  } catch (error) {
-    toast.add({ severity: 'error', summary: 'Không thể tải dữ liệu', detail: error.response?.data?.message || 'Vui lòng thử lại.', life: 3500 })
+  } catch (requestError) {
+    returns.value = []
+    orders.value = []
+    const message = requestError.response?.data?.message || 'Vui lòng kiểm tra kết nối và thử lại.'
+    error.value = message
+    toast.add({ severity: 'error', summary: 'Không thể tải dữ liệu', detail: message, life: 3500 })
   } finally {
     loading.value = false
   }
@@ -92,18 +100,23 @@ onMounted(fetchData)
   <div class="min-h-screen bg-background">
     <div class="w-full px-gutter max-w-[1280px] mx-auto py-xl flex flex-col lg:flex-row items-stretch gap-xl">
       <UserSidebar :user="authStore.user" />
-      <main class="flex-1 min-w-0 space-y-6">
+      <main class="flex-1 min-w-0 space-y-6" aria-labelledby="returns-title">
         <section class="bg-surface-container-lowest rounded-3xl border border-outline-variant/30 soft-shadow p-lg md:p-xl">
           <div class="mb-6">
-            <h1 class="text-2xl font-black text-on-surface">Trả hàng & hoàn tiền</h1>
-            <p class="text-sm text-on-surface-variant mt-1">Gửi yêu cầu trong 7 ngày kể từ khi nhận sách giấy.</p>
+            <h1 id="returns-title" class="text-2xl font-black text-on-surface">Trả hàng & hoàn tiền sách cũ</h1>
+            <p class="text-sm text-on-surface-variant mt-1">Chỉ áp dụng cho sách cũ vật lý đủ điều kiện trong 7 ngày kể từ khi nhận hàng. Ebook không được hoàn trả.</p>
           </div>
 
-          <div v-if="loading" class="py-12 text-center text-on-surface-variant">Đang tải dữ liệu...</div>
+          <div v-if="loading" class="py-12 text-center text-on-surface-variant" role="status" aria-live="polite">Đang tải dữ liệu...</div>
+          <div v-else-if="error" class="rounded-2xl border border-error/20 bg-error-container/30 p-6 text-center" role="alert">
+            <h2 class="text-lg font-bold text-on-surface">Không thể tải dữ liệu trả hàng</h2>
+            <p class="mt-2 text-sm text-on-surface-variant">{{ error }}</p>
+            <button type="button" class="mt-4 min-h-11 rounded-xl bg-primary px-6 py-3 text-sm font-bold text-on-primary" @click="fetchData">Thử lại</button>
+          </div>
           <form v-else class="space-y-5" @submit.prevent="submitReturn">
             <label class="block">
               <span class="block text-sm font-bold text-on-surface mb-2">Đơn hàng đủ điều kiện</span>
-              <select :value="selectedOrderId || ''" class="w-full rounded-xl border border-outline-variant bg-surface px-4 py-3" @change="selectOrder($event.target.value)">
+              <select :value="selectedOrderId || ''" class="min-h-11 w-full rounded-xl border border-outline-variant bg-surface px-4 py-3" @change="selectOrder($event.target.value)">
                 <option value="">Chọn đơn hàng</option>
                 <option v-for="order in eligibleOrders" :key="order.id" :value="order.id">
                   #{{ order.order_code || order.id }} · {{ formatMoney(order.total_amount) }}
@@ -118,18 +131,18 @@ onMounted(fetchData)
                   <p class="font-bold text-sm text-on-surface">{{ item.book?.title || 'Sách giấy' }}</p>
                   <p class="text-xs text-on-surface-variant">Đã mua: {{ item.quantity }} · {{ formatMoney(item.price) }}/quyển</p>
                 </div>
-                <input v-model.number="quantities[item.id]" type="number" min="0" :max="item.quantity" class="w-20 rounded-lg border border-outline-variant px-3 py-2 text-center" :aria-label="`Số lượng trả ${item.book?.title || ''}`">
+                <input v-model.number="quantities[item.id]" type="number" min="0" :max="item.quantity" class="min-h-11 w-20 rounded-lg border border-outline-variant px-3 py-2 text-center" :aria-label="`Số lượng trả ${item.book?.title || ''}`">
               </div>
               <label class="block">
                 <span class="block text-sm font-bold text-on-surface mb-2">Lý do trả hàng</span>
                 <textarea v-model="reason" rows="4" minlength="10" maxlength="2000" class="w-full rounded-xl border border-outline-variant bg-surface px-4 py-3" placeholder="Mô tả tình trạng sản phẩm (ít nhất 10 ký tự)"></textarea>
               </label>
-              <button type="submit" :disabled="!canSubmit" class="rounded-xl bg-primary px-5 py-3 text-sm font-bold text-on-primary disabled:opacity-50">
+              <button type="submit" :disabled="!canSubmit" class="min-h-11 rounded-xl bg-primary px-5 py-3 text-sm font-bold text-on-primary disabled:opacity-50">
                 {{ submitting ? 'Đang gửi...' : 'Gửi yêu cầu trả hàng' }}
               </button>
             </div>
             <p v-else-if="eligibleOrders.length === 0" class="rounded-xl bg-surface-container-low p-4 text-sm text-on-surface-variant">
-              Hiện không có đơn sách giấy đã giao nào còn đủ điều kiện trả hàng.
+              Hiện không có đơn sách cũ vật lý đã giao nào còn đủ điều kiện trả hàng.
             </p>
           </form>
         </section>

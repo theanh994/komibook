@@ -6,20 +6,22 @@
       <UserSidebar :user="authStore.user" />
 
       <!-- Main Content -->
-      <main class="flex-1 min-w-0 w-full flex flex-col">
+      <main class="flex-1 min-w-0 w-full flex flex-col" aria-labelledby="orders-title">
         <div class="bg-surface-container-lowest rounded-3xl border border-outline-variant/30 soft-shadow overflow-hidden flex-1 flex flex-col">
           <div class="p-lg md:p-xl border-b border-outline-variant/10 flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
-              <h1 class="text-2xl font-black text-on-surface tracking-tight mb-1">Đơn hàng của tôi</h1>
+              <h1 id="orders-title" class="text-2xl font-black text-on-surface tracking-tight mb-1">Đơn hàng của tôi</h1>
               <p class="text-sm text-on-surface-variant font-medium">Theo dõi lịch sử mua sắm và trạng thái đơn hàng của bạn.</p>
             </div>
             
-            <div class="flex p-1 bg-surface-container-low rounded-xl border border-outline-variant/20">
+            <div class="flex max-w-full gap-1 overflow-x-auto p-1 bg-surface-container-low rounded-xl border border-outline-variant/20" role="group" aria-label="Lọc đơn hàng theo trạng thái">
               <button 
                 v-for="filter in statusFilters" 
                 :key="filter.value"
+                type="button"
+                :aria-pressed="currentFilter === filter.value"
                 @click="currentFilter = filter.value"
-                class="px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all border-none cursor-pointer whitespace-nowrap"
+                class="min-h-11 px-3.5 py-2 rounded-lg text-sm font-bold transition-colors border-none cursor-pointer whitespace-nowrap"
                 :class="currentFilter === filter.value ? 'bg-primary text-on-primary shadow-xs' : 'text-outline hover:text-on-surface'"
               >
                 {{ filter.label }}
@@ -29,9 +31,18 @@
 
           <div class="p-lg md:p-xl">
             <!-- Loading -->
-            <div v-if="loading" class="py-20 flex flex-col items-center gap-4">
+            <div v-if="loading" class="py-20 flex flex-col items-center gap-4" role="status" aria-live="polite">
               <div class="w-12 h-12 border-4 border-primary/20 border-t-primary rounded-full animate-spin"></div>
               <p class="text-sm font-bold text-outline">Đang tải đơn hàng...</p>
+            </div>
+
+            <div v-else-if="error" class="py-16 text-center" role="alert">
+              <span class="material-symbols-outlined text-5xl text-error" aria-hidden="true">inventory</span>
+              <h2 class="mt-3 text-xl font-bold text-on-surface">Không thể tải đơn hàng</h2>
+              <p class="mx-auto mt-2 max-w-sm text-sm text-on-surface-variant">{{ error }}</p>
+              <button type="button" class="mt-5 min-h-11 rounded-xl bg-primary px-6 py-3 text-sm font-bold text-on-primary" @click="fetchOrders">
+                Thử lại
+              </button>
             </div>
 
             <!-- Empty State -->
@@ -39,11 +50,11 @@
               <div class="w-20 h-20 bg-surface-container-high rounded-3xl flex items-center justify-center mx-auto mb-4 text-outline/40 border border-outline-variant/10">
                 <span class="material-symbols-outlined text-4xl">inventory_2</span>
               </div>
-              <h3 class="text-lg font-bold text-on-surface mb-1 tracking-tight">Chưa có đơn hàng nào</h3>
-              <p class="text-xs text-on-surface-variant mb-6 max-w-xs mx-auto font-medium leading-relaxed">
-                Có vẻ như bạn chưa đặt mua sản phẩm nào. Hãy khám phá kho sách khổng lồ của chúng tôi!
+              <h2 class="text-lg font-bold text-on-surface mb-1 tracking-tight">{{ orders.length ? 'Không có đơn phù hợp bộ lọc' : 'Chưa có đơn hàng nào' }}</h2>
+              <p class="text-sm text-on-surface-variant mb-6 max-w-sm mx-auto font-medium leading-relaxed">
+                {{ orders.length ? 'Hãy chọn trạng thái khác để xem các đơn hiện có.' : 'Khám phá danh mục để tìm cuốn sách phù hợp với bạn.' }}
               </p>
-              <button @click="$router.push('/catalog')" class="bg-primary text-on-primary px-5 py-2.5 rounded-xl font-bold text-xs shadow-md hover:bg-primary/90 active:scale-95 transition-all border-none cursor-pointer flex items-center gap-2 mx-auto">
+              <button v-if="orders.length === 0" type="button" @click="$router.push('/catalog')" class="min-h-11 bg-primary text-on-primary px-5 py-2.5 rounded-xl font-bold text-sm shadow-md hover:bg-primary/90 transition-colors border-none cursor-pointer flex items-center gap-2 mx-auto">
                 <span>Khám phá KomiBook</span>
                 <span class="material-symbols-outlined text-sm">arrow_forward</span>
               </button>
@@ -60,17 +71,17 @@
                     </div>
                     <div>
                       <div class="text-sm font-black text-on-surface uppercase tracking-wider">#{{ order.order_code || order.id }}</div>
-                      <div class="text-[10px] font-bold text-outline">{{ formatDate(order.created_at) }}</div>
+                      <div class="text-xs font-bold text-outline">{{ formatDate(order.created_at) }}</div>
                     </div>
                   </div>
                   <div class="flex items-center gap-3">
-                    <span :class="['px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider shadow-sm', getStatusStyle(order.status)]">
+                    <span :class="['px-3 py-1 rounded-lg text-xs font-black tracking-wide shadow-sm', getStatusStyle(order.status)]">
                       {{ getStatusText(order.status) }}
                     </span>
-                    <span :class="['px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider shadow-sm', getPaymentStatusStyle(order.payment_status)]">
+                    <span :class="['px-3 py-1 rounded-lg text-xs font-black tracking-wide shadow-sm', getPaymentStatusStyle(order.payment_status)]">
                       {{ getPaymentStatusText(order.payment_status) }}
                     </span>
-                    <span class="px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider bg-surface-container-highest text-on-surface-variant border border-outline-variant/30">
+                    <span class="px-3 py-1 rounded-lg text-xs font-black tracking-wide bg-surface-container-highest text-on-surface-variant border border-outline-variant/30">
                       {{ getPaymentMethodText(order.payment_method) }}
                     </span>
                   </div>
@@ -79,8 +90,8 @@
                 <!-- Order Items -->
                 <div class="p-lg space-y-md">
                   <div v-for="item in order.items" :key="item.id" class="flex items-start gap-md">
-                    <div class="w-16 h-20 rounded-lg overflow-hidden bg-surface-container-high shrink-0 shadow-sm border border-outline-variant/10">
-                      <img v-if="item.book?.cover_image" :src="getCoverUrl(item.book.cover_image)" :alt="item.book.title" class="w-full h-full object-cover" />
+                    <div class="w-16 h-24 overflow-hidden bg-surface-container-high shrink-0 shadow-sm border border-outline-variant/10">
+                      <img v-if="item.book?.cover_image" :src="getCoverUrl(item.book.cover_image)" :alt="`Bìa sách ${item.book.title}`" class="w-full h-full object-contain" />
                       <div v-else class="w-full h-full flex items-center justify-center text-outline">
                         <span class="material-symbols-outlined text-xl">image</span>
                       </div>
@@ -88,7 +99,7 @@
                     <div class="flex-1 min-w-0">
                       <h4 class="text-sm font-bold text-on-surface truncate leading-tight mb-1">{{ item.book?.title || 'Sách không còn tồn tại' }}</h4>
                       <div class="flex items-center gap-2 mb-1">
-                        <span class="text-[10px] font-black text-outline uppercase tracking-tighter px-1.5 py-0.5 bg-surface-container-low rounded border border-outline-variant/20">
+                        <span class="text-xs font-black text-outline px-1.5 py-0.5 bg-surface-container-low rounded border border-outline-variant/20">
                           {{ item.book?.type === 'ebook' ? 'E-book' : 'Sách giấy' }}
                         </span>
                         <span class="text-xs text-on-surface-variant font-medium">x{{ item.quantity }}</span>
@@ -213,6 +224,7 @@ const currentFilter = ref('all')
 const orderDetailVisible = ref(false)
 const selectedOrder = ref(null)
 const payingOrderId = ref(null)
+const error = ref('')
 
 const statusFilters = [
   { label: 'Tất cả', value: 'all' },
@@ -228,11 +240,14 @@ const filteredOrders = computed(() => {
 
 const fetchOrders = async () => {
   loading.value = true
+  error.value = ''
   try {
     const res = await apiClient.get('/api/my-orders')
     const fetched = readApiList(res.data)
     orders.value = fetched.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
   } catch {
+    orders.value = []
+    error.value = 'Vui lòng kiểm tra kết nối và thử lại.'
     toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Không thể tải đơn hàng', life: 3000 })
   } finally { loading.value = false }
 }
@@ -297,7 +312,7 @@ const getPaymentMethodText = (method) => {
 
 const canRequestReturn = (order) => order.status === 'completed'
   && order.shipping_status === 'delivered'
-  && order.items?.some((item) => item.book?.type === 'physical')
+  && order.items?.some((item) => item.book?.type === 'physical' && item.book?.provenance === 'used_resale')
   && !['refunding', 'refunded'].includes(order.refund_status)
 
 const payNow = async (order) => {
@@ -324,7 +339,7 @@ onMounted(() => {
   const paymentStatus = route.query.payment
   if (paymentStatus) {
     if (paymentStatus === 'success') {
-      toast.add({ severity: 'success', summary: 'Thành công', detail: 'Thanh toán đơn hàng thành công!', life: 5000 })
+      toast.add({ severity: 'info', summary: 'Đã nhận phản hồi thanh toán', detail: 'Trạng thái đơn hàng đang được đối chiếu từ hệ thống.', life: 5000 })
     } else if (paymentStatus === 'failed') {
       toast.add({ severity: 'error', summary: 'Thất bại', detail: 'Thanh toán đơn hàng không thành công hoặc đã bị hủy.', life: 5000 })
     } else if (paymentStatus === 'pending') {
@@ -350,4 +365,15 @@ onMounted(() => {
 }
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+button {
+  min-height: 44px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-in,
+  .animate-spin {
+    animation: none !important;
+  }
+}
 </style>

@@ -17,6 +17,7 @@ const kpis = ref({
 
 const payoutRequests = ref([])
 const currentPage = ref(1)
+const pagination = ref({ current_page: 1, last_page: 1, total: 0 })
 
 const tabs = [
   { key: 'all', label: 'Tất cả', icon: 'list' },
@@ -45,6 +46,7 @@ const fetchReconciliations = async () => {
     })
     kpis.value = res.data.data.kpi
     payoutRequests.value = res.data.data.payout_requests
+    pagination.value = res.data.data.meta
   } catch (err) {
     toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Không thể tải dữ liệu đối soát.', life: 3000 })
   } finally {
@@ -58,25 +60,15 @@ const changeTab = (tabKey) => {
   fetchReconciliations()
 }
 
-const approveItem = async (item) => {
-  try {
-    await apiClient.patch(`/api/admin/reconciliation/${item.id}/approve`)
-    toast.add({ severity: 'success', summary: 'Đã duyệt', detail: `Yêu cầu rút tiền #${item.id} đã được duyệt.`, life: 3000 })
-    fetchReconciliations()
-  } catch (err) {
-    toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Không thể duyệt yêu cầu này.', life: 3000 })
-  }
+const changePage = (page) => {
+  if (page < 1 || page > pagination.value.last_page || page === currentPage.value) return
+  currentPage.value = page
+  fetchReconciliations()
 }
 
-const rejectItem = async (item) => {
-  try {
-    await apiClient.patch(`/api/admin/reconciliation/${item.id}/reject`)
-    toast.add({ severity: 'success', summary: 'Đã từ chối', detail: `Yêu cầu rút tiền #${item.id} đã bị từ chối.`, life: 3000 })
-    fetchReconciliations()
-  } catch (err) {
-    toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Không thể từ chối yêu cầu này.', life: 3000 })
-  }
-}
+const reconciliationConfig = (row) => row.reconciliation?.is_consistent
+  ? { label: 'Khớp sổ', classes: 'bg-emerald-100 text-emerald-800', icon: 'verified' }
+  : { label: 'Cần kiểm tra', classes: 'bg-orange-100 text-orange-800', icon: 'warning' }
 
 const transitionItem = async (item, target) => {
   const payload = { target, idempotency_key: crypto.randomUUID() }
@@ -115,7 +107,7 @@ onMounted(() => {
         <p class="font-body-md text-body-md text-on-surface-variant mt-xs">Quản lý và xét duyệt các yêu cầu thanh toán từ nhà bán hàng.</p>
       </div>
       <div class="flex gap-sm">
-        <button @click="fetchReconciliations" class="px-4 py-2 border border-outline-variant text-on-surface-variant rounded-lg font-label-md text-label-md hover:bg-surface-container-low transition-colors flex items-center gap-sm">
+        <button type="button" @click="fetchReconciliations" class="min-h-11 px-4 py-2 border border-outline-variant text-on-surface-variant rounded-lg font-label-md text-label-md hover:bg-surface-container-low transition-colors flex items-center gap-sm">
           <span class="material-symbols-outlined text-[18px]">refresh</span> Làm mới
         </button>
       </div>
@@ -147,7 +139,7 @@ onMounted(() => {
       <div class="bg-surface-container-lowest rounded-xl p-md shadow-soft border border-outline-variant/30">
         <div class="flex items-center gap-sm mb-2">
           <span class="material-symbols-outlined text-on-surface-variant bg-surface-container-high p-1 rounded-md text-[20px]">shopping_bag</span>
-          <span class="font-label-md text-[13px] text-on-surface-variant">Đơn hàng chưa đối soát</span>
+          <span class="font-label-md text-[13px] text-on-surface-variant">Payout cần kiểm tra</span>
         </div>
         <span class="font-headline-md text-headline-md font-bold text-on-surface">{{ kpis.unreconciled }}</span>
       </div>
@@ -159,8 +151,9 @@ onMounted(() => {
       <div class="border-b border-outline-variant/30 px-lg bg-surface flex items-center gap-0 overflow-x-auto">
         <button
           v-for="tab in tabs" :key="tab.key"
+          type="button"
           @click="changeTab(tab.key)"
-          class="py-md px-lg font-label-md text-label-md whitespace-nowrap flex items-center gap-xs border-b-2 transition-colors"
+          class="min-h-11 py-md px-lg font-label-md text-label-md whitespace-nowrap flex items-center gap-xs border-b-2 transition-colors"
           :class="activeTab === tab.key ? 'border-primary text-primary' : 'border-transparent text-on-surface-variant hover:text-on-surface'"
         >
           <span class="material-symbols-outlined text-[18px]">{{ tab.icon }}</span>
@@ -169,7 +162,7 @@ onMounted(() => {
       </div>
 
       <!-- Table -->
-      <div class="overflow-x-auto">
+      <div class="overflow-x-auto" role="region" aria-label="Danh sách yêu cầu rút tiền" tabindex="0">
         <table class="w-full text-left border-collapse">
           <thead>
             <tr class="bg-surface-container-low text-on-surface-variant font-label-md text-[13px]">
@@ -179,15 +172,16 @@ onMounted(() => {
               <th class="py-3 px-lg font-semibold text-right">Số tiền rút</th>
               <th class="py-3 px-lg font-semibold">Thông tin nhận tiền</th>
               <th class="py-3 px-lg font-semibold">Trạng thái</th>
+              <th class="py-3 px-lg font-semibold">Đối soát</th>
               <th class="py-3 px-lg font-semibold text-center">Hành động</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-outline-variant/20">
             <tr v-if="loading" class="text-center">
-              <td colspan="7" class="py-xl text-on-surface-variant">Đang tải dữ liệu...</td>
+              <td colspan="8" class="py-xl text-on-surface-variant">Đang tải dữ liệu...</td>
             </tr>
             <tr v-else-if="payoutRequests.length === 0">
-              <td colspan="7" class="py-xl text-center text-on-surface-variant">Không có yêu cầu nào.</td>
+              <td colspan="8" class="py-xl text-center text-on-surface-variant">Không có yêu cầu nào.</td>
             </tr>
             <tr v-for="row in payoutRequests" :key="row.id" class="hover:bg-surface-variant/30 transition-colors">
               <td class="py-3.5 px-lg font-medium text-primary text-sm">#{{ row.id }}</td>
@@ -204,22 +198,42 @@ onMounted(() => {
                   {{ statusConfig[row.status]?.label || row.status }}
                 </span>
               </td>
+              <td class="py-3.5 px-lg">
+                <span
+                  :class="reconciliationConfig(row).classes"
+                  class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold whitespace-nowrap"
+                  :title="row.reconciliation?.issues?.join(', ') || 'Ledger và transition hợp lệ'"
+                >
+                  <span class="material-symbols-outlined text-[14px]">{{ reconciliationConfig(row).icon }}</span>
+                  {{ reconciliationConfig(row).label }}
+                </span>
+                <div v-if="row.reconciliation?.latest_transition" class="mt-1 text-xs text-on-surface-variant">
+                  Cập nhật: {{ statusConfig[row.reconciliation.latest_transition.to_status]?.label || row.reconciliation.latest_transition.to_status }}
+                </div>
+              </td>
               <td class="py-3.5 px-lg text-center">
                 <div class="flex items-center justify-center gap-2">
-                  <button v-if="row.status === 'pending'" @click="transitionItem(row, 'approved')" class="text-green-600 hover:bg-green-50 p-1.5 rounded-md transition-colors" title="Duyệt">
+                  <button v-if="row.status === 'pending'" type="button" @click="transitionItem(row, 'approved')" class="min-h-11 min-w-11 text-green-600 hover:bg-green-50 p-1.5 rounded-md transition-colors" aria-label="Duyệt yêu cầu rút tiền">
                     <span class="material-symbols-outlined text-[20px]">check_circle</span>
                   </button>
-                  <button v-if="row.status === 'pending'" @click="transitionItem(row, 'rejected')" class="text-red-600 hover:bg-red-50 p-1.5 rounded-md transition-colors" title="Từ chối">
+                  <button v-if="row.status === 'pending'" type="button" @click="transitionItem(row, 'rejected')" class="min-h-11 min-w-11 text-red-600 hover:bg-red-50 p-1.5 rounded-md transition-colors" aria-label="Từ chối yêu cầu rút tiền">
                     <span class="material-symbols-outlined text-[20px]">cancel</span>
                   </button>
-                  <button v-if="row.status === 'approved'" @click="transitionItem(row, 'processing')" class="text-blue-600 hover:bg-blue-50 p-1.5 rounded-md transition-colors" title="Bắt đầu chuyển khoản"><span class="material-symbols-outlined text-[20px]">sync</span></button>
-                  <button v-if="row.status === 'processing'" @click="transitionItem(row, 'completed')" class="text-emerald-600 hover:bg-emerald-50 p-1.5 rounded-md transition-colors" title="Xác nhận hoàn tất"><span class="material-symbols-outlined text-[20px]">payments</span></button>
+                  <button v-if="row.status === 'approved'" type="button" @click="transitionItem(row, 'processing')" class="min-h-11 min-w-11 text-blue-600 hover:bg-blue-50 p-1.5 rounded-md transition-colors" aria-label="Bắt đầu chuyển khoản"><span class="material-symbols-outlined text-[20px]">sync</span></button>
+                  <button v-if="row.status === 'processing'" type="button" @click="transitionItem(row, 'completed')" class="min-h-11 min-w-11 text-emerald-600 hover:bg-emerald-50 p-1.5 rounded-md transition-colors" aria-label="Xác nhận hoàn tất chuyển khoản"><span class="material-symbols-outlined text-[20px]">payments</span></button>
                   <span v-if="row.status === 'rejected' || row.status === 'completed'" class="text-on-surface-variant text-xs">Đã xử lý</span>
                 </div>
               </td>
             </tr>
           </tbody>
         </table>
+      </div>
+      <div v-if="pagination.last_page > 1" class="flex items-center justify-between gap-md border-t border-outline-variant/30 px-lg py-md">
+        <span class="text-sm text-on-surface-variant">Trang {{ pagination.current_page }} / {{ pagination.last_page }} · {{ pagination.total }} yêu cầu</span>
+        <div class="flex gap-sm">
+          <button type="button" class="min-h-11 px-4 rounded-lg border border-outline-variant disabled:opacity-40" :disabled="currentPage <= 1" @click="changePage(currentPage - 1)">Trang trước</button>
+          <button type="button" class="min-h-11 px-4 rounded-lg border border-outline-variant disabled:opacity-40" :disabled="currentPage >= pagination.last_page" @click="changePage(currentPage + 1)">Trang sau</button>
+        </div>
       </div>
     </div>
   </div>
@@ -231,4 +245,12 @@ onMounted(() => {
 .animate-slide-up { opacity: 0; transform: translateY(15px); animation: slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 @keyframes slideUp { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-in,
+  .animate-slide-up {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+}
 </style>

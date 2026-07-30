@@ -119,6 +119,16 @@ class ReturnRefundService
                     throw new LogicException('E-book không thuộc luồng trả hàng vật lý.');
                 }
 
+                $provenance = $orderItem->product_taxonomy_snapshot['provenance']
+                    ?? $invoiceLine['provenance']
+                    ?? null;
+                $returnable = $orderItem->return_policy_snapshot['is_returnable']
+                    ?? $invoiceLine['return_policy_snapshot']['is_returnable']
+                    ?? false;
+                if ($provenance !== 'used_resale' || ! $returnable) {
+                    throw new LogicException('Chỉ sách cũ đủ điều kiện mới thuộc luồng trả hàng và hoàn tiền.');
+                }
+
                 $alreadyRequested = (int) ReturnRequestItem::query()
                     ->where('order_item_id', $orderItem->id)
                     ->whereHas('returnRequest', fn ($query) => $query->whereIn('status', self::ACTIVE_RETURN_STATES))

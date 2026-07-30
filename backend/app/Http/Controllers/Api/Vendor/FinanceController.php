@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Order;
 use App\Models\PayoutRequest;
 use App\Models\VendorFinancialHold;
+use App\Services\CommerceFeeService;
 use App\Services\PayoutService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -14,7 +15,7 @@ use Throwable;
 
 class FinanceController extends Controller
 {
-    public function index()
+    public function index(CommerceFeeService $fees)
     {
         $vendor = Auth::user()->vendor;
         if (! $vendor) {
@@ -29,10 +30,21 @@ class FinanceController extends Controller
             'created_at' => $payout->created_at->format('d/m/Y H:i'),
         ]);
         $refundHolds = (int) VendorFinancialHold::where('vendor_id', $vendor->id)->where('status', 'active')->sum('amount');
+        $feeSchedule = $fees->effective();
 
         return response()->json([
             'balance' => ['available' => max(0, (int) $vendor->balance - $refundHolds), 'pending' => (int) $pendingAmount, 'totalWithdrawn' => (int) $vendor->total_withdrawn, 'refundHolds' => $refundHolds],
             'payout_requests' => $payoutRequests,
+            'fee_policy' => [
+                'schedule' => $feeSchedule,
+                'example_base_amount' => 100000,
+                'example' => $fees->calculate(100000, $feeSchedule),
+                'explanation' => [
+                    'commission' => 'Khấu trừ từ doanh thu gộp của Nhà bán.',
+                    'service_fee' => 'Cộng vào số tiền khách thanh toán; không khấu trừ thêm từ seller_net.',
+                    'tax' => 'Chưa cấu hình thuế trong fee engine hiện tại.',
+                ],
+            ],
         ]);
     }
 

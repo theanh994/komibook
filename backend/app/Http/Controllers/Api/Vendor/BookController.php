@@ -8,6 +8,8 @@ use App\Http\Requests\Vendor\UpdateBookRequest;
 use App\Http\Resources\BookResource;
 use App\Models\Book;
 use App\Models\Series;
+use App\Models\EbookVersion;
+use App\Services\ProductTaxonomyService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Redis;
@@ -112,7 +114,7 @@ class BookController extends Controller
      * vendor_id sẽ được tự động gán bởi MultiVendorScoped trait,
      * KHÔNG CẦN set thủ công.
      */
-    public function store(StoreBookRequest $request): JsonResponse
+    public function store(StoreBookRequest $request, ProductTaxonomyService $taxonomy): JsonResponse
     {
         $data = $request->validated();
 
@@ -176,7 +178,7 @@ class BookController extends Controller
 
         unset($data['ebook_file'], $data['category_ids'], $data['series_name']);
 
-        $book = Book::create($data);
+        $book = Book::create($taxonomy->normalize($data));
 
         if (! empty($categoryIds)) {
             $book->categories()->sync($categoryIds);
@@ -206,7 +208,7 @@ class BookController extends Controller
     /**
      * Cập nhật thông tin sách.
      */
-    public function update(UpdateBookRequest $request, Book $book): JsonResponse
+    public function update(UpdateBookRequest $request, Book $book, ProductTaxonomyService $taxonomy): JsonResponse
     {
         $data = $request->validated();
 
@@ -272,7 +274,7 @@ class BookController extends Controller
         // Upload file E-book mới nếu có
         if ($request->hasFile('ebook_file')) {
             // Xóa file cũ
-            if ($book->file_path) {
+            if ($book->file_path && ! EbookVersion::where('file_path', $book->file_path)->exists()) {
                 Storage::disk('local')->delete($book->file_path);
             }
             $data['file_path'] = $request->file('ebook_file')
@@ -309,7 +311,7 @@ class BookController extends Controller
 
         unset($data['ebook_file'], $data['category_ids'], $data['existing_gallery_images'], $data['series_name'], $data['status'], $data['publishing_status']);
 
-        $book->update($data);
+        $book->update($taxonomy->normalize($data, $book));
 
         // Xoá key cache tồn kho trên Redis để cập nhật thông tin mới nhất
         try {

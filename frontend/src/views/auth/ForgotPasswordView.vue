@@ -29,7 +29,7 @@
               id="recovery-email" 
               placeholder="name@example.com" 
               type="email"
-              autocomplete="off"
+              autocomplete="email"
               required
             />
           </div>
@@ -53,7 +53,7 @@
 
         <!-- Back Link -->
         <div class="text-center pt-2 border-t border-outline-variant/20">
-          <router-link to="/login" class="inline-flex items-center gap-2 text-sm font-bold text-primary hover:text-secondary transition-colors group">
+          <router-link to="/login" class="inline-flex min-h-11 items-center gap-2 px-2 text-sm font-bold text-primary transition-colors hover:text-secondary group">
             <span class="material-symbols-outlined text-base group-hover:-translate-x-1 transition-transform">arrow_back</span>
             Quay lại Đăng nhập
           </router-link>

@@ -25,6 +25,11 @@ class OrderItem extends Model
         'promotion_discount_amount',
         'flash_sale_book_id',
         'promotion_snapshot',
+        'ebook_version_id',
+        'product_taxonomy_snapshot',
+        'commercial_parties_snapshot',
+        'return_policy_snapshot',
+        'ebook_consent_snapshot',
     ];
 
     /**
@@ -40,6 +45,10 @@ class OrderItem extends Model
             'list_unit_price' => 'integer',
             'promotion_discount_amount' => 'integer',
             'promotion_snapshot' => 'array',
+            'product_taxonomy_snapshot' => 'array',
+            'commercial_parties_snapshot' => 'array',
+            'return_policy_snapshot' => 'array',
+            'ebook_consent_snapshot' => 'array',
         ];
     }
 

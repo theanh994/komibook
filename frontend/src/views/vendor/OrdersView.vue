@@ -106,15 +106,6 @@ onMounted(fetchOrders)
           </select>
           <span class="material-symbols-outlined absolute right-md top-1/2 -translate-y-1/2 text-on-surface-variant pointer-events-none">arrow_drop_down</span>
         </div>
-        <!-- Quick Actions -->
-        <button class="bg-surface-container-lowest border border-primary text-primary font-label-md text-label-md px-md py-sm rounded-lg hover:bg-surface-container-high transition-colors flex items-center gap-xs">
-          <span class="material-symbols-outlined text-[18px]">print</span>
-          In hóa đơn
-        </button>
-        <button class="bg-primary text-on-primary font-label-md text-label-md px-md py-sm rounded-lg hover:bg-primary-container hover:text-on-primary-container transition-colors shadow-sm flex items-center gap-xs">
-          <span class="material-symbols-outlined text-[18px]">bolt</span>
-          Xử lý nhanh
-        </button>
       </div>
     </div>
     

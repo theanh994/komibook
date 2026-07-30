@@ -5,6 +5,28 @@
 
 ---
 
+## Phase 3D current-workspace addendum (2026-07-26)
+
+This addendum is direct evidence from
+`C:\Projects\DoAnTotNGhiep_komibook`. It supersedes stale row notes and old
+Herd paths below only for the endpoints listed here.
+
+| Domain | Endpoints | Current contract | Compatibility |
+|---|---|---|---|
+| Checkout | `POST /api/checkout` | `status`, `message`, `data`; HTTP 201 on success and `status: error` on handled failure | Retains `success: boolean` for one compatibility window |
+| Coupon | `POST /api/coupons/apply` | `status`, `message`, `data`; errors include `status: error` | Retains `success: boolean` for one compatibility window |
+| Public flash sale | `GET /api/flash-sales`, `GET /api/flash-sales/active` | `status: success`, `data` | Retains `success: true` for one compatibility window |
+| Wishlist | list, toggle, check | `status: success`, `data`; toggle state is `data.state` and membership is `data.is_favorite` | Frontend migrated in the same batch |
+| Customer orders/library | `GET /api/my-orders`, `GET /api/my-library` | `status: success`, array in `data` | Frontend uses the shared contract reader |
+| E-book access link | `GET /api/orders/{order}/ebooks/{book}/generate-link` | `status: success`, URL in `data.url`; JSON failures use `status: error` | Reader migrated in the same batch |
+
+Focused evidence:
+
+- `backend/tests/Feature/Phase3CustomerCommerceContractTest.php`
+- `frontend/src/__tests__/phase3_customer_commerce_contract.spec.js`
+
+---
+
 ## 1. Bảng Thống Kê Tổng Quan API Contract
 
 - **Tổng số vị trí gọi API trong Frontend code (`apiClient.*`):** 177 vị trí gọi.

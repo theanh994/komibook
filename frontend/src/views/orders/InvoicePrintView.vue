@@ -40,6 +40,9 @@ const formatDate = (dateString) => {
   return dateString.split('T')[0]
 }
 
+const closeWindow = () => window.close()
+const printInvoice = () => window.print()
+
 onMounted(() => {
   fetchOrderDetails()
 })
@@ -48,41 +51,41 @@ onMounted(() => {
 <template>
   <div class="print-page min-h-screen bg-slate-100 py-10 px-4 flex justify-center">
     <!-- Loading State -->
-    <div v-if="loading" class="flex flex-col items-center justify-center p-12 gap-3">
+    <div v-if="loading" class="flex flex-col items-center justify-center p-12 gap-3" role="status" aria-live="polite">
       <i class="pi pi-spin pi-spinner text-3xl text-slate-500"></i>
       <p class="text-xs text-slate-500 font-semibold">Đang tải thông tin đơn hàng...</p>
     </div>
 
     <!-- Error State -->
-    <div v-else-if="error || !order" class="bg-white max-w-md w-full p-8 rounded-2xl border border-slate-200 shadow-md text-center my-auto space-y-4">
+    <div v-else-if="error || !order" class="bg-white max-w-md w-full p-8 rounded-2xl border border-slate-200 shadow-md text-center my-auto space-y-4" role="alert">
       <div class="w-12 h-12 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mx-auto">
         <i class="pi pi-exclamation-triangle text-xl"></i>
       </div>
-      <h3 class="text-base font-bold text-slate-900">Không thể tải thông tin đơn hàng</h3>
-      <p class="text-xs text-slate-500 leading-relaxed">{{ error || 'Đơn hàng không tồn tại hoặc bạn không có quyền xem.' }}</p>
+      <h1 class="text-xl font-bold text-slate-900">Không thể tải thông tin đơn hàng</h1>
+      <p class="text-sm text-slate-600 leading-relaxed">{{ error || 'Đơn hàng không tồn tại hoặc bạn không có quyền xem.' }}</p>
       <div class="pt-2 flex justify-center gap-3">
-        <button class="px-4 py-2 bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg hover:bg-slate-300 transition-colors border-none cursor-pointer" @click="window.close()">
+        <button class="min-h-11 px-4 py-2 bg-slate-200 text-slate-700 text-sm font-semibold rounded-lg hover:bg-slate-300 transition-colors border-none cursor-pointer" @click="closeWindow">
           Đóng tab
         </button>
-        <button class="px-4 py-2 bg-indigo-600 text-white text-xs font-semibold rounded-lg hover:bg-indigo-700 transition-colors border-none cursor-pointer" @click="fetchOrderDetails">
+        <button class="min-h-11 px-4 py-2 bg-indigo-700 text-white text-sm font-semibold rounded-lg hover:bg-indigo-800 transition-colors border-none cursor-pointer" @click="fetchOrderDetails">
           Thử lại
         </button>
       </div>
     </div>
 
     <!-- Invoice Container -->
-    <main v-else class="print-container bg-white w-full max-w-4xl p-10 md:p-16 border border-slate-300 shadow-md rounded flex flex-col gap-8 text-slate-800">
+    <main v-else class="print-container bg-white w-full max-w-4xl p-6 md:p-16 border border-slate-300 shadow-md rounded flex flex-col gap-8 text-slate-800" aria-labelledby="invoice-title">
       <!-- Invoice Header -->
       <header class="flex flex-col md:flex-row justify-between items-start border-b-2 border-slate-900 pb-6 gap-6">
         <div class="flex items-center gap-3">
           <i class="pi pi-book text-3xl text-indigo-950"></i>
           <div>
-            <h1 class="text-xl font-bold tracking-tight text-slate-900">KomiBook</h1>
+            <p class="text-xl font-bold tracking-tight text-slate-900">KomiBook</p>
             <p class="text-xs text-slate-500">Thông tin chi tiết đơn hàng bán lẻ</p>
           </div>
         </div>
         <div class="text-left md:text-right">
-          <h2 class="text-2xl font-extrabold text-slate-900 mb-1">THÔNG TIN ĐƠN HÀNG</h2>
+          <h1 id="invoice-title" class="text-2xl font-extrabold text-slate-900 mb-1">THÔNG TIN ĐƠN HÀNG</h1>
           <div class="text-xs text-slate-500 space-y-1">
             <p>Số chứng từ: <span class="font-bold text-slate-900 tracking-wider">#{{ invoice?.invoice_number || order.order_code || order.id }}</span></p>
             <p>Ngày phát hành: <span class="text-slate-900 font-medium">{{ formatDate(invoice?.issued_at || order.created_at) }}</span></p>
@@ -174,10 +177,10 @@ onMounted(() => {
 
       <!-- Print controls (Hidden on print) -->
       <div class="no-print flex justify-end gap-3 border-t border-slate-100 pt-4 mt-auto">
-        <button class="px-4 py-2 border border-slate-350 text-slate-600 rounded text-xs font-semibold hover:bg-slate-50 border-none cursor-pointer" @click="window.close()">
+        <button class="min-h-11 px-4 py-2 border border-slate-350 text-slate-700 rounded text-sm font-semibold hover:bg-slate-50 border-none cursor-pointer" @click="closeWindow">
           Đóng tab
         </button>
-        <button class="px-5 py-2 bg-indigo-600 text-white rounded text-xs font-semibold hover:opacity-90 flex items-center gap-1.5 border-none cursor-pointer" @click="window.print()">
+        <button class="min-h-11 px-5 py-2 bg-indigo-700 text-white rounded text-sm font-semibold hover:bg-indigo-800 flex items-center gap-1.5 border-none cursor-pointer" @click="printInvoice">
           <i class="pi pi-print"></i> In đơn hàng
         </button>
       </div>
@@ -203,6 +206,12 @@ onMounted(() => {
   }
   .no-print {
     display: none !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-spin {
+    animation: none !important;
   }
 }
 </style>

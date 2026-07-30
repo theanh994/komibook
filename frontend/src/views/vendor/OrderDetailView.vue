@@ -97,12 +97,12 @@ onMounted(() => {
     <div>
       
       <!-- Back button & Page Header -->
-      <button @click="goBack" class="flex items-center gap-xs text-on-surface-variant hover:text-primary mb-md font-label-md transition-colors">
+      <button type="button" @click="goBack" class="flex min-h-11 items-center gap-xs text-on-surface-variant hover:text-primary mb-md font-label-md transition-colors">
         <span class="material-symbols-outlined text-sm">arrow_back</span>
         Quay lại danh sách
       </button>
 
-      <div v-if="loading" class="flex flex-col items-center justify-center py-20">
+      <div v-if="loading" role="status" aria-live="polite" class="flex flex-col items-center justify-center py-20">
         <span class="material-symbols-outlined animate-spin text-primary text-4xl mb-sm">progress_activity</span>
         <span class="text-on-surface-variant">Đang tải chi tiết đơn hàng...</span>
       </div>
@@ -112,7 +112,7 @@ onMounted(() => {
         <div class="flex flex-col md:flex-row md:items-center justify-between gap-md mb-xl">
           <div>
             <div class="flex items-center gap-sm mb-xs">
-              <h2 class="font-headline-lg text-headline-lg text-on-surface">Đơn hàng {{ selectedOrder.order_code }}</h2>
+              <h1 class="font-headline-lg text-headline-lg text-on-surface">Đơn hàng {{ selectedOrder.order_code }}</h1>
               <span :class="['font-label-md text-label-md px-sm py-xs rounded-full inline-flex items-center gap-xs', getStatus(selectedOrder.status).bg, getStatus(selectedOrder.status).text]">
                 <span class="material-symbols-outlined text-[16px]">{{ getStatus(selectedOrder.status).icon }}</span>
                 {{ getStatus(selectedOrder.status).label }}
@@ -124,11 +124,11 @@ onMounted(() => {
             </p>
           </div>
           <div class="flex flex-wrap gap-sm">
-            <button class="flex items-center gap-xs px-md py-sm border-outline border rounded-lg text-on-surface hover:bg-surface-container transition-colors bg-surface-container-lowest font-label-md text-label-md shadow-sm">
+            <button type="button" class="flex min-h-11 items-center gap-xs px-md py-sm border-outline border rounded-lg text-on-surface hover:bg-surface-container transition-colors bg-surface-container-lowest font-label-md text-label-md shadow-sm">
               <span class="material-symbols-outlined text-[18px]">print</span>
               In hóa đơn
             </button>
-            <button class="flex items-center gap-xs px-md py-sm border border-secondary text-secondary rounded-lg hover:bg-secondary/10 transition-colors bg-transparent font-label-md text-label-md">
+            <button type="button" class="flex min-h-11 items-center gap-xs px-md py-sm border border-secondary text-secondary rounded-lg hover:bg-secondary/10 transition-colors bg-transparent font-label-md text-label-md">
               <span class="material-symbols-outlined text-[18px]">undo</span>
               Hoàn tiền
             </button>
@@ -290,14 +290,16 @@ onMounted(() => {
               <div class="flex flex-col gap-3">
                 <select 
                   v-model="newStatus"
-                  class="w-full appearance-none bg-surface-container-low border border-outline-variant/50 text-on-surface font-body-md rounded-lg px-md py-sm focus:outline-none focus:border-primary"
+                  aria-label="Trạng thái mới của đơn hàng"
+                  class="w-full min-h-11 appearance-none bg-surface-container-low border border-outline-variant/50 text-on-surface font-body-md rounded-lg px-md py-sm focus:outline-none focus:border-primary"
                 >
                   <option v-for="opt in statusOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
                 </select>
                 <button 
+                  type="button"
                   @click="updateStatus"
                   :disabled="updatingStatus || newStatus === selectedOrder.status"
-                  class="w-full py-sm bg-primary text-on-primary rounded-lg font-label-md transition-opacity hover:opacity-90 disabled:opacity-50"
+                  class="w-full min-h-11 py-sm bg-primary text-on-primary rounded-lg font-label-md transition-opacity hover:opacity-90 disabled:opacity-50"
                 >
                   Xác nhận thay đổi
                 </button>

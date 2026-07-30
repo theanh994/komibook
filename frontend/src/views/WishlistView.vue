@@ -1,146 +1,142 @@
 <template>
   <div class="min-h-screen bg-background">
-    <div class="w-full px-gutter max-w-[1280px] mx-auto py-xl flex flex-col lg:flex-row items-stretch gap-xl">
-      
-      <!-- Sidebar -->
+    <div class="mx-auto flex w-full max-w-[1280px] flex-col items-stretch gap-xl px-gutter py-xl lg:flex-row">
       <UserSidebar :user="authStore.user" />
 
-      <!-- Main Content -->
-      <main class="flex-1 min-w-0 w-full flex flex-col">
-        <div class="bg-surface-container-lowest rounded-3xl border border-outline-variant/30 soft-shadow overflow-hidden flex-1 flex flex-col">
-          <div class="p-lg md:p-xl border-b border-outline-variant/10">
-            <h1 class="text-2xl font-black text-on-surface tracking-tight mb-1">Danh sách yêu thích</h1>
-            <p class="text-sm text-on-surface-variant font-medium">Lưu giữ những cuốn sách bạn đang quan tâm.</p>
-          </div>
- 
+      <main class="flex min-w-0 flex-1 flex-col" aria-labelledby="wishlist-title">
+        <section class="flex flex-1 flex-col overflow-hidden rounded-3xl border border-outline-variant/30 bg-surface-container-lowest soft-shadow">
+          <header class="border-b border-outline-variant/10 p-lg md:p-xl">
+            <h1 id="wishlist-title" class="mb-1 text-2xl font-black tracking-tight text-on-surface">
+              Danh sách yêu thích
+            </h1>
+            <p class="text-sm font-medium text-on-surface-variant">
+              Lưu những cuốn sách bạn quan tâm để quay lại nhanh hơn.
+            </p>
+          </header>
+
           <div class="p-lg md:p-xl">
-            <!-- Loading State -->
-            <div v-if="loading" class="py-20 flex flex-col items-center gap-4">
-               <div class="w-12 h-12 border-4 border-primary/20 border-t-primary rounded-full animate-spin"></div>
-               <p class="text-sm font-bold text-outline">Đang tải danh sách...</p>
+            <div v-if="loading" class="flex flex-col items-center gap-4 py-20" role="status" aria-live="polite">
+              <div class="h-12 w-12 animate-spin rounded-full border-4 border-primary/20 border-t-primary" aria-hidden="true"></div>
+              <p class="text-sm font-bold text-on-surface-variant">Đang tải danh sách yêu thích...</p>
             </div>
- 
-            <!-- Empty State -->
-            <div v-else-if="wishlist.length === 0" class="py-16 text-center animate-fade-in">
-              <div class="w-20 h-20 bg-error-container/20 rounded-3xl flex items-center justify-center mx-auto mb-4 text-error border border-outline-variant/10">
-                <span class="material-symbols-outlined text-4xl">favorite</span>
-              </div>
-              <h3 class="text-lg font-bold text-on-surface mb-1 tracking-tight">Chưa có cuốn sách nào</h3>
-              <p class="text-xs text-on-surface-variant mb-6 max-w-xs mx-auto font-medium leading-relaxed">
-                Hãy thả tim cho những cuốn sách bạn yêu thích để chúng xuất hiện ở đây nhé!
-              </p>
-              <button @click="$router.push('/catalog')" class="bg-primary text-on-primary px-5 py-2.5 rounded-xl font-bold text-xs shadow-md hover:bg-primary/90 active:scale-95 transition-all border-none cursor-pointer flex items-center gap-2 mx-auto">
-                <span>Khám phá KomiBook</span>
-                <span class="material-symbols-outlined text-sm">arrow_forward</span>
+
+            <div v-else-if="error" class="py-16 text-center" role="alert">
+              <span class="material-symbols-outlined text-5xl text-error" aria-hidden="true">heart_broken</span>
+              <h2 class="mt-3 text-xl font-bold text-on-surface">Không thể tải danh sách yêu thích</h2>
+              <p class="mx-auto mt-2 max-w-md text-sm leading-relaxed text-on-surface-variant">{{ error }}</p>
+              <button
+                type="button"
+                class="mt-6 min-h-11 rounded-xl bg-primary px-6 py-3 text-sm font-bold text-on-primary"
+                @click="fetchWishlist"
+              >
+                Thử lại
               </button>
             </div>
- 
-            <!-- Wishlist Grid -->
-            <div v-else class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-gutter animate-fade-in">
-              <div v-for="book in wishlist" :key="book.id" 
-                   class="group bg-surface-container-low/30 rounded-2xl border border-outline-variant/20 overflow-hidden hover:border-primary/30 transition-all flex flex-col">
-                <div class="relative aspect-[3/4] cursor-pointer overflow-hidden" @click="$router.push(`/book/${book.slug}`)">
-                  <img :src="getCoverUrl(book.cover_image)" :alt="book.title" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-                  <div class="absolute top-2 right-2">
-                    <button @click.stop="toggleWishlist(book.id)" class="w-8 h-8 rounded-full bg-white/90 backdrop-blur shadow-md flex items-center justify-center text-error hover:scale-110 transition-all">
-                      <span class="material-symbols-outlined text-[20px] fill-1">favorite</span>
-                    </button>
-                  </div>
-                </div>
-                <div class="p-4 flex-grow flex flex-col">
-                  <h4 class="text-sm font-bold text-on-surface line-clamp-2 mb-1 leading-snug group-hover:text-primary transition-colors cursor-pointer" @click="$router.push(`/book/${book.slug}`)">
-                    {{ book.title }}
-                  </h4>
-                  <p class="text-[11px] text-on-surface-variant font-medium mb-3">{{ book.author }}</p>
-                  <div class="mt-auto flex items-center justify-between">
-                    <span class="text-sm font-bold text-primary">{{ formatCurrency(book.sale_price || book.price) }}</span>
-                    <button @click="addToCart(book)" class="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center hover:bg-primary hover:text-on-primary transition-all">
-                      <span class="material-symbols-outlined text-[18px]">add_shopping_cart</span>
-                    </button>
-                  </div>
-                </div>
+
+            <div v-else-if="wishlist.length === 0" class="py-16 text-center">
+              <div class="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-3xl border border-outline-variant/20 bg-error-container/20 text-error">
+                <span class="material-symbols-outlined text-4xl" aria-hidden="true">favorite</span>
               </div>
+              <h2 class="mb-1 text-xl font-bold tracking-tight text-on-surface">Chưa có cuốn sách nào</h2>
+              <p class="mx-auto mb-6 max-w-sm text-sm font-medium leading-relaxed text-on-surface-variant">
+                Chọn biểu tượng trái tim trên thẻ sách để lưu lại tại đây.
+              </p>
+              <router-link
+                to="/catalog"
+                class="mx-auto inline-flex min-h-11 items-center gap-2 rounded-xl bg-primary px-6 py-3 text-sm font-bold text-on-primary no-underline shadow-md"
+              >
+                Khám phá sách
+                <span class="material-symbols-outlined text-xl" aria-hidden="true">arrow_forward</span>
+              </router-link>
+            </div>
+
+            <div v-else class="grid grid-cols-1 gap-gutter sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4">
+              <BookCard
+                v-for="book in wishlist"
+                :key="book.id"
+                :book="book"
+                show-wishlist
+                :is-favorite="true"
+                @toggle-wishlist="toggleWishlist"
+                @quick-view="openBook"
+                @add-to-cart="addToCart"
+                @buy-now="buyNow"
+              />
             </div>
           </div>
-        </div>
+        </section>
       </main>
     </div>
   </div>
 </template>
- 
+
 <script setup>
-import { ref, onMounted } from 'vue'
-import { useAuthStore } from '@/stores/auth'
-import { useCartStore } from '@/stores/cart'
-import { useWishlistStore } from '@/stores/wishlist'
+import { onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { useToast } from 'primevue/usetoast'
 import apiClient from '@/services/axios'
 import { readApiList } from '@/services/apiContract'
+import BookCard from '@/components/BookCard.vue'
 import UserSidebar from '@/components/profile/UserSidebar.vue'
- 
+import { useAuthStore } from '@/stores/auth'
+import { useCartStore } from '@/stores/cart'
+import { useWishlistStore } from '@/stores/wishlist'
+
+const router = useRouter()
+const toast = useToast()
 const authStore = useAuthStore()
 const cartStore = useCartStore()
 const wishlistStore = useWishlistStore()
-const toast = useToast()
- 
+
 const wishlist = ref([])
 const loading = ref(true)
- 
+const error = ref('')
+
 const fetchWishlist = async () => {
   loading.value = true
+  error.value = ''
   try {
-    const res = await apiClient.get('/api/wishlist')
-    wishlist.value = readApiList(res.data)
+    const response = await apiClient.get('/api/wishlist')
+    wishlist.value = readApiList(response.data)
   } catch {
-    toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Không thể tải danh sách yêu thích', life: 3000 })
+    wishlist.value = []
+    error.value = 'Vui lòng kiểm tra kết nối và thử lại.'
   } finally {
     loading.value = false
   }
 }
- 
+
 const toggleWishlist = async (bookId) => {
   try {
     await wishlistStore.toggleWishlist(bookId)
-    wishlist.value = wishlist.value.filter(b => b.id !== bookId)
-    toast.add({ severity: 'success', summary: 'Thành công', detail: 'Đã xóa khỏi danh sách yêu thích', life: 2000 })
+    wishlist.value = wishlist.value.filter(book => book.id !== bookId)
+    toast.add({ severity: 'success', summary: 'Đã cập nhật', detail: 'Đã bỏ sách khỏi danh sách yêu thích.', life: 2000 })
   } catch {
-    toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Có lỗi xảy ra', life: 3000 })
+    toast.add({ severity: 'error', summary: 'Có lỗi', detail: 'Chưa thể cập nhật danh sách yêu thích.', life: 3000 })
   }
 }
- 
+
 const addToCart = (book) => {
-  cartStore.addToCart({
-    id: book.id, title: book.title, slug: book.slug,
-    author: book.author, cover_image: book.cover_image,
-    price: book.price, sale_price: book.sale_price,
-    type: book.type, vendor: book.vendor,
-    vendor_id: book.vendor?.id
-  })
-  toast.add({ severity: 'success', summary: 'Thành công', detail: 'Đã thêm vào giỏ hàng', life: 2000 })
+  cartStore.addToCart(book)
+  toast.add({ severity: 'success', summary: 'Đã thêm vào giỏ', detail: book.title, life: 2000 })
 }
- 
-const formatCurrency = (val) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(val)
- 
-const getCoverUrl = (path) => {
-  if (!path) return ''
-  if (path.startsWith('http://') || path.startsWith('https://')) return path
-  if (path.startsWith('/storage/')) return path
-  if (path.includes('/storage/')) return path.substring(path.indexOf('/storage/'))
-  return `/storage/${path}`
+
+const buyNow = (book) => {
+  cartStore.addToCart(book)
+  router.push('/cart')
 }
- 
-onMounted(() => {
-  fetchWishlist()
-})
+
+const openBook = (book) => {
+  router.push({ name: 'book-detail', params: { slug: book.slug } })
+}
+
+onMounted(fetchWishlist)
 </script>
- 
+
 <style scoped>
-@keyframes fade-in {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
+@media (prefers-reduced-motion: reduce) {
+  .animate-spin {
+    animation: none !important;
+  }
 }
-.animate-fade-in {
-  animation: fade-in 0.4s ease-out forwards;
-}
-.fill-1 { font-variation-settings: 'FILL' 1; }
 </style>

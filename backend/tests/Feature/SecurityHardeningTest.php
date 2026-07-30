@@ -2,7 +2,6 @@
 
 namespace Tests\Feature;
 
-use App\Models\Author;
 use App\Models\Book;
 use App\Models\Category;
 use App\Models\SupportTicket;
@@ -287,7 +286,7 @@ class SecurityHardeningTest extends TestCase
     }
 
     /**
-     * SEC-03 & SEC-04: Test bảo vệ file riêng tư CCCD và ticket attachments & Artisan migration commands.
+     * SEC-03 & SEC-04: Test bảo vệ ticket attachments và Artisan migration command.
      */
     public function test_sec_03_and_04_private_files_and_migration_commands()
     {
@@ -297,31 +296,6 @@ class SecurityHardeningTest extends TestCase
         $user = User::factory()->create(['role' => 'customer']);
         $otherUser = User::factory()->create(['role' => 'customer']);
         $admin = User::factory()->create(['role' => 'admin']);
-
-        $filePath = UploadedFile::fake()->image('cccd.jpg')->store('authors/cccd', 'private');
-
-        $author = Author::create([
-            'user_id' => $user->id,
-            'pen_name' => 'Tác Giả Bảo Mật',
-            'bank_account_number' => '12345678',
-            'bank_name' => 'Vietcombank',
-            'bank_holder_name' => 'NGUYEN VAN A',
-            'identity_document' => $filePath,
-            'status' => 'pending',
-        ]);
-
-        // JSON response của Author không rò rỉ identity_document raw path
-        $authorArray = $author->toArray();
-        $this->assertArrayNotHasKey('identity_document', $authorArray);
-        $this->assertTrue($authorArray['has_identity_document']);
-        $this->assertEquals("/api/authors/{$author->id}/identity-document", $authorArray['identity_document_url']);
-
-        // Phân quyền tải file CCCD bằng đúng URL trả về từ JSON response
-        $downloadUrl = $authorArray['identity_document_url'];
-        $this->getJson($downloadUrl)->assertStatus(401);
-        $this->actingAs($otherUser)->getJson($downloadUrl)->assertStatus(403);
-        $this->actingAs($user)->getJson($downloadUrl)->assertStatus(200);
-        $this->actingAs($admin)->getJson($downloadUrl)->assertStatus(200);
 
         // Test Ticket Message Attachment URL & Access
         $ticket = SupportTicket::create([

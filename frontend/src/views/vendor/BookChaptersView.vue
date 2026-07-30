@@ -70,7 +70,7 @@ onMounted(() => {
     
     <div class="flex items-center justify-between mb-8">
       <div class="flex items-center gap-3">
-        <Button icon="pi pi-arrow-left" class="p-button-text p-button-secondary p-button-sm" @click="router.push({ name: 'author-dashboard' })" />
+        <Button icon="pi pi-arrow-left" class="p-button-text p-button-secondary p-button-sm" @click="router.push({ name: 'vendor-books' })" />
         <div>
           <h1 class="text-2xl md:text-3xl font-extrabold text-slate-900">Thiết lập Giá & Đọc thử</h1>
           <p class="text-slate-500 text-sm mt-1">Cấu hình giá trị bán lẻ và quyền đọc thử cho từng chương sách của tác phẩm: <strong class="text-indigo-600 font-bold">{{ bookTitle }}</strong></p>

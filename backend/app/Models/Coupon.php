@@ -20,6 +20,9 @@ class Coupon extends Model
         'category_id',
         'usage_limit',
         'used_count',
+        'scope_book_ids',
+        'stacking_policy',
+        'status',
     ];
 
     protected function casts(): array
@@ -31,6 +34,7 @@ class Coupon extends Model
             'discount_percent' => 'float',
             'usage_limit' => 'integer',
             'used_count' => 'integer',
+            'scope_book_ids' => 'array',
         ];
     }
 

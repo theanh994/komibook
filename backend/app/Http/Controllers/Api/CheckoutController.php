@@ -25,11 +25,26 @@ class CheckoutController extends Controller
         try {
             $user = $request->user();
             $items = $request->input('items');
-            $shippingData = $request->only(['shipping_address', 'phone', 'payment_method']);
+            $shippingData = [
+                'shipping_address' => $request->input('shipping_address') ?: 'Digital delivery',
+                'phone' => $request->input('phone') ?: 'Không áp dụng',
+                'payment_method' => $request->input('payment_method'),
+            ];
             $couponCode = $request->input('coupon_code');
 
             // Gọi service xử lý logic lõi
-            $orders = $this->checkoutService->processCheckout($items, $shippingData, $user->id, $couponCode);
+            $orders = $this->checkoutService->processCheckout(
+                $items,
+                $shippingData,
+                $user->id,
+                $couponCode,
+                [
+                    'accepted' => $request->boolean('ebook_terms_accepted'),
+                    'accepted_at' => now()->toISOString(),
+                    'ip_hash' => hash('sha256', (string) $request->ip()),
+                    'user_agent_hash' => hash('sha256', (string) $request->userAgent()),
+                ],
+            );
 
             return response()->json([
                 'status' => 'success',

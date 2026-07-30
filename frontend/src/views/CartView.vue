@@ -65,11 +65,13 @@
                 <div v-for="item in group.items" :key="item.book.id" class="p-lg flex flex-col sm:flex-row gap-lg transition-colors hover:bg-surface-container-low/20">
                   
                   <!-- Hình ảnh -->
-                  <div class="w-24 sm:w-28 shrink-0 rounded-xl overflow-hidden shadow-sm aspect-[3/4] relative cursor-pointer group" @click="$router.push(`/book/${item.book.slug}`)">
-                    <img v-if="item.book.cover_image" :src="item.book.cover_image" :alt="item.book.title" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                  <div class="relative aspect-[2/3] w-24 shrink-0 overflow-hidden bg-surface-container shadow-sm sm:w-28">
+                    <router-link :to="`/book/${item.book.slug}`" class="absolute inset-0 block focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary-fixed-dim" :aria-label="`Xem chi tiết ${item.book.title}`">
+                    <img v-if="item.book.cover_image" :src="item.book.cover_image" :alt="`Bìa sách ${item.book.title}`" class="h-full w-full rounded-none object-contain p-2" />
                     <div v-else class="absolute inset-0 flex items-center justify-center bg-surface-container-high">
                       <span class="material-symbols-outlined text-outline text-3xl">image</span>
                     </div>
+                    </router-link>
                   </div>
 
                   <!-- Info & Actions -->
@@ -82,11 +84,16 @@
                           <span class="w-1 h-1 rounded-full bg-outline-variant"></span>
                           <span class="text-xs text-outline uppercase tracking-wider font-bold">{{ item.book.type === 'ebook' ? 'E-book' : 'Sách giấy' }}</span>
                         </div>
+                        <p v-if="item.book.type === 'ebook'" class="text-xs font-bold text-primary">
+                          {{ item.book.latest_ebook_version?.version
+                            ? `Phiên bản mới nhất: ${item.book.latest_ebook_version.version}`
+                            : 'Phiên bản mới nhất sẽ được chốt khi thanh toán' }}
+                        </p>
                       </div>
                       <button 
-                        class="w-10 h-10 rounded-full flex items-center justify-center text-outline hover:text-error hover:bg-error-container/20 transition-all border-none bg-transparent cursor-pointer" 
+                        class="flex h-11 w-11 items-center justify-center rounded-full border-none bg-transparent text-outline transition-colors hover:bg-error-container/20 hover:text-error"
                         @click="confirmRemove(item.book)"
-                        title="Xoá khỏi giỏ"
+                        :aria-label="`Xoá ${item.book.title} khỏi giỏ`"
                       >
                         <span class="material-symbols-outlined text-[20px]">delete</span>
                       </button>
@@ -103,11 +110,12 @@
                       </div>
 
                       <!-- Counter -->
-                      <div class="flex items-center gap-1 p-1 bg-surface-container-low rounded-xl border border-outline-variant/20">
+                      <div v-if="item.book.type !== 'ebook'" class="flex items-center gap-1 p-1 bg-surface-container-low rounded-xl border border-outline-variant/20">
                         <button 
-                          class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-surface-container-highest text-on-surface-variant transition-all disabled:opacity-30 border-none bg-transparent cursor-pointer" 
+                          class="flex h-11 w-11 items-center justify-center rounded-lg border-none bg-transparent text-on-surface-variant transition-colors hover:bg-surface-container-highest disabled:opacity-30"
                           @click="updateQuantity(item.book.id, item.quantity - 1)" 
                           :disabled="item.quantity <= 1"
+                          :aria-label="`Giảm số lượng ${item.book.title}`"
                         >
                           <span class="material-symbols-outlined text-[18px]">remove</span>
                         </button>
@@ -117,13 +125,18 @@
                           @change="(e) => updateQuantity(item.book.id, parseInt(e.target.value) || 1)" 
                           class="w-10 text-center bg-transparent border-none text-sm font-bold text-on-surface focus:outline-none p-0 hide-arrows" 
                           min="1" 
+                          :aria-label="`Số lượng ${item.book.title}`"
                         />
                         <button 
-                          class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-surface-container-highest text-on-surface-variant transition-all border-none bg-transparent cursor-pointer" 
+                          class="flex h-11 w-11 items-center justify-center rounded-lg border-none bg-transparent text-on-surface-variant transition-colors hover:bg-surface-container-highest"
                           @click="updateQuantity(item.book.id, item.quantity + 1)"
+                          :aria-label="`Tăng số lượng ${item.book.title}`"
                         >
                           <span class="material-symbols-outlined text-[18px]">add</span>
                         </button>
+                      </div>
+                      <div v-else class="flex min-h-11 items-center rounded-lg bg-primary-container px-3 text-xs font-bold text-on-primary-container">
+                        1 quyền truy cập số
                       </div>
                     </div>
                   </div>
@@ -151,7 +164,7 @@
             <div class="bg-surface-container-lowest rounded-2xl border border-outline-variant/30 soft-shadow p-lg md:p-xl space-y-xl">
               
               <!-- Address Section -->
-              <section>
+              <section v-if="hasPhysicalBooks">
                 <div class="flex items-center justify-between mb-lg">
                   <h3 class="text-lg font-bold text-on-surface flex items-center gap-2">
                     <span class="material-symbols-outlined text-primary">location_on</span>
@@ -162,8 +175,8 @@
                 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-lg">
                   <div class="space-y-2">
-                    <label class="text-sm font-bold text-on-surface-variant ml-1">Sổ địa chỉ</label>
-                    <Select v-model="selectedAddress" :options="addresses" optionLabel="address" placeholder="Chọn địa chỉ đã lưu..." class="w-full !rounded-xl !border-outline-variant/40" @change="onAddressSelect">
+                    <label for="checkout-address-book" class="text-sm font-bold text-on-surface-variant ml-1">Sổ địa chỉ</label>
+                    <Select inputId="checkout-address-book" v-model="selectedAddress" :options="addresses" optionLabel="address" placeholder="Chọn địa chỉ đã lưu..." class="w-full !rounded-xl !border-outline-variant/40" @change="onAddressSelect">
                       <template #value="slotProps">
                         <div v-if="slotProps.value" class="flex items-center">
                           <div class="font-medium">{{ slotProps.value.receiver_name }} - {{ slotProps.value.phone }}</div>
@@ -180,29 +193,33 @@
                   </div>
                   
                   <div class="space-y-2">
-                    <label class="text-sm font-bold text-on-surface-variant ml-1">Tên người nhận</label>
+                    <label for="checkout-receiver" class="text-sm font-bold text-on-surface-variant ml-1">Tên người nhận</label>
                     <div class="relative">
-                      <InputText v-model="shippingData.receiver_name" placeholder="Nhập họ và tên..." class="w-full !pl-10 !rounded-xl !border-outline-variant/40" />
+                      <InputText id="checkout-receiver" v-model="shippingData.receiver_name" placeholder="Nhập họ và tên..." class="w-full !pl-10 !rounded-xl !border-outline-variant/40" />
                       <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-[20px]">person</span>
                     </div>
                   </div>
 
                   <div class="space-y-2">
-                    <label class="text-sm font-bold text-on-surface-variant ml-1">Số điện thoại</label>
+                    <label for="checkout-phone" class="text-sm font-bold text-on-surface-variant ml-1">Số điện thoại</label>
                     <div class="relative">
-                      <InputText v-model="shippingData.phone" placeholder="Nhập số điện thoại..." class="w-full !pl-10 !rounded-xl !border-outline-variant/40" />
+                      <InputText id="checkout-phone" v-model="shippingData.phone" placeholder="Nhập số điện thoại..." class="w-full !pl-10 !rounded-xl !border-outline-variant/40" />
                       <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-[20px]">phone</span>
                     </div>
                   </div>
 
                   <div class="space-y-2 md:col-span-2">
-                    <label class="text-sm font-bold text-on-surface-variant ml-1">Địa chỉ chi tiết</label>
+                    <label for="checkout-address" class="text-sm font-bold text-on-surface-variant ml-1">Địa chỉ chi tiết</label>
                     <div class="relative">
-                      <InputText v-model="shippingData.shipping_address" placeholder="Số nhà, tên đường, phường/xã, quận/huyện..." class="w-full !pl-10 !rounded-xl !border-outline-variant/40" />
+                      <InputText id="checkout-address" v-model="shippingData.shipping_address" placeholder="Số nhà, tên đường, phường/xã, quận/huyện..." class="w-full !pl-10 !rounded-xl !border-outline-variant/40" />
                       <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-[20px]">home</span>
                     </div>
                   </div>
                 </div>
+              </section>
+              <section v-else class="rounded-xl border border-primary/20 bg-primary-container p-5 text-on-primary-container">
+                <h3 class="flex items-center gap-2 font-bold"><span class="material-symbols-outlined" aria-hidden="true">cloud_download</span>Giao nội dung số</h3>
+                <p class="mt-2 text-sm leading-6">Đơn chỉ có ebook nên không cần địa chỉ nhận hàng. Ebook sẽ xuất hiện trong Tủ sách sau khi thanh toán hoàn tất.</p>
               </section>
 
               <!-- Payment Method -->
@@ -213,8 +230,10 @@
                 </h3>
                 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-md">
-                  <div 
+                  <button
+                    type="button"
                     @click="paymentMethod = 'COD'"
+                    :aria-pressed="paymentMethod === 'COD'"
                     :class="['p-lg rounded-2xl border-2 cursor-pointer transition-all flex items-center gap-md', paymentMethod === 'COD' ? 'border-primary bg-primary-container/5 shadow-sm' : 'border-outline-variant/20 hover:border-outline-variant/60']"
                   >
                     <div :class="['w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0', paymentMethod === 'COD' ? 'border-primary' : 'border-outline']">
@@ -225,10 +244,12 @@
                       <div class="text-xs text-on-surface-variant">Thanh toán bằng tiền mặt khi giao hàng</div>
                     </div>
                     <span class="material-symbols-outlined text-3xl text-primary/40">local_shipping</span>
-                  </div>
+                  </button>
 
-                  <div 
+                  <button
+                    type="button"
                     @click="paymentMethod = 'VNPAY'"
+                    :aria-pressed="paymentMethod === 'VNPAY'"
                     :class="['p-lg rounded-2xl border-2 cursor-pointer transition-all flex items-center gap-md', paymentMethod === 'VNPAY' ? 'border-primary bg-primary-container/5 shadow-sm' : 'border-outline-variant/20 hover:border-outline-variant/60']"
                   >
                     <div :class="['w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0', paymentMethod === 'VNPAY' ? 'border-primary' : 'border-outline']">
@@ -239,7 +260,7 @@
                       <div class="text-xs text-on-surface-variant">Thanh toán qua cổng VNPAY an toàn</div>
                     </div>
                     <span class="material-symbols-outlined text-3xl text-primary/40">account_balance_wallet</span>
-                  </div>
+                  </button>
                 </div>
               </section>
 
@@ -305,9 +326,22 @@
               </button>
             </template>
             <template v-else>
+              <div v-if="hasEbooks" class="mb-4 rounded-xl border border-amber-300 bg-amber-50 p-4 text-left">
+                <label class="flex min-h-11 cursor-pointer items-start gap-3">
+                  <input v-model="ebookTermsAccepted" type="checkbox" class="mt-1 h-5 w-5 shrink-0" />
+                  <span class="text-sm leading-6 text-amber-950">
+                    Tôi mua <strong>phiên bản ebook mới nhất tại thời điểm đặt hàng</strong> và hiểu nội dung số
+                    <strong>không được trả lại sau khi mua</strong>. Khi ebook được cập nhật, tôi vẫn giữ bản đã mua
+                    và được đọc các phiên bản mới hơn từ trình đọc ebook.
+                    <RouterLink to="/policies/ebooks" class="inline-flex min-h-11 items-center font-bold text-primary underline">
+                      Xem {{ ebookPolicyLabel }}
+                    </RouterLink>.
+                  </span>
+                </label>
+              </div>
               <button 
                 @click="processCheckout"
-                :disabled="isSubmitting"
+                :disabled="isSubmitting || (hasEbooks && !ebookTermsAccepted)"
                 class="w-full py-4 bg-primary text-on-primary rounded-xl text-lg font-bold hover:bg-primary/90 transition-all shadow-md active:scale-[0.98] flex items-center justify-center gap-2 disabled:opacity-50"
               >
                 <template v-if="isSubmitting">
@@ -374,8 +408,17 @@ const selectedAddress = ref(null)
 const couponCode = ref('')
 const isApplyingCoupon = ref(false)
 const appliedCoupon = ref(null)
+const ebookTermsAccepted = ref(false)
+const ebookPolicy = ref(null)
+const hasEbooks = computed(() => cartStore.items.some(item => item.book.type === 'ebook'))
+const hasPhysicalBooks = computed(() => cartStore.items.some(item => item.book.type !== 'ebook'))
+const ebookPolicyLabel = computed(() => ebookPolicy.value?.version
+  ? `chính sách ebook v${ebookPolicy.value.version}`
+  : 'chính sách ebook hiện hành')
 
 onMounted(() => {
+  refreshCartBooks()
+  fetchPublicPolicies()
   if (authStore.isAuthenticated) {
     fetchAddresses()
   }
@@ -390,6 +433,23 @@ onMounted(() => {
     toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Thanh toán không thành công hoặc bị hủy.', life: 5000 })
   }
 })
+
+const fetchPublicPolicies = async () => {
+  try {
+    const response = await apiClient.get('/api/policies/returns')
+    ebookPolicy.value = response.data?.data?.ebook_non_returnable || null
+  } catch {
+    ebookPolicy.value = null
+  }
+}
+
+const refreshCartBooks = async () => {
+  await Promise.allSettled(cartStore.items.map(async (item) => {
+    if (!item.book?.slug) return
+    const response = await apiClient.get(`/api/books/${item.book.slug}`)
+    cartStore.refreshBook(item.book.id, readApiData(response.data))
+  }))
+}
 
 const fetchAddresses = async () => {
   if (!authStore.isAuthenticated) return
@@ -481,7 +541,11 @@ const goToCheckout = () => {
 }
 
 const processCheckout = async () => {
-  if (!shippingData.value.phone || !shippingData.value.shipping_address || !shippingData.value.receiver_name) {
+  if (hasEbooks.value && !ebookTermsAccepted.value) {
+    toast.add({ severity: 'warn', summary: 'Cần xác nhận điều khoản ebook', detail: 'Vui lòng đồng ý điều khoản nội dung số trước khi đặt hàng.', life: 4000 })
+    return
+  }
+  if (hasPhysicalBooks.value && (!shippingData.value.phone || !shippingData.value.shipping_address || !shippingData.value.receiver_name)) {
     toast.add({ severity: 'warn', summary: 'Cảnh báo', detail: 'Vui lòng nhập đầy đủ thông tin giao hàng!', life: 3000 })
     return
   }
@@ -491,7 +555,8 @@ const processCheckout = async () => {
     const payload = {
       ...shippingData.value,
       payment_method: paymentMethod.value,
-      coupon_code: appliedCoupon.value?.code
+      coupon_code: appliedCoupon.value?.code,
+      ebook_terms_accepted: ebookTermsAccepted.value
     }
     const res = await cartStore.checkout(payload)
     

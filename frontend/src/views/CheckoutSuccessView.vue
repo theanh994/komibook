@@ -1,5 +1,8 @@
 <template>
-  <div class="min-h-screen bg-background flex items-center justify-center py-20 px-gutter font-inter antialiased">
+  <main
+    class="min-h-screen bg-background flex items-center justify-center py-12 md:py-20 px-gutter font-inter antialiased"
+    aria-labelledby="checkout-result-title"
+  >
     <!-- Dynamic Background Decor -->
     <div class="fixed inset-0 pointer-events-none overflow-hidden opacity-40">
        <div class="absolute top-[-10%] right-[-10%] w-[800px] h-[800px] bg-primary/10 blur-[150px] rounded-full animate-pulse"></div>
@@ -7,24 +10,24 @@
     </div>
 
     <!-- Loading State -->
-    <div v-if="loading" class="text-center animate-fade-in relative z-10">
-       <div class="w-16 h-16 border-8 border-primary/20 border-t-primary rounded-full animate-spin mx-auto mb-6"></div>
-       <p class="text-[11px] font-bold text-outline uppercase tracking-[0.3em]">Đang xác nhận thông tin đơn hàng...</p>
+    <div v-if="loading" class="text-center animate-fade-in relative z-10" role="status" aria-live="polite">
+       <div class="w-14 h-14 border-4 border-primary/20 border-t-primary rounded-full animate-spin mx-auto mb-6" aria-hidden="true"></div>
+       <p class="text-sm font-bold text-on-surface-variant">Đang xác nhận thông tin đơn hàng...</p>
     </div>
 
     <!-- Invalid or Missing Order ID -->
     <div v-else-if="invalidId" class="max-w-[600px] w-full relative z-10">
-      <div class="bg-surface-container-lowest rounded-[48px] p-8 md:p-12 border border-outline-variant/10 shadow-2xl text-center space-y-6">
-        <div class="w-20 h-20 bg-amber-50 rounded-full flex items-center justify-center text-amber-500 mx-auto">
+      <div class="bg-surface-container-lowest rounded-3xl p-6 md:p-10 border border-outline-variant/20 shadow-xl text-center space-y-6">
+        <div class="w-20 h-20 bg-amber-50 rounded-full flex items-center justify-center text-amber-700 mx-auto" aria-hidden="true">
            <span class="material-symbols-outlined text-[48px]">warning</span>
         </div>
-        <h1 class="text-2xl font-bold text-on-surface">Thiếu thông tin mã đơn hàng</h1>
-        <p class="text-on-surface-variant text-sm max-w-md mx-auto">Không thể hiển thị kết quả đặt hàng do thiếu tham số mã đơn hàng.</p>
+        <h1 id="checkout-result-title" class="text-2xl md:text-3xl font-bold text-on-surface">Thiếu thông tin mã đơn hàng</h1>
+        <p class="text-on-surface-variant text-base leading-relaxed max-w-md mx-auto">Không thể hiển thị kết quả đặt hàng do thiếu tham số mã đơn hàng.</p>
         <div class="flex flex-col sm:flex-row gap-4 justify-center pt-2">
-           <button @click="router.push('/orders')" class="px-8 py-4 rounded-2xl bg-primary text-on-primary font-bold text-xs uppercase tracking-widest border-none cursor-pointer">
+           <button @click="router.push('/orders')" class="min-h-11 px-8 py-3 rounded-xl bg-primary text-on-primary font-bold text-sm border-none cursor-pointer">
              Danh sách đơn hàng
            </button>
-           <button @click="router.push('/')" class="px-8 py-4 rounded-2xl border border-outline-variant/30 bg-surface-container-low text-on-surface font-bold text-xs uppercase tracking-widest cursor-pointer">
+           <button @click="router.push('/')" class="min-h-11 px-8 py-3 rounded-xl border border-outline-variant/30 bg-surface-container-low text-on-surface font-bold text-sm cursor-pointer">
              Về trang chủ
            </button>
         </div>
@@ -33,17 +36,17 @@
 
     <!-- Error State -->
     <div v-else-if="error" class="max-w-[600px] w-full relative z-10">
-      <div class="bg-surface-container-lowest rounded-[48px] p-8 md:p-12 border border-outline-variant/10 shadow-2xl text-center space-y-6">
-        <div class="w-20 h-20 bg-rose-50 rounded-full flex items-center justify-center text-rose-500 mx-auto">
+      <div class="bg-surface-container-lowest rounded-3xl p-6 md:p-10 border border-outline-variant/20 shadow-xl text-center space-y-6" role="alert">
+        <div class="w-20 h-20 bg-rose-50 rounded-full flex items-center justify-center text-rose-700 mx-auto" aria-hidden="true">
            <span class="material-symbols-outlined text-[48px]">error</span>
         </div>
-        <h1 class="text-2xl font-bold text-on-surface">Không thể tải thông tin đơn hàng</h1>
-        <p class="text-on-surface-variant text-sm max-w-md mx-auto">{{ error }}</p>
+        <h1 id="checkout-result-title" class="text-2xl md:text-3xl font-bold text-on-surface">Không thể tải thông tin đơn hàng</h1>
+        <p class="text-on-surface-variant text-base leading-relaxed max-w-md mx-auto">{{ error }}</p>
         <div class="flex flex-col sm:flex-row gap-4 justify-center pt-2">
-           <button @click="fetchOrderDetails" class="px-8 py-4 rounded-2xl bg-rose-600 text-white font-bold text-xs uppercase tracking-widest border-none cursor-pointer">
+           <button @click="fetchOrderDetails" class="min-h-11 px-8 py-3 rounded-xl bg-rose-700 text-white font-bold text-sm border-none cursor-pointer">
              Thử lại
            </button>
-           <button @click="router.push('/orders')" class="px-8 py-4 rounded-2xl border border-outline-variant/30 bg-surface-container-low text-on-surface font-bold text-xs uppercase tracking-widest cursor-pointer">
+           <button @click="router.push('/orders')" class="min-h-11 px-8 py-3 rounded-xl border border-outline-variant/30 bg-surface-container-low text-on-surface font-bold text-sm cursor-pointer">
              Xem đơn hàng của tôi
            </button>
         </div>
@@ -52,18 +55,18 @@
 
     <!-- Success / Confirmed Order Content -->
     <div v-else-if="order" class="max-w-[800px] w-full relative z-10">
-      <div class="bg-surface-container-lowest rounded-[48px] p-8 md:p-16 border border-outline-variant/10 shadow-[0_32px_80px_rgba(0,0,0,0.08)] overflow-hidden relative text-center">
+      <div class="bg-surface-container-lowest rounded-3xl p-6 md:p-12 border border-outline-variant/20 shadow-xl overflow-hidden relative text-center">
         <!-- Success/Info Icon Animation -->
-        <div class="relative w-32 h-32 mx-auto mb-12 animate-success-pop">
-           <div class="absolute inset-0 bg-primary/10 rounded-[40px] rotate-12 scale-110"></div>
-           <div class="absolute inset-0 bg-primary rounded-[32px] flex items-center justify-center shadow-2xl shadow-primary/40">
+        <div class="relative w-24 h-24 md:w-28 md:h-28 mx-auto mb-8 animate-success-pop" aria-hidden="true">
+           <div class="absolute inset-0 bg-primary/10 rounded-3xl rotate-6 scale-105"></div>
+           <div class="absolute inset-0 bg-primary rounded-2xl flex items-center justify-center shadow-lg shadow-primary/30">
               <span class="material-symbols-outlined text-white text-6xl">
                 {{ isCancelledOrRefunded ? 'cancel' : (isConfirmedPaid ? 'check_circle' : 'receipt_long') }}
               </span>
            </div>
         </div>
 
-        <h1 class="text-4xl md:text-6xl font-bold text-on-surface tracking-tighter leading-none mb-6">
+        <h1 id="checkout-result-title" class="text-3xl md:text-5xl font-bold text-on-surface tracking-tight leading-tight mb-5">
            <template v-if="isCancelledOrRefunded">
              Đơn hàng <span class="text-primary italic">không còn hiệu lực</span>
            </template>
@@ -74,7 +77,7 @@
              Đơn hàng <span class="text-primary italic">đã ghi nhận</span>
            </template>
         </h1>
-        <p class="text-on-surface-variant max-w-[32rem] mx-auto text-lg md:text-xl leading-relaxed font-medium opacity-70 mb-12">
+        <p class="text-on-surface-variant max-w-[36rem] mx-auto text-base md:text-lg leading-relaxed font-medium mb-10">
           <template v-if="isCancelledOrRefunded">
             Đơn hàng đã bị hủy hoặc hoàn tiền. Vui lòng xem trạng thái chi tiết trong danh sách đơn hàng.
           </template>
@@ -87,16 +90,16 @@
         </p>
 
         <!-- Order Detail Summary Card -->
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-16 text-left">
-           <div class="p-8 bg-surface-container-low rounded-[32px] border border-outline-variant/5">
-              <p class="text-[10px] font-bold text-outline uppercase tracking-widest mb-2">Mã đơn hàng</p>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 mb-10 text-left">
+           <div class="p-6 bg-surface-container-low rounded-2xl border border-outline-variant/10">
+              <p class="text-xs font-bold text-on-surface-variant uppercase tracking-wide mb-2">Mã đơn hàng</p>
               <h3 class="text-2xl font-bold text-on-surface select-all">#{{ order.order_code || order.id }}</h3>
-              <p class="text-xs text-on-surface-variant font-medium mt-2">{{ order.items?.length || 0 }} sản phẩm trong đơn</p>
+              <p class="text-sm text-on-surface-variant font-medium mt-2">{{ order.items?.length || 0 }} sản phẩm trong đơn</p>
            </div>
-           <div class="p-8 bg-surface-container-low rounded-[32px] border border-outline-variant/5">
-              <p class="text-[10px] font-bold text-outline uppercase tracking-widest mb-2">Tổng thanh toán</p>
+           <div class="p-6 bg-surface-container-low rounded-2xl border border-outline-variant/10">
+              <p class="text-xs font-bold text-on-surface-variant uppercase tracking-wide mb-2">Tổng thanh toán</p>
               <h3 class="text-2xl font-bold text-primary">{{ formatCurrency(order.grand_total || order.total_amount) }}</h3>
-              <p class="text-xs text-on-surface-variant font-medium mt-2">
+              <p class="text-sm text-on-surface-variant font-medium mt-2">
                 Trạng thái thanh toán: <strong class="capitalize">{{ getPaymentStatusLabel(order) }}</strong>
               </p>
            </div>
@@ -108,7 +111,7 @@
            <button 
              v-if="hasReadableEbook"
              @click="goToReader"
-             class="w-full md:w-auto px-10 py-5 rounded-[24px] bg-primary text-on-primary font-bold text-xs uppercase tracking-[0.2em] hover:scale-105 transition-all shadow-2xl shadow-primary/40 border-none cursor-pointer flex items-center justify-center gap-3"
+             class="min-h-11 w-full md:w-auto px-8 py-3 rounded-xl bg-primary text-on-primary font-bold text-sm shadow-lg shadow-primary/30 border-none cursor-pointer flex items-center justify-center gap-3 transition-colors hover:bg-primary/90"
            >
               <span class="material-symbols-outlined text-[20px]">auto_stories</span>
               Đọc sách ngay
@@ -118,7 +121,7 @@
            <button 
              v-if="hasPhysicalBook"
              @click="goToTracking"
-             class="w-full md:w-auto px-10 py-5 rounded-[24px] bg-secondary text-on-secondary font-bold text-xs uppercase tracking-[0.2em] hover:scale-105 transition-all shadow-2xl shadow-secondary/40 border-none cursor-pointer flex items-center justify-center gap-3"
+             class="min-h-11 w-full md:w-auto px-8 py-3 rounded-xl bg-secondary text-on-secondary font-bold text-sm shadow-lg shadow-secondary/30 border-none cursor-pointer flex items-center justify-center gap-3 transition-colors hover:bg-secondary/90"
            >
               <span class="material-symbols-outlined text-[20px]">local_shipping</span>
               Theo dõi vận chuyển
@@ -126,7 +129,7 @@
 
            <button 
              @click="router.push('/')"
-             class="w-full md:w-auto px-10 py-5 rounded-[24px] border border-outline-variant/30 bg-surface-container-low text-on-surface font-bold text-xs uppercase tracking-[0.2em] hover:bg-surface-container-high transition-all flex items-center justify-center gap-3 cursor-pointer"
+             class="min-h-11 w-full md:w-auto px-8 py-3 rounded-xl border border-outline-variant/30 bg-surface-container-low text-on-surface font-bold text-sm hover:bg-surface-container-high transition-colors flex items-center justify-center gap-3 cursor-pointer"
            >
               <span class="material-symbols-outlined text-[20px]">home</span>
               Về trang chủ
@@ -134,10 +137,10 @@
         </div>
 
         <!-- Footer Note -->
-        <p class="mt-16 text-[10px] font-bold text-outline uppercase tracking-[0.3em] opacity-40">Bạn có thể theo dõi chi tiết đơn hàng bất kỳ lúc nào trong Tủ sách hoặc Đơn hàng của tôi.</p>
+        <p class="mt-10 text-sm font-medium text-on-surface-variant">Bạn có thể theo dõi chi tiết đơn hàng bất kỳ lúc nào trong Tủ sách hoặc Đơn hàng của tôi.</p>
       </div>
     </div>
-  </div>
+  </main>
 </template>
 
 <script setup>
@@ -257,5 +260,13 @@ onMounted(() => {
 
 .animate-success-pop {
   animation: success-pop 1s cubic-bezier(0.17, 0.67, 0.83, 0.67) forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-in,
+  .animate-success-pop,
+  .animate-spin {
+    animation: none !important;
+  }
 }
 </style>

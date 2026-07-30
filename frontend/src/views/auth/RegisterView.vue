@@ -111,20 +111,13 @@
                   <span class="material-symbols-outlined text-[18px] text-primary/80">group</span>
                   Vai trò đăng ký
                 </label>
-                <div class="grid grid-cols-3 gap-3">
+                <div class="grid grid-cols-2 gap-3">
                   <label                    class="flex flex-col items-center justify-center p-3 border rounded-xl cursor-pointer transition-all duration-200 text-center gap-1.5 border-outline-variant/60 hover:scale-[1.02] active:scale-[0.98]"
                     :class="form.desired_role === 'customer' ? 'border-primary bg-primary/5 text-primary font-bold shadow-sm' : 'border-outline-variant/60 bg-surface text-on-surface-variant'"
                   >
                     <input type="radio" v-model="form.desired_role" value="customer" class="sr-only" />
                     <span class="material-symbols-outlined text-xl">person</span>
                     <span class="text-xs">Độc giả</span>
-                  </label>
-                  <label                    class="flex flex-col items-center justify-center p-3 border rounded-xl cursor-pointer transition-all duration-200 text-center gap-1.5 border-outline-variant/60 hover:scale-[1.02] active:scale-[0.98]"
-                    :class="form.desired_role === 'author' ? 'border-primary bg-primary/5 text-primary font-bold shadow-sm' : 'border-outline-variant/60 bg-surface text-on-surface-variant'"
-                  >
-                    <input type="radio" v-model="form.desired_role" value="author" class="sr-only" />
-                    <span class="material-symbols-outlined text-xl">edit</span>
-                    <span class="text-xs">Tác giả</span>
                   </label>
                   <label                    class="flex flex-col items-center justify-center p-3 border rounded-xl cursor-pointer transition-all duration-200 text-center gap-1.5 border-outline-variant/60 hover:scale-[1.02] active:scale-[0.98]"
                     :class="form.desired_role === 'vendor' ? 'border-primary bg-primary/5 text-primary font-bold shadow-sm' : 'border-outline-variant/60 bg-surface text-on-surface-variant'"
@@ -150,7 +143,7 @@
                       required
                       autocomplete="new-password"
                     />
-                    <button @click="showPassword = !showPassword" class="absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-primary cursor-pointer transition-colors p-1" type="button">
+                    <button @click="showPassword = !showPassword" class="absolute right-0 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center border-none bg-transparent text-on-surface-variant transition-colors hover:text-primary" type="button" :aria-label="showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'">
                       <span class="material-symbols-outlined" style="font-size: 20px;">{{ showPassword ? 'visibility_off' : 'visibility' }}</span>
                     </button>
                   </div>
@@ -172,13 +165,13 @@
             </div>
 
             <!-- Terms -->
-            <div class="flex items-start gap-3 px-0.5">
+            <div class="flex min-h-11 items-start gap-3 px-0.5">
               <input                id="terms"                type="checkbox"
                 required
                 class="mt-1 w-5 h-5 rounded-md border border-outline-variant text-primary focus:ring-primary focus:ring-offset-0 bg-surface-container-lowest cursor-pointer transition-all checked:bg-primary checked:border-primary"
               />
               <label for="terms" class="text-xs font-medium text-on-surface-variant leading-relaxed select-none cursor-pointer">
-                Tôi đồng ý với <a href="#" class="text-primary font-bold hover:underline">Điều khoản</a> và <a href="#" class="text-primary font-bold hover:underline">Chính sách bảo mật</a> của Komibook.
+                Tôi đồng ý với <RouterLink to="/terms" class="inline-flex min-h-11 items-center font-bold text-primary hover:underline">Điều khoản</RouterLink> và <RouterLink to="/privacy" class="inline-flex min-h-11 items-center font-bold text-primary hover:underline">Chính sách bảo mật</RouterLink> của Komibook.
               </label>
             </div>
 
@@ -200,7 +193,7 @@
           <!-- Footer Links -->
           <div class="text-center">
             <span class="text-sm text-on-surface-variant">Đã có tài khoản?</span>
-            <router-link to="/login" class="text-sm font-bold text-primary hover:text-secondary ml-2 underline underline-offset-4 transition-colors">Đăng nhập</router-link>
+            <router-link to="/login" class="ml-2 inline-flex min-h-11 items-center text-sm font-bold text-primary underline underline-offset-4 transition-colors hover:text-secondary">Đăng nhập</router-link>
           </div>
         </div>
       </div>
@@ -314,7 +307,6 @@
             <select              v-model="googleRegForm.desired_role"
               class="w-full h-11 bg-surface-container-lowest border border-outline-variant/60 rounded-xl px-4 text-sm text-on-surface focus:outline-none focus:border-primary transition-all duration-200"            >
               <option value="customer">Độc giả</option>
-              <option value="author">Tác giả</option>
               <option value="vendor">Nhà bán</option>
             </select>
           </div>
@@ -493,7 +485,6 @@
             <select              v-model="phoneRegForm.desired_role"
               class="w-full h-11 bg-surface-container-lowest border border-outline-variant/60 rounded-xl px-4 text-sm text-on-surface focus:outline-none focus:border-primary transition-all duration-200"            >
               <option value="customer">Độc giả</option>
-              <option value="author">Tác giả</option>
               <option value="vendor">Nhà bán</option>
             </select>
           </div>
@@ -898,7 +889,7 @@ const handleConfirmEmailOtp = async () => {
     emailOtpDialogVisible.value = false
 
     let message = 'Đăng ký tài khoản thành công! Đang chuyển hướng...'
-    if (form.desired_role === 'author' || form.desired_role === 'vendor') {
+    if (form.desired_role === 'vendor') {
       message = 'Đăng ký thành công! Hồ sơ đối tác của bạn đang chờ Admin phê duyệt.'
     }
     toast.add({ severity: 'success', summary: 'Thành công', detail: message, life: 4000 })

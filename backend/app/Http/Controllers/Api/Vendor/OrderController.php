@@ -20,7 +20,7 @@ class OrderController extends Controller
      */
     public function index(Request $request)
     {
-        $query = Order::with('user')->orderByDesc('created_at');
+        $query = Order::with(['user', 'orderItems.book'])->orderByDesc('created_at');
 
         // Lọc theo trạng thái
         if ($request->filled('status') && $request->status !== 'all') {

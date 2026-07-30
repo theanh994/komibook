@@ -29,6 +29,7 @@ class VendorOnboardingController extends Controller
             'shop_name' => $validated['shop_name'],
             'slug' => $validated['slug'],
             'description' => $validated['description'] ?? null,
+            'business_model' => $validated['business_model'] ?? $vendor->business_model ?? 'bookstore',
             'legal_name' => $validated['legal_name'],
             'tax_code' => $validated['tax_code'],
             'payout_bank_account' => $validated['payout_bank_account'],
@@ -60,7 +61,7 @@ class VendorOnboardingController extends Controller
             throw ValidationException::withMessages(['profile' => 'Hồ sơ nhà bán hiện không thể chỉnh sửa.']);
         }
         $validated = $request->validate($this->rules($vendor, true));
-        foreach (['shop_name', 'slug', 'description', 'legal_name', 'tax_code', 'payout_bank_account', 'payout_bank_name', 'payout_bank_holder'] as $field) {
+        foreach (['shop_name', 'slug', 'description', 'business_model', 'legal_name', 'tax_code', 'payout_bank_account', 'payout_bank_name', 'payout_bank_holder'] as $field) {
             if (array_key_exists($field, $validated)) {
                 $vendor->{$field} = $validated[$field];
             }
@@ -122,6 +123,7 @@ class VendorOnboardingController extends Controller
             'shop_name' => [$presence, 'string', 'max:255'],
             'slug' => [$presence, 'string', 'max:255', Rule::unique('vendors', 'slug')->ignore($vendor?->id)],
             'description' => ['nullable', 'string', 'max:5000'],
+            'business_model' => [$partial ? 'sometimes' : 'nullable', Rule::in(['direct_publisher', 'bookstore', 'distributor', 'mixed'])],
             'legal_name' => [$presence, 'string', 'max:255'],
             'tax_code' => [$presence, 'string', 'max:64'],
             'business_registration_document' => [$partial ? 'sometimes' : 'nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:5120'],

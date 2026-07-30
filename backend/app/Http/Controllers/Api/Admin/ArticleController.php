@@ -27,7 +27,7 @@ class ArticleController extends Controller
         $article = DB::transaction(function () use ($request, $validated) {
             $article = Article::create([
                 ...collect($validated)->except(['category', 'tags', 'book_ids', 'cover_image'])->all(),
-                'author_id' => $request->user()->id, 'slug' => $this->uniqueSlug($validated['title']),
+                'created_by' => $request->user()->id, 'slug' => $this->uniqueSlug($validated['title']),
                 'body' => HtmlSanitizer::sanitize($validated['body']), 'status' => ArticleStatus::Draft,
                 'cover_image' => $request->file('cover_image')?->store('articles/covers', 'public'),
                 'article_category_id' => $this->category($validated['category'] ?? null)?->id,

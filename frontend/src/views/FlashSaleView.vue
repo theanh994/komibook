@@ -9,8 +9,8 @@
     <div class="w-full px-gutter max-w-[1280px] mx-auto py-xl relative z-10">
       
       <!-- Premium Breadcrumb -->
-      <nav class="mb-xl flex items-center gap-3 text-[11px] font-bold uppercase tracking-[0.2em] text-outline/60 animate-fade-in">
-        <router-link to="/" class="hover:text-primary transition-all flex items-center gap-1 group">
+      <nav class="mb-xl flex items-center gap-3 text-xs font-bold uppercase tracking-[0.16em] text-outline animate-fade-in" aria-label="Đường dẫn">
+        <router-link to="/" class="flex min-h-11 min-w-11 items-center justify-center transition-colors hover:text-primary" aria-label="Trang chủ">
           <span class="material-symbols-outlined text-[20px] group-hover:scale-110 transition-transform">home</span>
         </router-link>
         <span class="material-symbols-outlined text-[14px]">chevron_right</span>
@@ -34,7 +34,7 @@
           <h2 class="text-2xl font-bold text-on-surface">Không thể tải chương trình Flash Sale</h2>
           <p class="text-on-surface-variant text-sm max-w-md mx-auto">{{ error }}</p>
         </div>
-        <button @click="fetchActiveSale" class="bg-primary text-on-primary px-8 py-3.5 rounded-2xl font-bold text-xs uppercase tracking-widest hover:scale-105 transition-all flex items-center gap-2 cursor-pointer border-none">
+        <button @click="fetchActiveSale" class="ui-button ui-button-primary">
           <span class="material-symbols-outlined text-[18px]">refresh</span> Thử lại
         </button>
       </div>
@@ -46,7 +46,7 @@
         </div>
         <h2 class="text-3xl font-bold text-on-surface mb-4 tracking-tight">Không có Flash Sale nào đang diễn ra</h2>
         <p class="text-on-surface-variant mb-10 max-w-md mx-auto font-medium leading-relaxed">Hãy quay lại sau để đón chờ những ưu đãi cực lớn nhé!</p>
-        <router-link to="/" class="bg-primary text-on-primary px-10 py-4 rounded-2xl font-bold text-xs uppercase tracking-widest shadow-xl shadow-primary/20 hover:scale-105 active:scale-95 transition-all">
+        <router-link to="/" class="ui-button ui-button-primary no-underline">
           Về trang chủ
         </router-link>
       </div>
@@ -60,7 +60,7 @@
           </div>
 
           <div class="space-y-4 text-center md:text-left relative z-10 max-w-2xl">
-            <span class="inline-flex items-center gap-2 px-5 py-2 bg-white/25 backdrop-blur-md rounded-full text-[10px] font-bold uppercase tracking-widest text-white border border-white/20">
+            <span class="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/25 px-5 py-2 text-xs font-bold uppercase tracking-widest text-white backdrop-blur-md">
               <span class="material-symbols-outlined text-[16px] animate-pulse" style="font-variation-settings: 'FILL' 1;">bolt</span> Đang diễn ra
             </span>
             <h1 class="text-4xl md:text-6xl font-bold tracking-tighter leading-none">{{ activeSale.title }}</h1>
@@ -69,32 +69,35 @@
 
           <!-- Countdown Timer -->
           <div class="bg-black/25 backdrop-blur-xl rounded-[32px] p-6 md:p-8 border border-white/15 text-center space-y-4 min-w-[260px] relative z-10">
-            <p class="text-[9px] uppercase font-bold tracking-[0.2em] text-white/70">Thời gian còn lại</p>
+            <p class="text-xs font-bold uppercase tracking-[0.16em] text-white/80">Thời gian còn lại</p>
             <div class="flex items-center justify-center gap-3">
               <div class="flex flex-col items-center">
                 <span class="text-3xl font-bold tracking-tight">{{ countdown.hours }}</span>
-                <span class="text-[9px] uppercase font-bold text-white/60 mt-1">Giờ</span>
+                <span class="mt-1 text-xs font-bold uppercase text-white/80">Giờ</span>
               </div>
               <span class="text-2xl font-bold -mt-4 text-white/60">:</span>
               <div class="flex flex-col items-center">
                 <span class="text-3xl font-bold tracking-tight">{{ countdown.minutes }}</span>
-                <span class="text-[9px] uppercase font-bold text-white/60 mt-1">Phút</span>
+                <span class="mt-1 text-xs font-bold uppercase text-white/80">Phút</span>
               </div>
               <span class="text-2xl font-bold -mt-4 text-white/60">:</span>
               <div class="flex flex-col items-center">
                 <span class="text-3xl font-bold tracking-tight">{{ countdown.seconds }}</span>
-                <span class="text-[9px] uppercase font-bold text-white/60 mt-1">Giây</span>
+                <span class="mt-1 text-xs font-bold uppercase text-white/80">Giây</span>
               </div>
             </div>
           </div>
         </div>
 
         <!-- Products Grid -->
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-8">
-          <div v-for="item in activeSale.items" :key="item.id" class="group bg-surface-container-lowest hover:bg-surface rounded-[32px] border border-outline-variant/15 hover:border-primary/20 hover:shadow-2xl transition-all duration-500 overflow-hidden flex flex-col p-4">
+        <div class="grid grid-cols-2 gap-4 md:grid-cols-3 md:gap-6 xl:grid-cols-4">
+          <article v-for="item in activeSale.items" :key="item.id" class="group flex flex-col overflow-hidden rounded-2xl border border-outline-variant/30 bg-surface-container-lowest p-3 shadow-sm transition-shadow hover:shadow-card-hover md:p-4">
             <!-- Cover image -->
-            <div class="relative aspect-[3/4.2] rounded-[24px] overflow-hidden bg-surface-container-low mb-6">
-              <img :src="getCoverUrl(item.book.cover_image)" :alt="item.book.title" @error="handleImageError" class="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" />
+            <div class="relative mb-5 aspect-[2/3] overflow-hidden bg-surface-container">
+              <img v-if="item.book.cover_image && !failedCoverIds.has(item.book.id)" :src="getCoverUrl(item.book.cover_image)" :alt="`Bìa sách ${item.book.title}`" @error="markCoverFailed(item.book.id)" class="h-full w-full rounded-none object-contain p-2" />
+              <div v-else class="flex h-full w-full items-center justify-center text-outline" aria-hidden="true">
+                <span class="material-symbols-outlined text-4xl">image</span>
+              </div>
               <!-- Sale Badge -->
               <span class="absolute top-3 left-3 bg-primary text-on-primary text-xs font-bold px-3 py-1.5 rounded-xl shadow-lg">
                 -{{ item.discount_percent }}%
@@ -104,9 +107,9 @@
             <!-- Content -->
             <div class="flex-1 flex flex-col justify-between space-y-4 px-2">
               <div class="space-y-1">
-                <p class="text-[10px] font-bold text-outline uppercase tracking-wider">{{ item.book.category?.name || 'Sách' }}</p>
-                <h3 @click="$router.push({ name: 'book-detail', params: { slug: item.book.slug } })" class="text-base font-bold text-on-surface line-clamp-2 cursor-pointer hover:text-primary transition-colors tracking-tight leading-snug">
-                  {{ item.book.title }}
+                <p class="text-xs font-bold uppercase tracking-wider text-outline">{{ item.book.category?.name || 'Sách' }}</p>
+                <h3 class="line-clamp-2 text-base font-bold leading-snug tracking-tight text-on-surface">
+                  <router-link :to="{ name: 'book-detail', params: { slug: item.book.slug } }" class="text-inherit no-underline transition-colors hover:text-primary">{{ item.book.title }}</router-link>
                 </h3>
                 <p class="text-xs text-outline/80 font-medium">{{ item.book.author }}</p>
               </div>
@@ -122,7 +125,7 @@
 
                 <!-- Limited Indicator / Sold quantity bar -->
                 <div class="space-y-1.5">
-                  <div class="flex justify-between items-center text-[10px] font-bold text-outline">
+                  <div class="flex items-center justify-between text-xs font-bold text-outline">
                     <span>Đã bán {{ getSoldPercent(item) }}%</span>
                     <span>Còn lại {{ item.book.stock }}</span>
                   </div>
@@ -131,12 +134,12 @@
                   </div>
                 </div>
 
-                <button @click="addToCart(item.book)" class="w-full py-3.5 rounded-2xl bg-primary text-on-primary text-[11px] font-bold uppercase tracking-widest hover:scale-[1.03] active:scale-95 transition-all shadow-md shadow-primary/10 flex items-center justify-center gap-2 cursor-pointer border-none">
+                <button @click="addToCart(item.book)" class="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border-none bg-primary px-3 text-xs font-bold uppercase tracking-wider text-on-primary shadow-md transition-colors hover:bg-primary/90">
                   <span class="material-symbols-outlined text-[16px]">shopping_cart</span> Thêm vào giỏ
                 </button>
               </div>
             </div>
-          </div>
+          </article>
         </div>
 
       </div>
@@ -159,6 +162,7 @@ const loading = ref(true)
 const error = ref(null)
 const timer = ref(null)
 const countdown = ref({ hours: '00', minutes: '00', seconds: '00' })
+const failedCoverIds = ref(new Set())
 
 const fetchActiveSale = async () => {
   loading.value = true
@@ -257,8 +261,8 @@ const getCoverUrl = (path) => {
   return `/storage/${path}`
 }
 
-const handleImageError = (e) => {
-  e.target.src = 'https://images.unsplash.com/photo-1543002588-bfa74002ed7e?q=80&w=600&auto=format&fit=crop'
+const markCoverFailed = (bookId) => {
+  failedCoverIds.value = new Set([...failedCoverIds.value, bookId])
 }
 
 onMounted(() => {

@@ -29,7 +29,7 @@ class RegisterRequest extends FormRequest
             'phone' => ['required_without_all:email,challenge_token', 'nullable', 'string', 'max:20', 'unique:users,phone'],
             'gender' => ['nullable', 'string', 'in:male,female,other'],
             'birthday' => ['nullable', 'date'],
-            'desired_role' => ['nullable', 'string', 'in:customer,author,vendor'],
+            'desired_role' => ['nullable', 'string', 'in:customer,vendor'],
             'challenge_token' => ['nullable', 'string', 'uuid'],
             'email_verification_token' => ['nullable', 'string', 'uuid'],
         ];

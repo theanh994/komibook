@@ -1,9 +1,18 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { computed, ref, onMounted } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useToast } from 'primevue/usetoast'
 import apiClient from '@/services/axios'
+import FeeSchedulesView from '@/views/admin/FeeSchedulesView.vue'
 
 const toast = useToast()
+const route = useRoute()
+const router = useRouter()
+const activeSection = computed(() => route.query.section === 'fees' ? 'fees' : 'general')
+
+const setSection = (section) => {
+  router.replace({ name: 'admin-system-config', query: section === 'fees' ? { section: 'fees' } : {} })
+}
 
 const config = ref({
   systemName: '',
@@ -73,12 +82,16 @@ onMounted(() => {
     <div class="flex flex-col md:flex-row md:items-center justify-between gap-md mb-xl animate-fade-in">
       <div>
         <h1 class="font-headline-lg text-headline-lg text-primary font-bold">Cấu hình hệ thống</h1>
-        <p class="font-body-md text-body-md text-on-surface-variant mt-xs">Quản lý thông tin chung, thanh toán và các tham số vận hành cốt lõi.</p>
+        <p class="font-body-md text-body-md text-on-surface-variant mt-xs">
+          {{ activeSection === 'fees' ? 'Quản lý lịch Commission, phí dịch vụ và cách phân bổ dòng tiền.' : 'Quản lý thông tin chung, thanh toán và các tham số vận hành cốt lõi.' }}
+        </p>
       </div>
       <button
+        v-if="activeSection === 'general'"
+        type="button"
         @click="handleSave"
         :disabled="saving || loading"
-        class="bg-primary text-on-primary font-label-md text-label-md px-lg py-sm rounded-lg hover:opacity-90 transition-opacity flex items-center gap-sm shadow-sm whitespace-nowrap disabled:opacity-50"
+        class="min-h-11 bg-primary text-on-primary font-label-md text-label-md px-lg py-sm rounded-lg hover:opacity-90 transition-opacity flex items-center gap-sm shadow-sm whitespace-nowrap disabled:opacity-50"
       >
         <span class="material-symbols-outlined text-[18px]" v-if="!saving">save</span>
         <span class="material-symbols-outlined text-[18px] animate-spin" v-else>progress_activity</span>
@@ -86,14 +99,35 @@ onMounted(() => {
       </button>
     </div>
 
+    <nav class="mb-xl flex w-full gap-xs overflow-x-auto border-b border-outline-variant/30" aria-label="Nhóm cấu hình hệ thống">
+      <button
+        type="button"
+        class="min-h-11 shrink-0 border-b-2 px-md py-sm font-label-md transition-colors"
+        :class="activeSection === 'general' ? 'border-primary text-primary' : 'border-transparent text-on-surface-variant hover:text-primary'"
+        :aria-current="activeSection === 'general' ? 'page' : undefined"
+        @click="setSection('general')"
+      >
+        Thông tin và vận hành
+      </button>
+      <button
+        type="button"
+        class="min-h-11 shrink-0 border-b-2 px-md py-sm font-label-md transition-colors"
+        :class="activeSection === 'fees' ? 'border-primary text-primary' : 'border-transparent text-on-surface-variant hover:text-primary'"
+        :aria-current="activeSection === 'fees' ? 'page' : undefined"
+        @click="setSection('fees')"
+      >
+        Commission và phí
+      </button>
+    </nav>
+
     <!-- Loading Skeleton -->
-    <div v-if="loading" class="grid grid-cols-1 lg:grid-cols-3 gap-lg animate-pulse">
+    <div v-if="activeSection === 'general' && loading" class="grid grid-cols-1 lg:grid-cols-3 gap-lg animate-pulse">
       <div class="lg:col-span-2 bg-surface-container-lowest h-96 rounded-xl shadow-soft"></div>
       <div class="bg-surface-container-lowest h-96 rounded-xl shadow-soft"></div>
     </div>
 
     <!-- Content Layout: Bento Grid Style -->
-    <div v-else class="grid grid-cols-1 lg:grid-cols-3 gap-lg animate-slide-up">
+    <div v-else-if="activeSection === 'general'" class="grid grid-cols-1 lg:grid-cols-3 gap-lg animate-slide-up">
       <!-- Left Column -->
       <div class="lg:col-span-2 space-y-lg">
         <!-- Section: General Info -->
@@ -143,7 +177,7 @@ onMounted(() => {
           <div class="p-lg grid grid-cols-1 md:grid-cols-2 gap-lg">
             <div class="space-y-xs md:col-span-2 rounded-lg border border-primary/20 bg-primary/5 p-md">
               <p class="font-label-md text-label-md text-on-surface">Commission và phí dịch vụ được quản lý theo lịch sử hiệu lực.</p>
-              <RouterLink to="/admin/fee-schedules" class="mt-sm inline-flex font-label-md text-primary hover:underline">Mở cấu hình phí có hiệu lực →</RouterLink>
+              <RouterLink to="/admin/fee-schedules" class="mt-sm inline-flex min-h-11 items-center font-label-md text-primary hover:underline">Mở tab cấu hình phí →</RouterLink>
             </div>
             <div class="space-y-xs md:col-span-2">
               <label class="font-label-md text-label-md text-on-surface-variant">Thời gian gia hạn mượn sách mặc định</label>
@@ -189,14 +223,15 @@ onMounted(() => {
             </div>
           </div>
           <div class="p-md bg-surface-container-low border-t border-outline-variant/10">
-            <button class="w-full text-primary font-label-md text-label-md flex items-center justify-center gap-xs hover:underline">
+            <button type="button" disabled class="min-h-11 w-full text-on-surface-variant font-label-md text-label-md flex items-center justify-center gap-xs cursor-not-allowed opacity-70">
               <span class="material-symbols-outlined text-[18px]">add</span>
-              Thêm cổng thanh toán mới
+              Thêm cổng thanh toán mới — Chưa hỗ trợ
             </button>
           </div>
         </section>
       </div>
     </div>
+    <FeeSchedulesView v-else embedded class="animate-slide-up" />
   </div>
 </template>
 

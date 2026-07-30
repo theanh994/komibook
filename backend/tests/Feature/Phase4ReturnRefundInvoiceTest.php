@@ -503,6 +503,8 @@ class Phase4ReturnRefundInvoiceTest extends TestCase
             'book_id' => $book->id,
             'quantity' => 1,
             'price' => 100000,
+            'product_taxonomy_snapshot' => ['format' => 'physical', 'provenance' => 'used_resale'],
+            'return_policy_snapshot' => ['is_returnable' => true, 'return_window_days' => 7],
         ]);
         $session = CheckoutSession::create([
             'user_id' => $buyer->id,
@@ -557,6 +559,8 @@ class Phase4ReturnRefundInvoiceTest extends TestCase
                 'book_id' => $book->id,
                 'title' => 'Original Book',
                 'type' => 'physical',
+                'provenance' => 'used_resale',
+                'return_policy_snapshot' => ['is_returnable' => true, 'return_window_days' => 7],
                 'quantity' => 1,
                 'unit_price' => 100000,
                 'line_total' => 100000,

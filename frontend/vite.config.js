@@ -1,40 +1,71 @@
 /* global process */
 import { fileURLToPath, URL } from 'node:url'
 
-import { defineConfig } from 'vite'
+import { defineConfig, loadEnv } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import tailwindcss from '@tailwindcss/vite'
 
 // https://vite.dev/config/
-export default defineConfig({
-  plugins: [
-    tailwindcss(),
-    vue(),
-  ],
-  resolve: {
-    alias: {
-      '@': fileURLToPath(new URL('./src', import.meta.url))
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), 'VITE_')
+  const backendTarget = env.VITE_BACKEND_URL || 'http://127.0.0.1:8000'
+  const cookieDomainRewrite = env.VITE_COOKIE_DOMAIN
+    ? { cookieDomainRewrite: env.VITE_COOKIE_DOMAIN }
+    : {}
+  const localCookieProxy = env.VITE_LOCAL_COOKIE_MODE === 'true'
+    ? {
+        configure(proxy) {
+          proxy.on('proxyReq', (proxyRequest) => {
+            const statefulOrigin = env.VITE_LOCAL_STATEFUL_ORIGIN || backendTarget
+
+            proxyRequest.setHeader('origin', statefulOrigin)
+            proxyRequest.setHeader('referer', `${statefulOrigin.replace(/\/$/, '')}/`)
+          })
+
+          proxy.on('proxyRes', (proxyResponse) => {
+            const cookies = proxyResponse.headers['set-cookie']
+            if (!cookies) return
+
+            proxyResponse.headers['set-cookie'] = cookies.map((cookie) => cookie
+              .replace(/;\s*domain=[^;]+/i, '')
+              .replace(/;\s*secure/gi, ''))
+          })
+        },
+      }
+    : {}
+
+  return {
+    plugins: [
+      tailwindcss(),
+      vue(),
+    ],
+    resolve: {
+      alias: {
+        '@': fileURLToPath(new URL('./src', import.meta.url))
+      },
     },
-  },
-  server: {
-    allowedHosts: ['komibook.id.vn'],
-    proxy: {
-      '/api': {
-        target: process.env.VITE_BACKEND_URL || 'http://127.0.0.1:8000',
-        changeOrigin: true,
-        headers: { Accept: 'application/json' },
-        ...(process.env.VITE_COOKIE_DOMAIN ? { cookieDomainRewrite: process.env.VITE_COOKIE_DOMAIN } : {})
-      },
-      '/sanctum': {
-        target: process.env.VITE_BACKEND_URL || 'http://127.0.0.1:8000',
-        changeOrigin: true,
-        headers: { Accept: 'application/json' },
-        ...(process.env.VITE_COOKIE_DOMAIN ? { cookieDomainRewrite: process.env.VITE_COOKIE_DOMAIN } : {})
-      },
-      '/storage': {
-        target: process.env.VITE_BACKEND_URL || 'http://127.0.0.1:8000',
-        changeOrigin: true,
-        ...(process.env.VITE_COOKIE_DOMAIN ? { cookieDomainRewrite: process.env.VITE_COOKIE_DOMAIN } : {})
+    server: {
+      allowedHosts: ['komibook.id.vn'],
+      proxy: {
+        '/api': {
+          target: backendTarget,
+          changeOrigin: true,
+          headers: { Accept: 'application/json' },
+          ...cookieDomainRewrite,
+          ...localCookieProxy,
+        },
+        '/sanctum': {
+          target: backendTarget,
+          changeOrigin: true,
+          headers: { Accept: 'application/json' },
+          ...cookieDomainRewrite,
+          ...localCookieProxy,
+        },
+        '/storage': {
+          target: backendTarget,
+          changeOrigin: true,
+          ...cookieDomainRewrite,
+        }
       }
     }
   }

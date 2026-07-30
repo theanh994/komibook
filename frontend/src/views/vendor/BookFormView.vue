@@ -494,7 +494,7 @@ const bookForm = ref({
   cover_format: 'Bìa mềm',
   weight: '',
   language: 'Tiếng Việt',
-  target_age: 'Tuổi trưởng thành (18+)',
+  target_age: 'Tuổi trưởng thành (Trên 18 tuổi)',
   pages: null,
   release_date: '2026',
   price: 0,
@@ -586,11 +586,11 @@ const languageOptions = [
 ]
 
 const targetAgePresets = [
-  { label: 'Nhà trẻ - Mẫu giáo (0 - 6 tuổi)', value: 'Nhà trẻ - Mẫu giáo (0 - 6)' },
-  { label: 'Nhi đồng (6 - 11 tuổi)', value: 'Nhi đồng (6 - 11)' },
-  { label: 'Thiếu niên (11 - 15 tuổi)', value: 'Thiếu niên (11 - 15)' },
-  { label: 'Tuổi mới lớn (15 - 18 tuổi)', value: 'Tuổi mới lớn (15 - 18)' },
-  { label: 'Tuổi trưởng thành (18+ tuổi)', value: 'Tuổi trưởng thành (18+)' },
+  { label: 'Nhà trẻ - mẫu giáo (0 - 6)', value: 'Nhà trẻ - mẫu giáo (0 - 6)' },
+  { label: 'Nhi đồng (6 - 11)', value: 'Nhi đồng (6 - 11)' },
+  { label: 'Thiếu niên (11 - 15)', value: 'Thiếu niên (11 - 15)' },
+  { label: 'Tuổi mới lớn (15 - 18)', value: 'Tuổi mới lớn (15 - 18)' },
+  { label: 'Tuổi trưởng thành (Trên 18 tuổi)', value: 'Tuổi trưởng thành (Trên 18 tuổi)' },
 ]
 
 const coverFormatOptions = [
@@ -655,7 +655,7 @@ const fetchBookDetail = async (id) => {
       cover_format: bookData.cover_format || 'Bìa mềm',
       weight: bookData.weight || '350',
       language: bookData.language || 'Tiếng Việt',
-      target_age: bookData.target_age || 'Tuổi trưởng thành (18+)',
+      target_age: bookData.target_age || 'Tuổi trưởng thành (Trên 18 tuổi)',
       pages: bookData.pages || null,
       release_date: bookData.release_date || '',
       price: bookData.price || 0,

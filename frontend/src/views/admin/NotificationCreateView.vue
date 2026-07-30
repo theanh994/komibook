@@ -95,15 +95,16 @@ const handleSubmit = async () => {
     <div class="flex items-center gap-3 mb-8 animate-fade-in">
       <router-link
         to="/admin/notifications"
-        class="p-2 border border-slate-200 dark:border-zinc-700 hover:bg-slate-50 dark:hover:bg-zinc-800 text-slate-600 dark:text-zinc-400 rounded-xl transition-all flex items-center justify-center"
+        aria-label="Quay lại danh sách chiến dịch"
+        class="ui-btn ui-btn-secondary"
       >
         <span class="material-symbols-outlined text-[20px]">arrow_back</span>
       </router-link>
       <div>
-        <h1 class="text-3xl font-bold text-slate-800 dark:text-zinc-100 flex items-center gap-2">
+        <h1 class="text-2xl font-extrabold text-on-surface sm:text-3xl">
           Tạo chiến dịch mới
         </h1>
-        <p class="text-sm text-slate-500 dark:text-zinc-400 mt-1">
+        <p class="mt-1 text-sm text-on-surface-variant">
           Thiết lập nội dung tin nhắn và cấu hình kênh truyền thông (Email/Push).
         </p>
       </div>
@@ -112,38 +113,38 @@ const handleSubmit = async () => {
     <!-- Main split layout -->
     <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start animate-slide-up">
       <!-- Left Configuration Panel -->
-      <div class="lg:col-span-7 bg-white dark:bg-zinc-900 border border-slate-100 dark:border-zinc-800 rounded-2xl p-6 md:p-8 shadow-sm space-y-6">
+      <div class="ui-panel space-y-6 lg:col-span-7">
         <!-- Section 1: Audience Selection -->
         <div>
-          <h3 class="text-md font-bold text-slate-800 dark:text-zinc-200 flex items-center gap-2 mb-4">
-            <span class="material-symbols-outlined text-indigo-600 text-[20px]">group</span>
+          <h3 class="text-md mb-4 flex items-center gap-2 font-bold text-on-surface">
+            <span class="material-symbols-outlined text-[20px] text-primary">group</span>
             1. Chọn nhóm đối tượng mục tiêu
           </h3>
           <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div
+            <label
               v-for="option in targetAudienceOptions"
               :key="option.value"
-              @click="form.target_audience = option.value"
-              class="border rounded-xl p-4 cursor-pointer transition-all duration-200 hover:border-indigo-400"
+              class="cursor-pointer rounded-xl border p-4 transition-colors hover:border-primary"
               :class="form.target_audience === option.value
-                ? 'border-indigo-600 bg-indigo-50/20 ring-1 ring-indigo-500/20'
-                : 'border-slate-200 dark:border-zinc-800 bg-slate-50/50 dark:bg-zinc-950/20'"
+                ? 'border-primary bg-primary-fixed ring-1 ring-primary'
+                : 'border-outline-variant bg-surface-container-lowest'"
             >
+              <input v-model="form.target_audience" class="sr-only" type="radio" name="target_audience" :value="option.value" />
               <div class="flex items-center justify-between">
-                <span class="font-bold text-sm" :class="form.target_audience === option.value ? 'text-indigo-700 dark:text-indigo-400' : 'text-slate-700 dark:text-zinc-300'">
+                <span class="text-sm font-bold" :class="form.target_audience === option.value ? 'text-on-primary-fixed' : 'text-on-surface'">
                   {{ option.label }}
                 </span>
                 <span
                   class="w-4 h-4 rounded-full border flex items-center justify-center shrink-0"
-                  :class="form.target_audience === option.value ? 'border-indigo-600 bg-indigo-600 text-white' : 'border-slate-300'"
+                  :class="form.target_audience === option.value ? 'border-primary bg-primary text-on-primary' : 'border-outline'"
                 >
                   <span v-if="form.target_audience === option.value" class="w-1.5 h-1.5 bg-white rounded-full"></span>
                 </span>
               </div>
-              <p class="text-[11px] text-slate-400 dark:text-zinc-500 mt-1 line-clamp-2 leading-relaxed">
+              <p class="mt-1 line-clamp-2 text-xs leading-relaxed text-on-surface-variant">
                 {{ option.desc }}
               </p>
-            </div>
+            </label>
           </div>
         </div>
 
@@ -151,41 +152,45 @@ const handleSubmit = async () => {
 
         <!-- Section 2: Message Template -->
         <div class="space-y-4">
-          <h3 class="text-md font-bold text-slate-800 dark:text-zinc-200 flex items-center gap-2">
-            <span class="material-symbols-outlined text-indigo-600 text-[20px]">edit_note</span>
+          <h3 class="text-md flex items-center gap-2 font-bold text-on-surface">
+            <span class="material-symbols-outlined text-[20px] text-primary">edit_note</span>
             2. Soạn nội dung thông điệp
           </h3>
 
           <!-- Title -->
           <div class="flex flex-col gap-1.5">
-            <label class="text-xs font-semibold text-slate-500 dark:text-zinc-400">Tiêu đề thông báo / Tiêu đề Email</label>
+            <label for="campaign-title-input" class="text-sm font-semibold text-on-surface-variant">Tiêu đề thông báo / Tiêu đề Email</label>
             <input
+              id="campaign-title-input"
               v-model="form.title"
               type="text"
               placeholder="Ví dụ: Độc Quyền Cuối Tuần: Giảm 50% Sách Best-Seller!"
-              class="px-4 py-2.5 bg-slate-50 dark:bg-zinc-950/30 border border-slate-200 dark:border-zinc-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-slate-800 dark:text-zinc-100 text-sm"
+              aria-label="Tiêu đề chiến dịch"
+              class="ui-field"
             />
           </div>
 
           <!-- Body Message -->
           <div class="flex flex-col gap-1.5">
-            <label class="text-xs font-semibold text-slate-500 dark:text-zinc-400">Nội dung chi tiết</label>
+            <label for="campaign-message" class="text-sm font-semibold text-on-surface-variant">Nội dung chi tiết</label>
             <textarea
+              id="campaign-message"
               v-model="form.message"
               rows="4"
               placeholder="Nhập nội dung thông điệp của bạn. Độc giả sẽ nhận được thông báo đẩy trên web/mobile và email gửi trực tiếp về hòm thư..."
-              class="px-4 py-2.5 bg-slate-50 dark:bg-zinc-950/30 border border-slate-200 dark:border-zinc-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-slate-800 dark:text-zinc-100 text-sm"
+              class="ui-field"
             ></textarea>
           </div>
 
           <!-- Image URL -->
           <div class="flex flex-col gap-1.5">
-            <label class="text-xs font-semibold text-slate-500 dark:text-zinc-400">Đường dẫn hình ảnh (Banner URL - tùy chọn)</label>
+            <label for="campaign-image" class="text-sm font-semibold text-on-surface-variant">Đường dẫn hình ảnh (Banner URL - tùy chọn)</label>
             <input
+              id="campaign-image"
               v-model="form.image_url"
               type="url"
               placeholder="https://example.com/banner-khuyen-mai.jpg"
-              class="px-4 py-2.5 bg-slate-50 dark:bg-zinc-950/30 border border-slate-200 dark:border-zinc-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-slate-800 dark:text-zinc-100 text-sm"
+              class="ui-field"
             />
           </div>
         </div>
@@ -194,8 +199,8 @@ const handleSubmit = async () => {
 
         <!-- Section 3: Send Setting -->
         <div class="space-y-4">
-          <h3 class="text-md font-bold text-slate-800 dark:text-zinc-200 flex items-center gap-2">
-            <span class="material-symbols-outlined text-indigo-600 text-[20px]">rocket_launch</span>
+          <h3 class="text-md flex items-center gap-2 font-bold text-on-surface">
+            <span class="material-symbols-outlined text-[20px] text-primary">rocket_launch</span>
             3. Thiết lập chế độ gửi
           </h3>
 
@@ -251,13 +256,14 @@ const handleSubmit = async () => {
         <div class="flex justify-end gap-3 pt-4 border-t border-slate-100 dark:border-zinc-800">
           <router-link
             to="/admin/notifications"
-            class="px-5 py-2.5 border border-slate-200 dark:border-zinc-700 text-slate-600 dark:text-zinc-400 hover:bg-slate-50 dark:hover:bg-zinc-800 rounded-xl text-sm font-semibold transition-all"
+            class="ui-btn ui-btn-secondary"
           >
             Hủy bỏ
           </router-link>
           <button
             @click="handleSubmit"
-            class="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-semibold shadow-md transition-all flex items-center gap-2"
+            type="button"
+            class="ui-btn ui-btn-primary"
             :disabled="submitting"
           >
             <i v-if="submitting" class="pi pi-spin pi-spinner text-sm"></i>
@@ -354,9 +360,9 @@ const handleSubmit = async () => {
 
               <!-- Mock Button link -->
               <div class="text-center pt-2">
-                <a href="#" class="inline-block bg-indigo-600 text-white font-bold text-[10px] px-4 py-2 rounded-lg shadow-sm">
+                <span class="inline-flex min-h-11 items-center bg-indigo-600 text-white font-bold text-[10px] px-4 py-2 rounded-lg shadow-sm" aria-hidden="true">
                   Khám phá ngay tại KomiBook
-                </a>
+                </span>
               </div>
             </div>
 

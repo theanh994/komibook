@@ -60,10 +60,19 @@ class CheckoutService
      *
      * @throws Exception
      */
-    public function processCheckout(array $items, array $shippingData, int $userId, ?string $couponCode = null): array
-    {
+    public function processCheckout(
+        array $items,
+        array $shippingData,
+        int $userId,
+        ?string $couponCode = null,
+        ?array $digitalConsent = null,
+    ): array {
         $bookIds = array_column($items, 'book_id');
-        $books = Book::withoutGlobalScopes()->with('vendor')->whereIn('id', $bookIds)->get()->keyBy('id');
+        $books = Book::withoutGlobalScopes()
+            ->with(['vendor', 'returnPolicyVersion'])
+            ->whereIn('id', $bookIds)
+            ->get()
+            ->keyBy('id');
 
         // BƯỚC 1: Kiểm tra E-book đã sở hữu
         $ebookIds = [];
@@ -75,6 +84,11 @@ class CheckoutService
         }
 
         if (! empty($ebookIds)) {
+            if ($digitalConsent !== null && ! ($digitalConsent['accepted'] ?? false)) {
+                throw ValidationException::withMessages([
+                    'ebook_terms_accepted' => 'Bạn phải đồng ý điều khoản nội dung số: ebook không được trả lại sau khi mua.',
+                ]);
+            }
             $ownedEbookIds = OrderItem::whereIn('book_id', $ebookIds)
                 ->whereHas('order', function ($q) use ($userId) {
                     $q->withoutGlobalScopes()
@@ -95,6 +109,8 @@ class CheckoutService
         $groupedItems = [];
         $totalCartAmount = 0;
         $promotionPricing = app(FlashSalePricingService::class);
+        $ebookVersions = app(EbookVersionService::class);
+        $commercialParties = app(CommercialPartyService::class);
         foreach ($items as $item) {
             $bookId = $item['book_id'];
             $quantity = $item['quantity'];
@@ -128,6 +144,34 @@ class CheckoutService
                 'promotion_discount_amount' => $pricing['promotion_discount_amount'],
                 'flash_sale_book_id' => $pricing['flash_sale_book_id'],
                 'promotion_snapshot' => $pricing['promotion_snapshot'],
+                'ebook_version_id' => $book->isEbook()
+                    ? $ebookVersions->currentOrCreate($book)->id
+                    : null,
+                'product_taxonomy_snapshot' => [
+                    'format' => $book->format ?? $book->type,
+                    'provenance' => $book->provenance,
+                    'condition' => $book->condition,
+                    'fulfillment_mode' => $book->fulfillment_mode,
+                ],
+                'commercial_parties_snapshot' => $commercialParties->snapshot($book),
+                'return_policy_snapshot' => $book->returnPolicyVersion
+                    ? [
+                        'id' => $book->returnPolicyVersion->id,
+                        'policy_key' => $book->returnPolicyVersion->policy_key,
+                        'version' => $book->returnPolicyVersion->version,
+                        'is_returnable' => $book->returnPolicyVersion->is_returnable,
+                        'return_window_days' => $book->returnPolicyVersion->return_window_days,
+                        'terms' => $book->returnPolicyVersion->terms,
+                    ]
+                    : null,
+                'ebook_consent_snapshot' => $book->isEbook() && $digitalConsent !== null
+                    ? [
+                        ...$digitalConsent,
+                        'policy_key' => $book->returnPolicyVersion?->policy_key,
+                        'policy_version' => $book->returnPolicyVersion?->version,
+                        'non_returnable' => true,
+                    ]
+                    : null,
             ];
         }
 
@@ -166,7 +210,9 @@ class CheckoutService
                         $eligibleBase = 0;
                         foreach ($vendorItems as $vItem) {
                             $book = $books->get($vItem['book_id']);
-                            if (! $coupon->category_id || ($book && $book->category_id == $coupon->category_id)) {
+                            $inBookScope = empty($coupon->scope_book_ids)
+                                || in_array((int) $vItem['book_id'], array_map('intval', $coupon->scope_book_ids), true);
+                            if ($inBookScope && (! $coupon->category_id || ($book && $book->category_id == $coupon->category_id))) {
                                 $eligibleBase += $vItem['price'] * $vItem['quantity'];
                             }
                         }
@@ -300,6 +346,12 @@ class CheckoutService
                         'promotion_discount_amount' => $item['promotion_discount_amount'],
                         'flash_sale_book_id' => $item['flash_sale_book_id'],
                         'promotion_snapshot' => $item['promotion_snapshot'],
+                        'ebook_version_id' => $item['ebook_version_id'],
+                        'product_taxonomy_snapshot' => $item['product_taxonomy_snapshot'],
+                        'commercial_parties_snapshot' => $item['commercial_parties_snapshot'],
+                        'return_policy_snapshot' => $item['return_policy_snapshot'],
+                        'commercial_parties_snapshot' => $item['commercial_parties_snapshot'],
+                        'ebook_consent_snapshot' => $item['ebook_consent_snapshot'],
                     ]);
                     $orderItem->saveQuietly();
                     if ($item['flash_sale_book_id']) {
@@ -311,6 +363,9 @@ class CheckoutService
                         'book_id' => $item['book_id'],
                         'title' => $book?->title,
                         'type' => $book?->type,
+                        'provenance' => $book?->provenance,
+                        'condition' => $book?->condition,
+                        'return_policy_snapshot' => $item['return_policy_snapshot'],
                         'quantity' => (int) $item['quantity'],
                         'unit_price' => (int) $item['price'],
                         'list_unit_price' => (int) $item['list_unit_price'],

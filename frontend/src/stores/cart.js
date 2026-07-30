@@ -10,7 +10,10 @@ export const useCartStore = defineStore('cart', () => {
   const stored = localStorage.getItem('komibook_cart')
   if (stored) {
     try {
-      items.value = JSON.parse(stored)
+      items.value = JSON.parse(stored).map(item => ({
+        ...item,
+        quantity: item.book?.type === 'ebook' ? 1 : Math.max(1, Number(item.quantity) || 1)
+      }))
     } catch (e) {
       console.error('Lỗi parse giỏ hàng', e)
     }
@@ -64,9 +67,10 @@ export const useCartStore = defineStore('cart', () => {
 
     const existing = items.value.find(item => item.book.id === book.id)
     if (existing) {
-      existing.quantity += quantity
+      existing.book = { ...existing.book, ...book }
+      existing.quantity = book.type === 'ebook' ? 1 : existing.quantity + quantity
     } else {
-      items.value.push({ book, quantity })
+      items.value.push({ book, quantity: book.type === 'ebook' ? 1 : quantity })
     }
     return true
   }
@@ -74,8 +78,15 @@ export const useCartStore = defineStore('cart', () => {
   const updateQuantity = (bookId, newQuantity) => {
     const item = items.value.find(item => item.book.id === bookId)
     if (item) {
-      item.quantity = Math.max(1, newQuantity)
+      item.quantity = item.book.type === 'ebook' ? 1 : Math.max(1, newQuantity)
     }
+  }
+
+  const refreshBook = (bookId, freshBook) => {
+    const item = items.value.find(entry => entry.book.id === bookId)
+    if (!item || !freshBook) return
+    item.book = { ...item.book, ...freshBook }
+    if (item.book.type === 'ebook') item.quantity = 1
   }
 
   const removeFromCart = (bookId) => {
@@ -97,7 +108,8 @@ export const useCartStore = defineStore('cart', () => {
       shipping_address: shippingData.shipping_address,
       phone: shippingData.phone,
       payment_method: shippingData.payment_method,
-      coupon_code: shippingData.coupon_code
+      coupon_code: shippingData.coupon_code,
+      ebook_terms_accepted: Boolean(shippingData.ebook_terms_accepted)
     }
 
     const response = await apiClient.post('/api/checkout', payload)
@@ -111,6 +123,7 @@ export const useCartStore = defineStore('cart', () => {
     groupedItems,
     addToCart,
     updateQuantity,
+    refreshBook,
     removeFromCart,
     clearCart,
     checkout

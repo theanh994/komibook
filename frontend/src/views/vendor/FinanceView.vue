@@ -13,7 +13,9 @@ const balance = ref({
 })
 
 const payoutRequests = ref([])
+const feePolicy = ref(null)
 const loading = ref(false)
+const errorMessage = ref('')
 
 // Modal state
 const isWithdrawModalOpen = ref(false)
@@ -28,12 +30,15 @@ const withdrawForm = ref({
 // --- API Calls ---
 const fetchFinanceData = async () => {
   loading.value = true
+  errorMessage.value = ''
   try {
     const res = await apiClient.get('/api/vendor/finance')
     balance.value = res.data.balance
     payoutRequests.value = res.data.payout_requests
+    feePolicy.value = res.data.fee_policy || null
   } catch (err) {
     toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Không thể tải dữ liệu tài chính.', life: 3000 })
+    errorMessage.value = 'Không thể tải số dư và lịch sử payout. Không sử dụng dữ liệu minh họa thay thế.'
   } finally {
     loading.value = false
   }
@@ -89,6 +94,11 @@ onMounted(() => {
       </button>
     </div>
 
+    <div v-if="errorMessage" class="mb-lg flex flex-col gap-3 rounded-xl border border-error/30 bg-error-container/30 p-4 text-on-error-container sm:flex-row sm:items-center sm:justify-between" role="alert">
+      <span>{{ errorMessage }}</span>
+      <button type="button" class="min-h-11 rounded-lg border border-error/40 px-4 font-bold" @click="fetchFinanceData">Thử lại</button>
+    </div>
+
     <!-- Bento Grid: Financial Summary -->
     <div class="grid grid-cols-1 md:grid-cols-2 gap-lg mb-xl animate-slide-up">
       <!-- Available Balance Card -->
@@ -123,6 +133,23 @@ onMounted(() => {
         </div>
       </div>
     </div>
+
+    <section class="mb-xl rounded-xl border border-outline-variant/30 bg-surface-container-lowest p-lg shadow-sm" aria-labelledby="vendor-fee-title">
+      <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h3 id="vendor-fee-title" class="text-xl font-black text-on-surface">Commission và phí dịch vụ</h3>
+          <p class="mt-1 text-sm leading-6 text-on-surface-variant">Commission được trừ từ doanh thu gộp của Nhà bán. Phí dịch vụ được cộng vào số tiền khách thanh toán.</p>
+        </div>
+        <RouterLink to="/help-center" class="inline-flex min-h-11 items-center font-bold text-primary no-underline hover:underline">Xem trợ giúp</RouterLink>
+      </div>
+      <div v-if="feePolicy" class="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div class="rounded-xl bg-surface-container-low p-4"><p class="text-sm text-on-surface-variant">Giá sách ví dụ</p><strong class="mt-1 block text-lg text-on-surface">{{ formatVND(feePolicy.example.seller_gross) }}</strong></div>
+        <div class="rounded-xl bg-surface-container-low p-4"><p class="text-sm text-on-surface-variant">Commission ({{ feePolicy.schedule.commission_rate }}%)</p><strong class="mt-1 block text-lg text-on-surface">− {{ formatVND(feePolicy.example.commission_amount) }}</strong></div>
+        <div class="rounded-xl bg-surface-container-low p-4"><p class="text-sm text-on-surface-variant">Nhà bán dự kiến nhận</p><strong class="mt-1 block text-lg text-primary">{{ formatVND(feePolicy.example.seller_net) }}</strong></div>
+        <div class="rounded-xl bg-surface-container-low p-4"><p class="text-sm text-on-surface-variant">Khách thanh toán</p><strong class="mt-1 block text-lg text-on-surface">{{ formatVND(feePolicy.example.customer_pays) }}</strong></div>
+      </div>
+      <p v-else class="mt-4 rounded-xl bg-surface-container-low p-4 text-sm text-on-surface-variant">Bản backend hiện tại chưa cung cấp preview phí. Số dư và payout vẫn hiển thị theo dữ liệu ledger; không tự suy đoán tỷ lệ.</p>
+    </section>
 
     <!-- Payout History Table Section -->
     <div class="bg-surface-container-lowest rounded-xl shadow-sm border border-surface-container-high overflow-hidden animate-slide-up delay-200">

@@ -1,279 +1,119 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useToast } from 'primevue/usetoast'
 import apiClient from '@/services/axios'
-
 import Button from 'primevue/button'
-import Toast from 'primevue/toast'
 import Dialog from 'primevue/dialog'
 import InputText from 'primevue/inputtext'
+import Toast from 'primevue/toast'
 
 const toast = useToast()
+const vendors = ref([])
 const loading = ref(true)
-const error = ref(null)
+const error = ref('')
+const selectedVendor = ref(null)
+const feedbackAction = ref('rejected')
+const feedbackReason = ref('')
+const dialogVisible = ref(false)
 
-const pendingVendors = ref([])
-const pendingAuthors = ref([])
-const selectedPartner = ref(null)
-
-const showRejectDialog = ref(false)
-const rejectReason = ref('')
-const reviewAction = ref('rejected')
-
-const fetchApprovals = async () => {
+const load = async () => {
   loading.value = true
-  error.value = null
+  error.value = ''
   try {
-    const res = await apiClient.get('/api/admin/approvals/vendors')
-    if (res.data?.status === 'success') {
-      pendingVendors.value = res.data.data.vendors || []
-      pendingAuthors.value = res.data.data.authors || []
-    } else if (res.data) {
-      pendingVendors.value = res.data.vendors || []
-      pendingAuthors.value = res.data.authors || []
-    } else {
-      pendingVendors.value = []
-      pendingAuthors.value = []
-    }
-  } catch (e) {
-    console.error('Không tải được danh sách phê duyệt', e)
-    pendingVendors.value = []
-    pendingAuthors.value = []
-    error.value = e.response?.data?.message || 'Không thể kết nối API kiểm duyệt đối tác.'
+    const response = await apiClient.get('/api/admin/approvals/vendors')
+    vendors.value = response.data?.data?.vendors || []
+  } catch (requestError) {
+    error.value = requestError.response?.data?.message || 'Không thể tải danh sách hồ sơ Nhà bán.'
   } finally {
     loading.value = false
   }
 }
 
-const transitionVendor = async (id, toStatus, reason = null) => {
+const transition = async (vendor, toStatus, reason = null) => {
   try {
-    const res = await apiClient.patch(`/api/admin/approvals/vendors/${id}/transition`, {
+    await apiClient.patch(`/api/admin/approvals/vendors/${vendor.id}/transition`, {
       to_status: toStatus,
       reason,
     })
-    if (res.data?.status === 'success') {
-      toast.add({ severity: 'success', summary: 'Đã cập nhật', detail: 'Trạng thái hồ sơ nhà bán đã được cập nhật.', life: 3000 })
-      fetchApprovals()
-    }
-  } catch (e) {
-    toast.add({ severity: 'error', summary: 'Lỗi', detail: e.response?.data?.message || 'Không thể cập nhật hồ sơ.', life: 3000 })
+    toast.add({ severity: 'success', summary: 'Đã cập nhật', detail: 'Trạng thái hồ sơ Nhà bán đã được cập nhật.', life: 3000 })
+    dialogVisible.value = false
+    await load()
+  } catch (requestError) {
+    toast.add({ severity: 'error', summary: 'Không thể cập nhật', detail: requestError.response?.data?.message || 'Vui lòng thử lại.', life: 3500 })
   }
 }
 
-const transitionAuthor = async (id, toStatus, reason = null) => {
-  try {
-    const res = await apiClient.patch(`/api/admin/approvals/authors/${id}/transition`, {
-      to_status: toStatus,
-      reason,
-    })
-    if (res.data?.status === 'success') {
-      toast.add({ severity: 'success', summary: 'Đã cập nhật', detail: 'Trạng thái tác giả đã được cập nhật độc lập với gian hàng.', life: 3500 })
-      fetchApprovals()
-    }
-  } catch (e) {
-    toast.add({ severity: 'error', summary: 'Lỗi', detail: e.response?.data?.message || 'Không thể cập nhật hồ sơ.', life: 3000 })
-  }
+const openFeedback = (vendor, action) => {
+  selectedVendor.value = vendor
+  feedbackAction.value = action
+  feedbackReason.value = ''
+  dialogVisible.value = true
 }
 
-const openRejectDialog = (partner, type, action = 'rejected') => {
-  selectedPartner.value = { ...partner, type }
-  reviewAction.value = action
-  rejectReason.value = ''
-  showRejectDialog.value = true
+const submitFeedback = () => {
+  if (!feedbackReason.value.trim()) return
+  transition(selectedVendor.value, feedbackAction.value, feedbackReason.value.trim())
 }
 
-const rejectPartner = async () => {
-  if (!rejectReason.value) {
-    toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Vui lòng cung cấp lý do từ chối.', life: 3000 })
-    return
-  }
-
-  try {
-    const { id, type } = selectedPartner.value
-    const res = ['author', 'vendor'].includes(type)
-      ? await apiClient.patch(`/api/admin/approvals/${type}s/${id}/transition`, {
-          to_status: reviewAction.value,
-          reason: rejectReason.value,
-        })
-      : await apiClient.patch(`/api/admin/approvals/partners/${type}/${id}/reject`, {
-          reason: rejectReason.value,
-        })
-
-    if (res.data?.status === 'success') {
-      toast.add({ severity: 'info', summary: 'Đã từ chối', detail: 'Đã gửi email phản hồi từ chối hồ sơ đăng ký.', life: 3000 })
-      showRejectDialog.value = false
-      fetchApprovals()
-    }
-  } catch {
-    toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Thao tác từ chối gặp lỗi.', life: 3000 })
-  }
-}
-
-const downloadAuthorDoc = async (author) => {
-  try {
-    const url = author.identity_document_url
-    if (!url) {
-      toast.add({ severity: 'warn', summary: 'Cảnh báo', detail: 'Tác giả chưa cập nhật giấy tờ CCCD.', life: 3000 })
-      return
-    }
-    const response = await apiClient.get(url, { responseType: 'blob' })
-    const blobUrl = window.URL.createObjectURL(new Blob([response.data]))
-    const link = document.createElement('a')
-    link.href = blobUrl
-    link.setAttribute('download', `author-cccd-${author.id}`)
-    document.body.appendChild(link)
-    link.click()
-    link.remove()
-    window.URL.revokeObjectURL(blobUrl)
-  } catch {
-    toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Không thể tải giấy tờ CCCD.', life: 3000 })
-  }
-}
-
-onMounted(() => {
-  fetchApprovals()
-})
+onMounted(load)
 </script>
 
 <template>
-  <div class="vendor-approvals min-h-screen bg-slate-50 p-6 md:p-8">
+  <main class="min-h-screen bg-surface-container-low p-4 sm:p-6 lg:p-8" aria-labelledby="vendor-approval-heading">
     <Toast />
-    
-    <div class="mb-8">
-      <h1 class="text-2xl md:text-3xl font-extrabold text-slate-900">Kiểm duyệt đối tác đăng ký</h1>
-      <p class="text-slate-500 text-sm mt-1">Phê duyệt danh tính và tài khoản thụ hưởng của các Nhà bán sách cũ & Tác giả tự viết.</p>
-    </div>
+    <header class="mx-auto mb-6 max-w-6xl">
+      <p class="font-label-md font-bold text-secondary">Đối tác thương mại</p>
+      <h1 id="vendor-approval-heading" class="mt-1 text-3xl font-bold text-primary">Kiểm duyệt Nhà bán</h1>
+      <p class="mt-2 max-w-3xl text-sm leading-6 text-on-surface-variant">Xác minh pháp lý, đơn vị chịu trách nhiệm và thông tin vận hành trước khi kích hoạt gian hàng.</p>
+    </header>
 
-    <!-- Error State -->
-    <div v-if="error" class="bg-rose-50 border border-rose-200 rounded-2xl p-6 text-center space-y-3 mb-8">
-      <h3 class="text-base font-bold text-rose-800">Không thể tải danh sách đối tác</h3>
-      <p class="text-xs text-rose-600">{{ error }}</p>
-      <Button label="Thử lại" icon="pi pi-refresh" class="p-button-danger p-button-sm text-xs bg-rose-600 text-white" @click="fetchApprovals" />
-    </div>
-
-    <!-- Bento Stats Counter -->
-    <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-      <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
-        <div class="w-12 h-12 rounded-xl bg-indigo-50 text-indigo-700 flex items-center justify-center">
-          <i class="pi pi-store text-xl"></i>
-        </div>
+    <section class="mx-auto max-w-6xl space-y-4">
+      <div class="flex min-h-20 items-center justify-between rounded-xl border border-outline-variant/30 bg-surface p-5 shadow-sm">
         <div>
-          <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider block">Yêu cầu Nhà bán (Sách cũ)</span>
-          <h2 class="text-2xl font-black text-slate-900 mt-1">{{ pendingVendors.length }} đơn chờ duyệt</h2>
+          <p class="text-sm text-on-surface-variant">Hồ sơ cần xử lý</p>
+          <p class="text-3xl font-bold text-on-surface">{{ vendors.length }}</p>
         </div>
+        <span class="material-symbols-outlined text-4xl text-primary" aria-hidden="true">storefront</span>
       </div>
 
-      <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
-        <div class="w-12 h-12 rounded-xl bg-indigo-50 text-indigo-700 flex items-center justify-center">
-          <i class="pi pi-user text-xl"></i>
-        </div>
-        <div>
-          <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider block">Yêu cầu Tác giả (Ebook)</span>
-          <h2 class="text-2xl font-black text-slate-900 mt-1">{{ pendingAuthors.length }} đơn chờ duyệt</h2>
-        </div>
+      <div v-if="error" role="alert" class="rounded-xl border border-error/30 bg-error/5 p-4 text-error">
+        <p>{{ error }}</p>
+        <Button label="Thử lại" class="mt-3 min-h-11" @click="load" />
       </div>
-    </div>
+      <div v-else-if="loading" role="status" aria-live="polite" class="rounded-xl bg-surface p-8 text-center text-on-surface-variant">Đang tải hồ sơ Nhà bán…</div>
+      <div v-else-if="!vendors.length" class="rounded-xl border border-dashed border-outline-variant p-10 text-center text-on-surface-variant">Không có hồ sơ Nhà bán nào đang chờ duyệt.</div>
 
-    <div v-if="loading" class="flex justify-center p-12">
-      <i class="pi pi-spin pi-spinner text-3xl text-indigo-600"></i>
-    </div>
-
-    <div v-else-if="!error" class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-      <!-- Pending Vendors Column -->
-      <div class="space-y-4">
-        <h3 class="font-bold text-slate-800 text-base mb-2">Đăng ký Nhà bán sách cũ</h3>
-        
-        <div v-for="vendor in pendingVendors" :key="vendor.id" class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm relative overflow-hidden">
-          <div class="absolute left-0 top-0 w-1 h-full bg-indigo-600"></div>
-          
-          <div class="flex flex-col sm:flex-row justify-between items-start gap-4">
-            <div class="space-y-2">
-              <div class="flex items-center gap-2">
-                <h4 class="font-bold text-slate-800 text-base">{{ vendor.shop_name }}</h4>
-                <span class="bg-slate-100 text-slate-600 text-[10px] px-2 py-0.5 rounded-full font-semibold">Cửa hàng sách cũ</span>
-              </div>
-              <p class="text-xs text-slate-500 leading-normal">{{ vendor.description }}</p>
-              <div class="text-[10px] text-slate-400">
-                Người đại diện: <strong class="text-slate-600">{{ vendor.user?.name }}</strong> | Email: {{ vendor.user?.email }}
-              </div>
+      <article v-for="vendor in vendors" v-else :key="vendor.id" class="rounded-xl border border-outline-variant/30 bg-surface p-5 shadow-sm">
+        <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div class="min-w-0">
+            <div class="flex flex-wrap items-center gap-2">
+              <h2 class="text-lg font-bold text-on-surface">{{ vendor.shop_name }}</h2>
+              <span class="rounded-full bg-primary-container px-3 py-1 text-xs font-bold text-on-primary-container">{{ vendor.onboarding_status }}</span>
             </div>
-
-            <div class="flex gap-2 w-full sm:w-auto shrink-0 justify-end">
-              <Button v-if="['submitted', 'resubmitted'].includes(vendor.onboarding_status)" label="Bắt đầu duyệt" icon="pi pi-search" class="p-button-info p-button-sm text-xs font-bold" @click="transitionVendor(vendor.id, 'under_review')" />
-              <template v-if="vendor.onboarding_status === 'under_review'">
-                <Button label="Phê duyệt" icon="pi pi-check" class="p-button-success p-button-sm text-xs font-bold" @click="transitionVendor(vendor.id, 'approved')" />
-                <Button label="Yêu cầu sửa" icon="pi pi-pencil" class="p-button-outlined p-button-warning p-button-sm text-xs" @click="openRejectDialog(vendor, 'vendor', 'changes_requested')" />
-                <Button label="Từ chối" icon="pi pi-times" class="p-button-outlined p-button-danger p-button-sm text-xs" @click="openRejectDialog(vendor, 'vendor', 'rejected')" />
-              </template>
-            </div>
+            <p class="mt-2 text-sm leading-6 text-on-surface-variant">{{ vendor.description || 'Chưa cung cấp mô tả.' }}</p>
+            <p class="mt-2 text-xs text-on-surface-variant">Đại diện: {{ vendor.user?.name || 'Chưa cập nhật' }} · {{ vendor.user?.email || 'Chưa cập nhật email' }}</p>
+          </div>
+          <div class="flex flex-wrap gap-2">
+            <Button v-if="['submitted', 'resubmitted'].includes(vendor.onboarding_status)" label="Bắt đầu duyệt" icon="pi pi-search" class="min-h-11" @click="transition(vendor, 'under_review')" />
+            <template v-if="vendor.onboarding_status === 'under_review'">
+              <Button label="Phê duyệt" icon="pi pi-check" severity="success" class="min-h-11" @click="transition(vendor, 'approved')" />
+              <Button label="Yêu cầu bổ sung" icon="pi pi-pencil" severity="warn" outlined class="min-h-11" @click="openFeedback(vendor, 'changes_requested')" />
+              <Button label="Từ chối" icon="pi pi-times" severity="danger" outlined class="min-h-11" @click="openFeedback(vendor, 'rejected')" />
+            </template>
           </div>
         </div>
+      </article>
+    </section>
 
-        <div v-if="pendingVendors.length === 0" class="text-center p-8 text-slate-400 text-xs bg-white rounded-2xl border border-slate-200">
-          Không có yêu cầu nhà bán nào đang chờ duyệt.
-        </div>
-      </div>
-
-      <!-- Pending Authors Column -->
-      <div class="space-y-4">
-        <h3 class="font-bold text-slate-800 text-base mb-2">Đăng ký Tác giả tự xuất bản</h3>
-        
-        <div v-for="author in pendingAuthors" :key="author.id" class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm relative overflow-hidden">
-          <div class="absolute left-0 top-0 w-1 h-full bg-rose-600"></div>
-          
-          <div class="flex flex-col sm:flex-row justify-between items-start gap-4">
-            <div class="space-y-2">
-              <div class="flex items-center gap-2">
-                <h4 class="font-bold text-slate-800 text-base">{{ author.pen_name }}</h4>
-                <span class="bg-rose-50 text-rose-700 text-[10px] px-2 py-0.5 rounded-full font-semibold">Tác giả sáng tác</span>
-              </div>
-              <p class="text-xs text-slate-500 leading-normal">{{ author.bio }}</p>
-              <div class="text-[10px] text-slate-400">
-                Chủ thẻ: <strong class="text-slate-600">{{ author.user?.name }}</strong> | NH: {{ author.bank_name }} | STK: {{ author.bank_account_number }}
-              </div>
-              <div v-if="author.has_identity_document || author.identity_document_url" class="mt-1">
-                <button type="button" @click="downloadAuthorDoc(author)" class="text-[11px] text-indigo-600 hover:underline flex items-center gap-1 font-semibold bg-transparent border-none cursor-pointer p-0">
-                  <i class="pi pi-file-pdf"></i> Tải / Xem giấy tờ CCCD
-                </button>
-              </div>
-            </div>
-
-            <div class="flex gap-2 w-full sm:w-auto shrink-0 justify-end">
-              <Button v-if="['submitted', 'resubmitted'].includes(author.onboarding_status)" label="Bắt đầu duyệt" icon="pi pi-search" class="p-button-info p-button-sm text-xs font-bold" @click="transitionAuthor(author.id, 'under_review')" />
-              <template v-if="author.onboarding_status === 'under_review'">
-                <Button label="Phê duyệt" icon="pi pi-check" class="p-button-success p-button-sm text-xs font-bold" @click="transitionAuthor(author.id, 'approved')" />
-                <Button label="Yêu cầu sửa" icon="pi pi-pencil" class="p-button-outlined p-button-warning p-button-sm text-xs" @click="openRejectDialog(author, 'author', 'changes_requested')" />
-                <Button label="Từ chối" icon="pi pi-times" class="p-button-outlined p-button-danger p-button-sm text-xs" @click="openRejectDialog(author, 'author', 'rejected')" />
-              </template>
-            </div>
-          </div>
-        </div>
-
-        <div v-if="pendingAuthors.length === 0" class="text-center p-8 text-slate-400 text-xs bg-white rounded-2xl border border-slate-200">
-          Không có yêu cầu tác giả nào đang chờ duyệt.
-        </div>
-      </div>
-    </div>
-
-    <!-- Reject Dialog -->
-    <Dialog v-model:visible="showRejectDialog" modal :header="reviewAction === 'changes_requested' ? 'Yêu cầu bổ sung hồ sơ' : 'Từ chối hồ sơ đăng ký'" :style="{ width: '90vw', maxWidth: '500px' }">
-      <div class="space-y-4">
-        <div class="flex flex-col gap-1.5">
-          <label class="text-xs font-bold text-slate-500">Lý do từ chối hồ sơ <span class="text-rose-500">*</span></label>
-          <InputText v-model="rejectReason" placeholder="Nhập lý do từ chối để phản hồi cho đối tác..." class="w-full text-sm" />
-        </div>
-      </div>
-      
+    <Dialog v-model:visible="dialogVisible" modal :header="feedbackAction === 'changes_requested' ? 'Yêu cầu bổ sung hồ sơ' : 'Từ chối hồ sơ'" :style="{ width: 'min(92vw, 500px)' }">
+      <label class="block space-y-2 text-sm font-bold text-on-surface">
+        <span>Lý do phản hồi</span>
+        <InputText v-model="feedbackReason" class="min-h-11 w-full" />
+      </label>
       <template #footer>
-        <Button label="Hủy" class="p-button-text p-button-sm text-xs" @click="showRejectDialog = false" />
-        <Button label="Xác nhận từ chối" class="p-button-danger p-button-sm text-xs bg-rose-600 text-white" @click="rejectPartner" />
+        <Button label="Hủy" text class="min-h-11" @click="dialogVisible = false" />
+        <Button label="Xác nhận" severity="danger" class="min-h-11" :disabled="!feedbackReason.trim()" @click="submitFeedback" />
       </template>
     </Dialog>
-  </div>
+  </main>
 </template>
-
-<style scoped>
-.vendor-approvals {
-  font-family: 'Inter', sans-serif;
-}
-</style>

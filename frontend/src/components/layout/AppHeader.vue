@@ -1,10 +1,10 @@
 <template>
   <!-- TopAppBar - Material Design 3 -->
-  <header class="bg-surface shadow-sm sticky top-0 z-50">
-    <div class="flex justify-between items-center w-full px-gutter max-w-[1280px] mx-auto py-md">
+  <header class="sticky top-0 z-50 bg-surface shadow-sm">
+    <div class="mx-auto flex w-full max-w-[1280px] items-center justify-between px-4 py-3 md:px-gutter md:py-md">
       <!-- Brand Logo -->
       <router-link to="/" class="flex items-center gap-sm no-underline shrink-0">
-        <div class="w-10 h-10 md:w-11 md:h-11 rounded-xl overflow-hidden shadow-md hover:scale-105 transition-transform duration-300">
+        <div class="h-11 w-11 overflow-hidden rounded-xl shadow-md">
           <img v-if="logoExists" src="@/assets/logo.png" alt="KomiBook Logo" class="w-full h-full object-cover" />
           <div v-else class="w-full h-full bg-primary flex items-center justify-center">
             <span class="material-symbols-outlined text-on-primary text-xl">auto_stories</span>
@@ -14,29 +14,78 @@
       </router-link>
 
       <!-- Navigation Links (Desktop) -->
-      <nav class="hidden md:flex gap-lg items-center">
+      <nav class="hidden items-center gap-md xl:flex" aria-label="Điều hướng chính">
         <router-link
           to="/"
           :class="[
-            'font-inter text-sm font-medium transition-colors duration-200 pb-1',
+            'flex min-h-11 min-w-11 items-center justify-center border-b-2 border-transparent font-inter text-sm font-medium transition-colors duration-200',
             $route.name === 'home'
               ? 'text-secondary font-bold border-b-2 border-secondary'
               : 'text-outline hover:text-secondary'
           ]"
         >Trang chủ</router-link>
+        <div class="relative">
+          <button
+            type="button"
+            :class="[
+              'flex min-h-11 min-w-11 items-center justify-center gap-1 border-b-2 border-transparent font-inter text-sm font-medium transition-colors duration-200',
+              $route.name === 'catalog' && $route.query.provenance !== 'used_resale'
+                ? 'border-secondary font-bold text-secondary'
+                : 'text-outline hover:text-secondary'
+            ]"
+            :aria-expanded="categoryMenuOpen"
+            aria-controls="desktop-category-menu"
+            @click="categoryMenuOpen = !categoryMenuOpen"
+            @keydown.esc="closeNavigationMenus"
+          >
+            Danh mục
+            <span class="material-symbols-outlined text-[18px]" aria-hidden="true">
+              {{ categoryMenuOpen ? 'expand_less' : 'expand_more' }}
+            </span>
+          </button>
+
+          <div
+            v-if="categoryMenuOpen"
+            id="desktop-category-menu"
+            class="absolute left-0 top-full z-50 mt-2 w-72 rounded-xl border border-outline-variant bg-surface-container-lowest p-2 shadow-elevated"
+          >
+            <p class="px-3 pb-2 pt-1 text-sm font-bold text-on-surface">Thể loại nổi bật</p>
+            <router-link
+              to="/catalog"
+              class="flex min-h-11 items-center rounded-lg px-3 text-sm font-semibold text-primary hover:bg-surface-container-low"
+              @click="closeNavigationMenus"
+            >
+              Tất cả danh mục
+            </router-link>
+            <p v-if="loadingCategories" class="px-3 py-2 text-sm text-text-muted">Đang tải thể loại…</p>
+            <p v-else-if="categoryLoadFailed" class="px-3 py-2 text-sm text-error">
+              Chưa thể tải danh sách thể loại.
+            </p>
+            <router-link
+              v-for="category in topCategories"
+              :key="category.id"
+              :to="{ name: 'catalog', query: { category_id: category.id } }"
+              class="flex min-h-11 items-center justify-between gap-3 rounded-lg px-3 text-sm text-on-surface-variant hover:bg-surface-container-low hover:text-primary"
+              @click="closeNavigationMenus"
+            >
+              <span>{{ category.name }}</span>
+              <span class="text-sm text-outline">{{ category.published_books_count }}</span>
+            </router-link>
+          </div>
+        </div>
         <router-link
-          to="/catalog"
+          :to="{ name: 'catalog', query: { provenance: 'used_resale' } }"
           :class="[
-            'font-inter text-sm font-medium transition-colors duration-200 pb-1',
-            $route.name === 'catalog'
-              ? 'text-secondary font-bold border-b-2 border-secondary'
+            'flex min-h-11 min-w-11 items-center justify-center border-b-2 border-transparent font-inter text-sm font-medium transition-colors duration-200',
+            $route.name === 'catalog' && $route.query.provenance === 'used_resale'
+              ? 'border-secondary font-bold text-secondary'
               : 'text-outline hover:text-secondary'
           ]"
-        >Danh mục</router-link>
+        >Sách cũ</router-link>
         <router-link
           to="/blog"
           :class="[
-            'font-inter text-sm font-medium transition-colors duration-200 pb-1',
+            'flex min-h-11 min-w-11 items-center justify-center border-b-2 border-transparent font-inter text-sm font-medium transition-colors duration-200',
             $route.name === 'blog'
               ? 'text-secondary font-bold border-b-2 border-secondary'
               : 'text-outline hover:text-secondary'
@@ -46,7 +95,7 @@
           v-if="authStore.isAuthenticated"
           to="/my-library"
           :class="[
-            'font-inter text-sm font-medium transition-colors duration-200 pb-1',
+            'flex min-h-11 min-w-11 items-center justify-center border-b-2 border-transparent font-inter text-sm font-medium transition-colors duration-200',
             $route.name === 'my-library'
               ? 'text-secondary font-bold border-b-2 border-secondary'
               : 'text-outline hover:text-secondary'
@@ -55,12 +104,13 @@
       </nav>
 
       <!-- Search + Actions -->
-      <div class="flex items-center gap-md">
+      <div class="flex items-center gap-2 md:gap-md">
         <!-- Search Bar (Desktop) -->
-        <div class="hidden md:flex items-center relative">
+        <div class="relative hidden items-center xl:flex">
           <input
             v-model="searchQuery"
-            class="pl-10 pr-4 py-2 bg-surface-container-low border border-outline-variant rounded-full text-sm font-inter font-medium focus:border-primary focus:ring-2 focus:ring-primary-fixed-dim transition-all w-56 lg:w-64 text-on-surface placeholder:text-outline"
+            aria-label="Tìm kiếm sách"
+            class="min-h-11 pl-10 pr-4 py-2 bg-surface-container-low border border-outline-variant rounded-full text-sm font-inter font-medium focus:border-primary focus:ring-2 focus:ring-primary-fixed-dim transition-all w-56 lg:w-64 text-on-surface placeholder:text-outline"
             placeholder="Tìm kiếm sách..."
             type="text"
             @keyup.enter="doSearch"
@@ -70,7 +120,7 @@
 
         <!-- Cart -->
         <button
-          class="relative text-primary hover:text-secondary transition-colors duration-200 cursor-pointer"
+          class="relative flex h-11 w-11 cursor-pointer items-center justify-center rounded-lg text-primary transition-colors duration-200 hover:bg-surface-container-low hover:text-secondary"
           @click="$router.push('/cart')"
           aria-label="Giỏ hàng"
         >
@@ -86,7 +136,7 @@
         <!-- Notification Bell -->
         <button
           v-if="authStore.isAuthenticated"
-          class="relative text-primary hover:text-secondary transition-colors duration-200 cursor-pointer"
+          class="relative hidden h-11 w-11 cursor-pointer items-center justify-center rounded-lg text-primary transition-colors duration-200 hover:bg-surface-container-low hover:text-secondary sm:flex"
           @click="$router.push('/notifications')"
           aria-label="Thông báo"
         >
@@ -102,18 +152,25 @@
         <!-- User Section -->
         <template v-if="authStore.isAuthenticated">
           <!-- User Avatar & Menu -->
-          <div class="flex items-center gap-sm cursor-pointer" @click="toggleUserMenu" aria-haspopup="true" aria-controls="overlay_menu">
+          <button
+            type="button"
+            class="hidden min-h-11 cursor-pointer items-center gap-sm rounded-lg px-1 sm:flex"
+            aria-label="Mở menu tài khoản"
+            aria-haspopup="menu"
+            aria-controls="overlay_menu"
+            @click="toggleUserMenu"
+          >
             <div class="hidden lg:flex flex-col items-end mr-1">
-              <span class="text-[11px] text-outline font-medium">Xin chào,</span>
+              <span class="text-sm text-outline font-medium">Xin chào,</span>
               <span class="text-sm font-bold text-on-surface">{{ authStore.user?.name }}</span>
             </div>
-            <div v-if="authStore.user?.avatar" class="w-9 h-9 rounded-full overflow-hidden border-2 border-surface-container-high shadow-sm">
+            <div v-if="authStore.user?.avatar" class="h-10 w-10 overflow-hidden rounded-full border-2 border-surface-container-high shadow-sm">
               <img :src="getAvatarUrl(authStore.user.avatar)" alt="Avatar" class="w-full h-full object-cover" />
             </div>
-            <div v-else class="w-9 h-9 rounded-full bg-primary-container flex items-center justify-center">
+            <div v-else class="flex h-10 w-10 items-center justify-center rounded-full bg-primary-container">
               <span class="material-symbols-outlined text-on-primary-container text-[20px]">person</span>
             </div>
-          </div>
+          </button>
           <Menu ref="userMenu" id="overlay_menu" :model="userMenuItems" :popup="true" />
         </template>
 
@@ -121,17 +178,25 @@
           <div class="flex gap-sm items-center">
             <router-link
               to="/login"
-              class="hidden md:inline-flex text-sm font-bold text-primary hover:text-secondary transition-colors px-md py-sm"
+              class="hidden min-h-11 items-center px-md py-sm text-sm font-bold text-primary transition-colors hover:text-secondary xl:inline-flex"
             >Đăng nhập</router-link>
             <router-link
               to="/register"
-              class="hidden md:inline-flex text-sm font-bold bg-primary text-on-primary px-md py-sm rounded-lg hover:bg-primary-container transition-colors shadow-sm"
+              class="hidden min-h-11 items-center rounded-lg bg-primary px-md py-sm text-sm font-bold text-on-primary shadow-sm transition-colors hover:bg-primary-container xl:inline-flex"
             >Đăng ký</router-link>
           </div>
         </template>
 
         <!-- Mobile Menu Button -->
-        <button class="md:hidden text-primary" @click="mobileMenuOpen = !mobileMenuOpen">
+        <button
+          type="button"
+          class="flex h-11 w-11 items-center justify-center rounded-lg text-primary xl:hidden"
+          :aria-label="mobileMenuOpen ? 'Đóng menu chính' : 'Mở menu chính'"
+          :aria-expanded="mobileMenuOpen"
+          aria-controls="mobile-main-menu"
+          @click="mobileMenuOpen = !mobileMenuOpen"
+          @keydown.esc="closeNavigationMenus"
+        >
           <span class="material-symbols-outlined">{{ mobileMenuOpen ? 'close' : 'menu' }}</span>
         </button>
       </div>
@@ -139,12 +204,17 @@
 
     <!-- Mobile Menu Dropdown -->
     <Transition name="slide-down">
-      <div v-if="mobileMenuOpen" class="md:hidden bg-surface border-t border-outline-variant/20 px-gutter pb-lg">
+      <div
+        v-if="mobileMenuOpen"
+        id="mobile-main-menu"
+        class="border-t border-outline-variant/20 bg-surface px-4 pb-lg xl:hidden"
+      >
         <!-- Mobile Search -->
         <div class="relative mt-md mb-md">
           <input
             v-model="searchQuery"
-            class="w-full pl-10 pr-4 py-2.5 bg-surface-container-low border border-outline-variant rounded-lg text-sm font-inter text-on-surface placeholder:text-outline"
+            aria-label="Tìm kiếm sách"
+            class="min-h-11 w-full pl-10 pr-4 py-2.5 bg-surface-container-low border border-outline-variant rounded-lg text-sm font-inter text-on-surface placeholder:text-outline"
             placeholder="Tìm kiếm sách..."
             type="text"
             @keyup.enter="doSearch"
@@ -153,24 +223,71 @@
         </div>
 
         <!-- Mobile Nav Links -->
-        <nav class="flex flex-col gap-xs">
-          <router-link to="/" class="flex items-center gap-md px-md py-sm rounded-lg text-on-surface-variant hover:bg-surface-container-low transition-colors text-sm font-medium" @click="mobileMenuOpen = false">
+        <nav class="flex flex-col gap-xs" aria-label="Điều hướng chính trên điện thoại">
+          <router-link to="/" class="flex min-h-11 items-center gap-md rounded-lg px-md py-sm text-sm font-medium text-on-surface-variant transition-colors hover:bg-surface-container-low" @click="mobileMenuOpen = false">
             <span class="material-symbols-outlined text-[20px]">home</span> Trang chủ
           </router-link>
-          <router-link to="/catalog" class="flex items-center gap-md px-md py-sm rounded-lg text-on-surface-variant hover:bg-surface-container-low transition-colors text-sm font-medium" @click="mobileMenuOpen = false">
-            <span class="material-symbols-outlined text-[20px]">search</span> Danh mục sách
+          <button
+            type="button"
+            class="flex min-h-11 w-full items-center justify-between rounded-lg px-md py-sm text-left text-sm font-medium text-on-surface-variant transition-colors hover:bg-surface-container-low"
+            :aria-expanded="mobileCategoriesOpen"
+            aria-controls="mobile-category-menu"
+            @click="mobileCategoriesOpen = !mobileCategoriesOpen"
+          >
+            <span class="flex items-center gap-md">
+              <span class="material-symbols-outlined text-[20px]" aria-hidden="true">category</span>
+              Danh mục sách
+            </span>
+            <span class="material-symbols-outlined text-[18px]" aria-hidden="true">
+              {{ mobileCategoriesOpen ? 'expand_less' : 'expand_more' }}
+            </span>
+          </button>
+          <div
+            v-if="mobileCategoriesOpen"
+            id="mobile-category-menu"
+            class="ml-4 border-l border-outline-variant pl-3"
+          >
+            <router-link
+              to="/catalog"
+              class="flex min-h-11 items-center rounded-lg px-md py-sm text-sm font-semibold text-primary hover:bg-surface-container-low"
+              @click="closeNavigationMenus"
+            >
+              Tất cả danh mục
+            </router-link>
+            <p v-if="loadingCategories" class="px-md py-sm text-sm text-text-muted">Đang tải thể loại…</p>
+            <p v-else-if="categoryLoadFailed" class="px-md py-sm text-sm text-error">
+              Chưa thể tải danh sách thể loại.
+            </p>
+            <router-link
+              v-for="category in topCategories"
+              :key="category.id"
+              :to="{ name: 'catalog', query: { category_id: category.id } }"
+              class="flex min-h-11 items-center justify-between gap-3 rounded-lg px-md py-sm text-sm text-on-surface-variant hover:bg-surface-container-low hover:text-primary"
+              @click="closeNavigationMenus"
+            >
+              <span>{{ category.name }}</span>
+              <span class="text-sm text-outline">{{ category.published_books_count }}</span>
+            </router-link>
+          </div>
+          <router-link
+            :to="{ name: 'catalog', query: { provenance: 'used_resale' } }"
+            class="flex min-h-11 items-center gap-md rounded-lg px-md py-sm text-sm font-medium text-on-surface-variant transition-colors hover:bg-surface-container-low"
+            @click="closeNavigationMenus"
+          >
+            <span class="material-symbols-outlined text-[20px]" aria-hidden="true">auto_stories</span>
+            Sách cũ
           </router-link>
-          <router-link to="/blog" class="flex items-center gap-md px-md py-sm rounded-lg text-on-surface-variant hover:bg-surface-container-low transition-colors text-sm font-medium" @click="mobileMenuOpen = false">
+          <router-link to="/blog" class="flex min-h-11 items-center gap-md rounded-lg px-md py-sm text-sm font-medium text-on-surface-variant transition-colors hover:bg-surface-container-low" @click="mobileMenuOpen = false">
             <span class="material-symbols-outlined text-[20px]">newspaper</span> Tin tức
           </router-link>
           <template v-if="authStore.isAuthenticated">
-            <router-link to="/my-library" class="flex items-center gap-md px-md py-sm rounded-lg text-on-surface-variant hover:bg-surface-container-low transition-colors text-sm font-medium" @click="mobileMenuOpen = false">
+            <router-link to="/my-library" class="flex min-h-11 items-center gap-md px-md py-sm rounded-lg text-on-surface-variant hover:bg-surface-container-low transition-colors text-sm font-medium" @click="mobileMenuOpen = false">
               <span class="material-symbols-outlined text-[20px]">local_library</span> Tủ sách
             </router-link>
-            <router-link to="/orders" class="flex items-center gap-md px-md py-sm rounded-lg text-on-surface-variant hover:bg-surface-container-low transition-colors text-sm font-medium" @click="mobileMenuOpen = false">
+            <router-link to="/orders" class="flex min-h-11 items-center gap-md px-md py-sm rounded-lg text-on-surface-variant hover:bg-surface-container-low transition-colors text-sm font-medium" @click="mobileMenuOpen = false">
               <span class="material-symbols-outlined text-[20px]">shopping_bag</span> Đơn hàng
             </router-link>
-            <router-link to="/notifications" class="flex items-center justify-between px-md py-sm rounded-lg text-on-surface-variant hover:bg-surface-container-low transition-colors text-sm font-medium" @click="mobileMenuOpen = false">
+            <router-link to="/notifications" class="flex min-h-11 items-center justify-between px-md py-sm rounded-lg text-on-surface-variant hover:bg-surface-container-low transition-colors text-sm font-medium" @click="mobileMenuOpen = false">
               <span class="flex items-center gap-md">
                 <span class="material-symbols-outlined text-[20px]">notifications</span> Thông báo
               </span>
@@ -178,18 +295,18 @@
                 {{ unreadNotificationsCount }}
               </span>
             </router-link>
-            <router-link to="/profile" class="flex items-center gap-md px-md py-sm rounded-lg text-on-surface-variant hover:bg-surface-container-low transition-colors text-sm font-medium" @click="mobileMenuOpen = false">
+            <router-link to="/profile" class="flex min-h-11 items-center gap-md px-md py-sm rounded-lg text-on-surface-variant hover:bg-surface-container-low transition-colors text-sm font-medium" @click="mobileMenuOpen = false">
               <span class="material-symbols-outlined text-[20px]">person</span> Tài khoản
             </router-link>
-            <button @click="handleLogout" class="flex items-center gap-md px-md py-sm rounded-lg text-error hover:bg-error-container/30 transition-colors text-sm font-medium w-full text-left">
+            <button @click="handleLogout" class="flex min-h-11 items-center gap-md px-md py-sm rounded-lg text-error hover:bg-error-container/30 transition-colors text-sm font-medium w-full text-left">
               <span class="material-symbols-outlined text-[20px]">logout</span> Đăng xuất
             </button>
           </template>
           <template v-else>
-            <router-link to="/login" class="flex items-center gap-md px-md py-sm rounded-lg text-primary hover:bg-surface-container-low transition-colors text-sm font-bold" @click="mobileMenuOpen = false">
+            <router-link to="/login" class="flex min-h-11 items-center gap-md px-md py-sm rounded-lg text-primary hover:bg-surface-container-low transition-colors text-sm font-bold" @click="mobileMenuOpen = false">
               <span class="material-symbols-outlined text-[20px]">login</span> Đăng nhập
             </router-link>
-            <router-link to="/register" class="flex items-center gap-md px-md py-sm rounded-lg bg-primary text-on-primary transition-colors text-sm font-bold" @click="mobileMenuOpen = false">
+            <router-link to="/register" class="flex min-h-11 items-center gap-md px-md py-sm rounded-lg bg-primary text-on-primary transition-colors text-sm font-bold" @click="mobileMenuOpen = false">
               <span class="material-symbols-outlined text-[20px]">person_add</span> Đăng ký
             </router-link>
           </template>
@@ -200,21 +317,56 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useCartStore } from '@/stores/cart'
 import Menu from 'primevue/menu'
 import apiClient from '@/services/axios'
 
 const router = useRouter()
+const route = useRoute()
 const authStore = useAuthStore()
 const cartStore = useCartStore()
 const logoExists = ref(false)
 const mobileMenuOpen = ref(false)
+const categoryMenuOpen = ref(false)
+const mobileCategoriesOpen = ref(false)
+const topCategories = ref([])
+const loadingCategories = ref(false)
+const categoryLoadFailed = ref(false)
 const userMenu = ref()
 const searchQuery = ref('')
 const unreadNotificationsCount = ref(0)
+let notificationTimer
+
+const closeNavigationMenus = () => {
+  mobileMenuOpen.value = false
+  categoryMenuOpen.value = false
+  mobileCategoriesOpen.value = false
+}
+
+const handleGlobalKeydown = (event) => {
+  if (event.key === 'Escape') closeNavigationMenus()
+}
+
+watch(() => route.fullPath, closeNavigationMenus)
+
+const fetchTopCategories = async () => {
+  loadingCategories.value = true
+  categoryLoadFailed.value = false
+  try {
+    const response = await apiClient.get('/api/categories', {
+      params: { popular: 1, limit: 10 },
+    })
+    topCategories.value = Array.isArray(response.data?.data) ? response.data.data : []
+  } catch (error) {
+    categoryLoadFailed.value = true
+    console.error('Failed to fetch public categories:', error)
+  } finally {
+    loadingCategories.value = false
+  }
+}
 
 const fetchUnreadCount = async () => {
   if (!authStore.isAuthenticated) return
@@ -257,32 +409,11 @@ const userMenuItems = computed(() => {
   ]
 
   if (authStore.isAuthenticated) {
-    const authorProfile = authStore.user?.author_profile
-    if (authorProfile) {
-      if (authorProfile.onboarding_status === 'approved') {
-        items.push({
-          label: 'Kênh sáng tác Tác giả',
-          icon: 'pi pi-pencil',
-          command: () => router.push('/author/dashboard')
-        })
-      } else if (['draft', 'submitted', 'resubmitted', 'under_review', 'changes_requested'].includes(authorProfile.onboarding_status)) {
-        items.push({
-          label: 'Đang duyệt Tác giả',
-          icon: 'pi pi-clock',
-          disabled: true
-        })
-      } else if (['rejected', 'suspended', 'revoked'].includes(authorProfile.onboarding_status)) {
-        items.push({
-          label: 'Hồ sơ Tác giả bị từ chối',
-          icon: 'pi pi-times-circle',
-          command: () => router.push('/author/register')
-        })
-      }
-    } else {
+    if (authStore.isWarehouseManager) {
       items.push({
-        label: 'Đăng ký làm Tác giả',
-        icon: 'pi pi-user-plus',
-        command: () => router.push('/author/register')
+        label: 'Không gian Quản kho',
+        icon: 'pi pi-box',
+        command: () => router.push('/warehouse-manager/dashboard')
       })
     }
 
@@ -327,12 +458,12 @@ const toggleUserMenu = (event) => {
 const doSearch = () => {
   if (searchQuery.value.trim()) {
     router.push({ name: 'catalog', query: { search: searchQuery.value.trim() } })
-    mobileMenuOpen.value = false
+    closeNavigationMenus()
   }
 }
 
 const handleLogout = async () => {
-  mobileMenuOpen.value = false
+  closeNavigationMenus()
   await authStore.logout()
   router.push({ name: 'home' })
 }
@@ -345,8 +476,16 @@ onMounted(() => {
   
   if (authStore.isAuthenticated) {
     fetchUnreadCount()
-    setInterval(fetchUnreadCount, 60000)
+    notificationTimer = window.setInterval(fetchUnreadCount, 60000)
   }
+
+  fetchTopCategories()
+  window.addEventListener('keydown', handleGlobalKeydown)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleGlobalKeydown)
+  if (notificationTimer) window.clearInterval(notificationTimer)
 })
 
 const getAvatarUrl = (avatar) => {
@@ -366,7 +505,9 @@ const getAvatarUrl = (avatar) => {
 
 <style scoped>
 .slide-down-enter-active, .slide-down-leave-active {
-  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  transition:
+    opacity 0.22s var(--ui-ease-standard),
+    max-height 0.22s var(--ui-ease-standard);
 }
 .slide-down-enter-from, .slide-down-leave-to {
   opacity: 0;

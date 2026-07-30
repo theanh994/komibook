@@ -1,99 +1,167 @@
 <template>
-  <div
-    class="group bg-surface-container-lowest rounded-lg soft-shadow overflow-hidden cursor-pointer border border-outline-variant/30 flex flex-col h-full transition-all duration-300 hover:-translate-y-1 hover:shadow-card-hover"
-    @click="goToDetail"
-  >
-    <!-- Cover Image -->
-    <div class="relative pt-[140%] bg-surface-variant/30">
-      <img
-        v-if="book.cover_image"
-        :src="book.cover_image"
-        :alt="book.title"
-        class="absolute inset-0 w-full h-full object-cover p-2 rounded-t-lg transition-transform duration-500 group-hover:scale-105"
-        loading="lazy"
-      />
-      <div v-else class="absolute inset-0 flex items-center justify-center">
-        <span class="material-symbols-outlined text-outline text-4xl">image</span>
-      </div>
-      <!-- Sale Badge -->
+  <article class="book-card group flex h-full flex-col overflow-hidden rounded-b-lg border border-outline-variant/25 bg-surface-container-lowest shadow-sm">
+    <div class="relative aspect-[2/3] overflow-hidden bg-white">
+      <router-link
+        :to="{ name: 'book-detail', params: { slug: book.slug } }"
+        class="absolute inset-0 block focus-visible:z-10 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary-fixed-dim"
+        :aria-label="`Xem chi tiết ${book.title}`"
+      >
+        <img
+          v-if="coverUrl && !coverFailed"
+          :src="coverUrl"
+          :alt="`Bìa sách ${book.title}`"
+          class="book-cover h-full w-full rounded-none object-contain"
+          loading="lazy"
+          @error="markCoverFailed"
+        />
+        <span
+          v-else
+          class="flex h-full w-full flex-col items-center justify-center gap-2 bg-surface-container-low px-3 text-center text-outline"
+          role="img"
+          :aria-label="`Chưa có ảnh bìa cho ${book.title}`"
+        >
+          <span class="material-symbols-outlined text-4xl" aria-hidden="true">menu_book</span>
+          <span class="text-xs font-medium">Chưa có ảnh bìa</span>
+        </span>
+      </router-link>
+
       <span
         v-if="book.sale_price && book.price > book.sale_price"
-        class="absolute top-2 left-2 bg-secondary text-on-secondary text-[11px] font-bold px-2 py-0.5 rounded-md shadow-sm"
-      >-{{ Math.round((1 - book.sale_price / book.price) * 100) }}%</span>
-
-      <!-- Out of Stock Badge -->
+        class="absolute left-2 top-2 z-10 rounded-md bg-secondary px-2 py-1 text-xs font-bold text-on-secondary shadow-sm"
+      >
+        -{{ Math.round((1 - book.sale_price / book.price) * 100) }}%
+      </span>
       <span
-        v-if="book.type !== 'ebook' && (Number(book.stock) <= 0 || (book.status && book.status !== 'published'))"
-        class="absolute top-2 right-2 bg-slate-800/90 text-white text-[10px] font-bold px-2 py-0.5 rounded-md shadow-sm z-10"
-      >Hết hàng</span>
-    </div>
+        v-if="book.type === 'ebook'"
+        class="absolute bottom-2 left-2 z-10 rounded-md bg-primary/95 px-2 py-1 text-xs font-bold text-on-primary shadow-sm"
+      >
+        Ebook
+      </span>
+      <span
+        v-else-if="book.provenance === 'used_resale'"
+        class="absolute bottom-2 left-2 z-10 rounded-md bg-secondary px-2 py-1 text-xs font-bold text-on-secondary shadow-sm"
+      >
+        Sách cũ
+      </span>
+      <span
+        v-if="!isPurchasable"
+        class="absolute right-2 top-2 z-10 rounded-md bg-slate-800/90 px-2 py-1 text-xs font-bold text-white shadow-sm"
+      >
+        Hết hàng
+      </span>
 
-    <!-- Info -->
-    <div class="p-md flex flex-col flex-grow">
-      <span class="text-[10px] font-bold text-outline uppercase tracking-wider mb-1">{{ book.category?.name || 'Sách' }}</span>
-      <h3 class="text-sm font-medium text-on-surface line-clamp-2 mb-1 leading-snug group-hover:text-primary transition-colors">
-        {{ book.title }}
-      </h3>
-      <p class="text-[13px] text-on-surface-variant mb-md flex-grow">
-        {{ book.author || 'Đang cập nhật' }}
-      </p>
-      <div class="flex flex-col gap-2 mt-auto">
-        <template v-if="book.type !== 'ebook' && (Number(book.stock) <= 0 || (book.status && book.status !== 'published'))">
-          <div class="w-full py-2 px-md bg-surface-container-high text-outline rounded-lg text-xs font-bold text-center border border-outline-variant/30 flex items-center justify-center gap-1 cursor-not-allowed">
-            <span class="material-symbols-outlined text-[16px]">remove_shopping_cart</span>
-            Sách đã hết hàng
-          </div>
-        </template>
-        <template v-else>
-          <div class="flex items-center justify-between">
-            <div class="flex items-center gap-2">
-              <span class="text-sm font-bold text-primary">
-                {{ formatCurrency(book.sale_price || book.price) }}
-              </span>
-              <span v-if="book.sale_price && book.price > book.sale_price" class="text-xs text-outline line-through">
-                {{ formatCurrency(book.price) }}
-              </span>
-            </div>
-            <button
-              class="text-primary hover:text-secondary transition-colors p-1 bg-surface-container rounded-full hover:bg-surface-variant cursor-pointer border-none"
-              @click.stop="$emit('add-to-cart', book)"
-              title="Thêm vào giỏ"
-            >
-              <span class="material-symbols-outlined text-[20px]">add_shopping_cart</span>
-            </button>
-          </div>
-          <button
-            class="w-full py-2 px-md bg-primary text-on-primary rounded-lg text-xs font-bold hover:bg-primary/90 transition-all shadow-sm active:scale-95 cursor-pointer border-none"
-            @click.stop="buyNow"
-          >
-            Mua ngay
-          </button>
-        </template>
+      <button
+        v-if="showWishlist"
+        type="button"
+        class="absolute right-2 top-2 z-20 flex h-11 w-11 items-center justify-center rounded-full border border-outline-variant/30 bg-surface-container-lowest/95 text-outline shadow-md transition-colors hover:text-error focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary-fixed-dim"
+        :class="{ 'text-error': isFavorite }"
+        :aria-label="isFavorite ? `Bỏ ${book.title} khỏi yêu thích` : `Thêm ${book.title} vào yêu thích`"
+        :aria-pressed="isFavorite"
+        @click="$emit('toggle-wishlist', book.id)"
+      >
+        <span class="material-symbols-outlined text-[22px]" :class="{ 'fill-1': isFavorite }" aria-hidden="true">favorite</span>
+      </button>
+
+      <div v-if="isPurchasable" class="card-actions absolute bottom-3 right-2 z-20 flex flex-col gap-2">
+        <button
+          type="button"
+          class="card-action"
+          :aria-label="`Xem nhanh ${book.title}`"
+          @click="$emit('quick-view', book)"
+        >
+          <span class="material-symbols-outlined text-[20px]" aria-hidden="true">visibility</span>
+        </button>
+        <button
+          type="button"
+          class="card-action"
+          :aria-label="`Thêm ${book.title} vào giỏ`"
+          @click="$emit('add-to-cart', book)"
+        >
+          <span class="material-symbols-outlined text-[20px]" aria-hidden="true">shopping_bag</span>
+        </button>
+        <button
+          type="button"
+          class="card-action"
+          :aria-label="`Mua ngay ${book.title}`"
+          @click="$emit('buy-now', book)"
+        >
+          <span class="material-symbols-outlined text-[20px]" aria-hidden="true">shopping_cart</span>
+        </button>
       </div>
     </div>
-  </div>
+
+    <div class="flex min-h-[96px] flex-grow flex-col px-3 pb-3 pt-2.5">
+      <h3 class="mb-1.5 line-clamp-2 text-sm font-medium leading-snug text-on-surface">
+        <router-link
+          :to="{ name: 'book-detail', params: { slug: book.slug } }"
+          class="text-inherit no-underline transition-colors hover:text-primary focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-fixed-dim"
+        >
+          {{ book.title }}
+        </router-link>
+      </h3>
+      <p v-if="book.type === 'ebook'" class="mb-1 text-xs font-bold text-primary">
+        {{ book.latest_ebook_version?.version
+          ? `Phiên bản ${book.latest_ebook_version.version}`
+          : 'Phiên bản đang cập nhật' }}
+      </p>
+
+      <div v-if="isPurchasable" class="mt-auto flex flex-wrap items-baseline gap-2">
+        <span class="text-[15px] font-bold text-primary">
+          {{ formatCurrency(book.sale_price || book.price) }}
+        </span>
+        <span v-if="book.sale_price && book.price > book.sale_price" class="text-xs text-outline line-through">
+          {{ formatCurrency(book.price) }}
+        </span>
+      </div>
+      <div v-else class="mt-auto flex min-h-11 items-center justify-center gap-1 rounded-lg border border-outline-variant/30 bg-surface-container-high px-3 text-center text-xs font-bold text-outline">
+        <span class="material-symbols-outlined text-[16px]" aria-hidden="true">remove_shopping_cart</span>
+        Sách đã hết hàng
+      </div>
+    </div>
+  </article>
 </template>
 
 <script setup>
-import { useRouter } from 'vue-router'
+import { computed, ref, watch } from 'vue'
 
 const props = defineProps({
   book: {
     type: Object,
-    required: true
-  }
+    required: true,
+  },
+  showWishlist: {
+    type: Boolean,
+    default: false,
+  },
+  isFavorite: {
+    type: Boolean,
+    default: false,
+  },
 })
 
-const emit = defineEmits(['add-to-cart', 'buy-now'])
+defineEmits(['quick-view', 'add-to-cart', 'buy-now', 'toggle-wishlist'])
 
-const router = useRouter()
+const isPurchasable = computed(() => (
+  props.book.type === 'ebook'
+  || (Number(props.book.stock) > 0 && (!props.book.status || props.book.status === 'published'))
+))
 
-const goToDetail = () => {
-  router.push({ name: 'book-detail', params: { slug: props.book.slug } })
-}
+const coverUrl = computed(() => {
+  const path = props.book.cover_image
+  if (!path) return ''
+  if (path.startsWith('http://') || path.startsWith('https://') || path.startsWith('/storage/')) return path
+  if (path.includes('/storage/')) return path.substring(path.indexOf('/storage/'))
+  return `/storage/${path}`
+})
 
-const buyNow = () => {
-  emit('buy-now', props.book)
+const coverFailed = ref(false)
+
+watch(coverUrl, () => {
+  coverFailed.value = false
+})
+
+const markCoverFailed = () => {
+  coverFailed.value = true
 }
 
 const formatCurrency = (value) => {
@@ -101,3 +169,81 @@ const formatCurrency = (value) => {
   return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(value)
 }
 </script>
+
+<style scoped>
+.card-action {
+  display: flex;
+  width: 44px;
+  height: 44px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 9999px;
+  color: var(--color-on-secondary, #ffffff);
+  background: var(--color-secondary, #d9043d);
+  box-shadow: 0 4px 12px rgba(15, 39, 64, 0.2);
+  transition: filter 180ms ease, transform 180ms ease;
+}
+
+.card-action:hover,
+.card-action:focus-visible {
+  filter: brightness(1.08);
+  transform: scale(1.05);
+  outline: 3px solid color-mix(in srgb, var(--color-primary, #17324d) 30%, transparent);
+  outline-offset: 2px;
+}
+
+.card-actions {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateX(0);
+  transition: opacity 200ms ease, transform 200ms ease;
+}
+
+.book-card {
+  transform: translateY(0);
+  transition: transform 220ms ease, box-shadow 220ms ease, border-color 220ms ease;
+}
+
+.book-cover {
+  transform: scale(1);
+  transition: transform 240ms ease;
+}
+
+@media (min-width: 640px) and (hover: hover) and (pointer: fine) {
+  .card-actions {
+    opacity: 0;
+    pointer-events: none;
+    transform: translateX(8px);
+  }
+
+  .book-card:hover .card-actions,
+  .book-card:focus-within .card-actions {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateX(0);
+  }
+
+  .book-card:hover,
+  .book-card:focus-within {
+    border-color: color-mix(in srgb, var(--color-primary, #17324d) 34%, transparent);
+    box-shadow: 0 14px 30px rgba(15, 39, 64, 0.14);
+    transform: translateY(-4px);
+  }
+
+  .book-card:hover .book-cover,
+  .book-card:focus-within .book-cover {
+    transform: scale(1.018);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .book-card,
+  .book-cover,
+  .card-actions,
+  .card-action {
+    transition: none;
+    transform: none;
+  }
+}
+</style>

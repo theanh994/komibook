@@ -5,10 +5,13 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\CustomerOrderDetailResource;
 use App\Http\Resources\OrderResource;
+use App\Models\EbookEntitlement;
+use App\Models\EbookVersion;
 use App\Models\Order;
 use App\Services\CheckoutSessionLifecycleService;
 use App\Services\EbookAccessService;
 use App\Services\OrderFulfillmentService;
+use App\Support\PublicMediaUrl;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Response;
@@ -73,18 +76,44 @@ class OrderController extends Controller
                     if ($book->type === 'ebook') {
                         $validOrder = $ebookAccessService->getValidOrder($user, $book->id);
                     }
+                    $entitlement = $book->type === 'ebook'
+                        ? EbookEntitlement::where('user_id', $user->id)
+                            ->where('book_id', $book->id)
+                            ->whereNull('revoked_at')
+                            ->with('purchaseVersion')
+                            ->first()
+                        : null;
+                    $versions = $entitlement
+                        ? EbookVersion::where('book_id', $book->id)
+                            ->where('version', '>=', $entitlement->purchaseVersion->version)
+                            ->orderByDesc('version')
+                            ->get()
+                            ->map(fn (EbookVersion $version) => [
+                                'id' => $version->id,
+                                'version' => $version->version,
+                                'release_notes' => $version->release_notes,
+                                'published_at' => $version->published_at?->toISOString(),
+                                'is_purchase_version' => $version->id === $entitlement->purchase_version_id,
+                            ])
+                            ->values()
+                        : collect();
 
                     $libraryItems[] = [
                         'order_id' => $book->type === 'ebook' ? ($validOrder?->id) : $order->id,
                         'status' => $order->status,
                         'purchased_at' => $order->created_at?->toISOString(),
                         'has_access' => $book->type === 'ebook' ? ($validOrder !== null) : false,
+                        'purchase_version_id' => $entitlement?->purchase_version_id,
+                        'purchase_version' => $entitlement?->purchaseVersion?->version,
+                        'latest_version_id' => $versions->first()['id'] ?? null,
+                        'latest_version' => $versions->first()['version'] ?? null,
+                        'available_versions' => $versions,
                         'book' => [
                             'id' => $book->id,
                             'title' => $book->title,
                             'slug' => $book->slug,
-                            'cover_image' => $book->cover_image,
-                            'author' => $book->author_name ?? $book->author ?? 'KomiBook Author',
+                            'cover_image' => PublicMediaUrl::storage($book->cover_image),
+                            'author' => $book->author_name ?? $book->author ?? 'Chưa cập nhật người viết',
                             'type' => $book->type ?? 'physical',
                         ],
                     ];
@@ -121,15 +150,39 @@ class OrderController extends Controller
         }
 
         $book = $orderItem->book;
+        $entitlement = EbookEntitlement::where('user_id', $user->id)
+            ->where('book_id', $book->id)
+            ->whereNull('revoked_at')
+            ->with('purchaseVersion')
+            ->first();
+        $versions = collect();
+        $version = null;
 
-        if (empty($book->file_path)) {
+        if ($entitlement) {
+            abort_unless($entitlement->purchaseVersion, 403, 'Entitlement không có phiên bản mua hợp lệ.');
+            $versions = EbookVersion::where('book_id', $book->id)
+                ->where('version', '>=', $entitlement->purchaseVersion->version)
+                ->orderByDesc('version')
+                ->get();
+
+            $version = $request->filled('version_id')
+                ? $versions->firstWhere('id', $request->integer('version_id'))
+                : $versions->first();
+
+            abort_if($request->filled('version_id') && ! $version, 404, 'Phiên bản không thuộc quyền đọc.');
+        } elseif ($request->filled('version_id')) {
+            abort(403, 'Đơn hàng cũ chưa có quyền chọn phiên bản.');
+        }
+
+        $filePath = $version?->file_path ?? $book->file_path;
+        if (empty($filePath)) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Sách này chưa được cấu hình file E-book',
             ], 404);
         }
 
-        $filename = basename($book->file_path);
+        $filename = basename($filePath);
 
         $relativeUrl = URL::temporarySignedRoute(
             'api.ebook.stream',
@@ -148,6 +201,15 @@ class OrderController extends Controller
             'status' => 'success',
             'data' => [
                 'url' => $url,
+                'version_id' => $version?->id,
+                'purchase_version_id' => $entitlement?->purchase_version_id,
+                'available_versions' => $versions->map(fn (EbookVersion $availableVersion) => [
+                    'id' => $availableVersion->id,
+                    'version' => $availableVersion->version,
+                    'release_notes' => $availableVersion->release_notes,
+                    'published_at' => $availableVersion->published_at?->toISOString(),
+                    'is_purchase_version' => $availableVersion->id === $entitlement?->purchase_version_id,
+                ])->values(),
             ],
         ]);
     }

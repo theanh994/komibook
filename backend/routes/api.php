@@ -4,38 +4,39 @@ use App\Http\Controllers\Api\AccountSessionController;
 use App\Http\Controllers\Api\Admin\ArticleController as AdminArticleController;
 use App\Http\Controllers\Api\Admin\BookPublishingController as AdminBookPublishingController;
 use App\Http\Controllers\Api\Admin\CommerceFeeScheduleController;
-use App\Http\Controllers\Api\Admin\CopyrightClaimController as AdminCopyrightClaimController;
 use App\Http\Controllers\Api\Admin\FinanceReportController;
 use App\Http\Controllers\Api\Admin\MembershipTierController;
 use App\Http\Controllers\Api\Admin\NotificationCampaignController;
+use App\Http\Controllers\Api\Admin\OrganizationReviewController;
 use App\Http\Controllers\Api\Admin\ReconciliationController;
 use App\Http\Controllers\Api\Admin\SystemConfigController;
 use App\Http\Controllers\Api\Admin\UserController;
 use App\Http\Controllers\Api\Admin\VendorApprovalController;
 use App\Http\Controllers\Api\ArticleController;
 use App\Http\Controllers\Api\AuthController;
-use App\Http\Controllers\Api\AuthorController;
 use App\Http\Controllers\Api\BookAnnotationController;
-use App\Http\Controllers\Api\BookAuthorController;
 use App\Http\Controllers\Api\BookController;
 use App\Http\Controllers\Api\BookPublishingController;
 use App\Http\Controllers\Api\CategoryController;
 use App\Http\Controllers\Api\ChapterController;
 use App\Http\Controllers\Api\CheckoutController;
-use App\Http\Controllers\Api\CopyrightClaimController;
 use App\Http\Controllers\Api\CouponController;
 use App\Http\Controllers\Api\DrmController;
 use App\Http\Controllers\Api\EmailRegistrationOtpController;
 use App\Http\Controllers\Api\HelpCenterController;
 use App\Http\Controllers\Api\InventoryAuditController;
 use App\Http\Controllers\Api\OrderController;
+use App\Http\Controllers\Api\OrganizationController;
 use App\Http\Controllers\Api\PhoneAuthController;
+use App\Http\Controllers\Api\PolicyController;
 use App\Http\Controllers\Api\ProfileController;
 use App\Http\Controllers\Api\ReadingProgressController;
 use App\Http\Controllers\Api\ReturnRequestController;
 use App\Http\Controllers\Api\ReviewController;
 use App\Http\Controllers\Api\StockTransferController;
 use App\Http\Controllers\Api\SupportTicketController;
+use App\Http\Controllers\Api\UsedBookDisputeController;
+use App\Http\Controllers\Api\UsedBookSellerController;
 use App\Http\Controllers\Api\UserNotificationController;
 use App\Http\Controllers\Api\Vendor\AnalyticsController;
 use App\Http\Controllers\Api\Vendor\DashboardController;
@@ -43,7 +44,10 @@ use App\Http\Controllers\Api\Vendor\FinanceController;
 use App\Http\Controllers\Api\Vendor\FlashSaleController;
 use App\Http\Controllers\Api\Vendor\SeriesController;
 use App\Http\Controllers\Api\Vendor\WarehouseController;
+use App\Http\Controllers\Api\Vendor\WarehouseManagerController as VendorWarehouseManagerController;
 use App\Http\Controllers\Api\VendorOnboardingController;
+use App\Http\Controllers\Api\WarehouseManagerPortalController;
+use App\Http\Controllers\Api\WarehouseDocumentController;
 use App\Http\Controllers\Api\VnpayController;
 use App\Http\Controllers\Api\WishlistController;
 use Illuminate\Support\Facades\Route;
@@ -69,10 +73,12 @@ Route::prefix('auth')->name('auth.')->group(function () {
 Route::get('/categories', [CategoryController::class, 'index']);
 Route::get('/series', [BookController::class, 'allSeries']);
 Route::get('/books', [BookController::class, 'index']);
+Route::get('/policies/returns', [PolicyController::class, 'returnPolicies']);
 Route::get('/books/top-selling', [BookController::class, 'topSelling']);
+Route::get('/books/recommendations', [BookController::class, 'recommendations']);
 Route::get('/books/{slug}', [BookController::class, 'show']);
 Route::get('/books/{id}/series', [BookController::class, 'seriesBooks']);
-Route::get('/books/{id}/author', [BookController::class, 'authorBooks']);
+Route::get('/books/{id}/contributors', [BookController::class, 'contributorBooks']);
 Route::get('/books/{id}/related', [BookController::class, 'relatedBooks']);
 
 // Help Center công khai
@@ -81,6 +87,8 @@ Route::get('/help-center/articles/{id}', [HelpCenterController::class, 'show']);
 Route::post('/help-center/articles/{id}/helpful', [HelpCenterController::class, 'helpful']);
 Route::get('/articles', [ArticleController::class, 'index']);
 Route::get('/articles/{slug}', [ArticleController::class, 'show']);
+Route::get('/organizations', [OrganizationController::class, 'index']);
+Route::get('/organizations/{slug}', [OrganizationController::class, 'show']);
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Protected routes — Yêu cầu Sanctum token hợp lệ
@@ -142,29 +150,25 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::patch('/notifications/{id}/read', [UserNotificationController::class, 'markAsRead']);
     Route::post('/notifications/read-all', [UserNotificationController::class, 'markAllAsRead']);
 
-    // Đăng ký và Trạng thái Tác giả
-    Route::post('/auth/register-author', [AuthorController::class, 'register']);
-    Route::patch('/author/draft', [AuthorController::class, 'saveDraft']);
-    Route::post('/author/submit', [AuthorController::class, 'submit']);
-    Route::get('/author/status', [AuthorController::class, 'status']);
-    Route::get('/author/dashboard-stats', [AuthorController::class, 'dashboardStats']);
+    Route::get('/used-book-seller/listings', [UsedBookSellerController::class, 'index']);
+    Route::post('/used-book-seller/listings', [UsedBookSellerController::class, 'store']);
+    Route::patch('/used-book-seller/listings/{listing}/inventory', [UsedBookSellerController::class, 'updateInventory']);
+    Route::get('/used-book-seller/fulfillment-address', [UsedBookSellerController::class, 'showAddress']);
+    Route::put('/used-book-seller/fulfillment-address', [UsedBookSellerController::class, 'upsertAddress']);
+    Route::post('/used-books/disputes', [UsedBookDisputeController::class, 'store']);
     Route::post('/vendor-onboarding/register', [VendorOnboardingController::class, 'register']);
     Route::patch('/vendor-onboarding/draft', [VendorOnboardingController::class, 'saveDraft']);
     Route::post('/vendor-onboarding/submit', [VendorOnboardingController::class, 'submit']);
     Route::get('/vendor-onboarding/status', [VendorOnboardingController::class, 'status']);
     Route::get('/vendors/{vendor}/documents/{type}', [VendorOnboardingController::class, 'downloadDocument']);
-    Route::patch('/author/book-authors/{bookAuthor}/respond', [BookAuthorController::class, 'respond']);
-    Route::post('/author/books/{book}/delegations', [BookAuthorController::class, 'inviteDelegate']);
-    Route::patch('/author/delegations/{delegation}/respond', [BookAuthorController::class, 'respondDelegation']);
-    Route::patch('/author/delegations/{delegation}/revoke', [BookAuthorController::class, 'revokeDelegation']);
-    Route::post('/author/books/{book}/copyright', [CopyrightClaimController::class, 'store']);
-    Route::patch('/author/copyright/{claim}', [CopyrightClaimController::class, 'update']);
-    Route::post('/author/copyright/{claim}/submit', [CopyrightClaimController::class, 'submit']);
-    Route::get('/author/copyright/{claim}', [CopyrightClaimController::class, 'show']);
-    Route::get('/author/copyright/{claim}/evidence', [CopyrightClaimController::class, 'downloadEvidence']);
-    Route::post('/author/royalty-agreements/{agreement}/accept', [BookPublishingController::class, 'acceptRoyaltyAsAuthor']);
-    Route::get('/author/royalty-agreements', [BookPublishingController::class, 'authorRoyaltyAgreements']);
-    Route::get('/authors/{id}/identity-document', [AuthorController::class, 'downloadIdentityDocument']);
+    Route::get('/warehouse-manager/assignments', [WarehouseManagerPortalController::class, 'assignments']);
+    Route::post('/warehouse-manager/assignments/{assignment}/accept', [WarehouseManagerPortalController::class, 'accept']);
+    Route::get('/warehouse-manager/assignments/{assignment}/dashboard', [WarehouseManagerPortalController::class, 'dashboard']);
+    Route::get('/warehouse-manager/documents', [WarehouseDocumentController::class, 'index']);
+    Route::get('/warehouse-manager/document-scope', [WarehouseDocumentController::class, 'scope']);
+    Route::post('/warehouse-manager/documents', [WarehouseDocumentController::class, 'store']);
+    Route::get('/warehouse-manager/documents/{document}', [WarehouseDocumentController::class, 'show']);
+    Route::patch('/warehouse-manager/documents/{document}/transition', [WarehouseDocumentController::class, 'transition']);
 
     // Tickets yêu cầu hỗ trợ (Khách hàng)
     Route::get('/support/tickets', [SupportTicketController::class, 'index']);
@@ -192,8 +196,6 @@ Route::middleware(['auth:sanctum', 'role:vendor', 'active-vendor'])->prefix('ven
     Route::delete('series/{id}', [SeriesController::class, 'destroy'])->name('series.destroy');
 
     Route::apiResource('books', App\Http\Controllers\Api\Vendor\BookController::class);
-    Route::post('books/{book}/authors', [BookAuthorController::class, 'inviteByVendor'])->name('books.authors.invite');
-    Route::post('books/{book}/royalty-agreements', [BookPublishingController::class, 'acceptRoyalty'])->name('books.royalty.accept');
     Route::get('books/{book}/publishing', [BookPublishingController::class, 'show'])->name('books.publishing.show');
     Route::post('books/{book}/submit', [BookPublishingController::class, 'submit'])->name('books.publish.submit');
     Route::patch('books/{book}/return-to-draft', [BookPublishingController::class, 'returnToDraft'])->name('books.publish.draft');
@@ -214,6 +216,19 @@ Route::middleware(['auth:sanctum', 'role:vendor', 'active-vendor'])->prefix('ven
     Route::get('warehouses/stats', [WarehouseController::class, 'stats'])->name('warehouses.stats');
     Route::post('warehouses', [WarehouseController::class, 'store'])->name('warehouses.store');
     Route::post('warehouses/adjust', [WarehouseController::class, 'adjustStock'])->name('warehouses.adjust');
+    Route::get('warehouse-documents', [WarehouseDocumentController::class, 'index'])->name('warehouse-documents.index');
+    Route::get('warehouse-document-scope', [WarehouseDocumentController::class, 'scope'])->name('warehouse-documents.scope');
+    Route::post('warehouse-documents', [WarehouseDocumentController::class, 'store'])->name('warehouse-documents.store');
+    Route::get('warehouse-documents/{document}', [WarehouseDocumentController::class, 'show'])->name('warehouse-documents.show');
+    Route::patch('warehouse-documents/{document}/transition', [WarehouseDocumentController::class, 'transition'])->name('warehouse-documents.transition');
+    Route::get('warehouse-managers', [VendorWarehouseManagerController::class, 'index'])->name('warehouse-managers.index');
+    Route::post('warehouse-managers/invite', [VendorWarehouseManagerController::class, 'invite'])->name('warehouse-managers.invite');
+    Route::patch('warehouse-managers/{assignment}/transition', [VendorWarehouseManagerController::class, 'transition'])->name('warehouse-managers.transition');
+    Route::get('organizations', [App\Http\Controllers\Api\Vendor\OrganizationController::class, 'index'])->name('organizations.index');
+    Route::post('organizations', [App\Http\Controllers\Api\Vendor\OrganizationController::class, 'storeOrganization'])->name('organizations.store');
+    Route::post('organization-relationships', [App\Http\Controllers\Api\Vendor\OrganizationController::class, 'storeRelationship'])->name('organization-relationships.store');
+    Route::post('organization-relationships/{relationship}/submit', [App\Http\Controllers\Api\Vendor\OrganizationController::class, 'submit'])->name('organization-relationships.submit');
+    Route::put('books/{book}/commercial-parties', [App\Http\Controllers\Api\Vendor\OrganizationController::class, 'assignBookParties'])->name('books.commercial-parties.update');
 
     // Quản lý tài chính / doanh thu (Finance)
     Route::get('finance', [FinanceController::class, 'index'])->name('finance.index');
@@ -323,15 +338,15 @@ Route::middleware(['auth:sanctum', 'role:admin'])->prefix('admin')->name('admin.
     Route::get('config', [SystemConfigController::class, 'show'])->name('config.show');
     Route::put('config', [SystemConfigController::class, 'update'])->name('config.update');
 
-    // Phê duyệt nhà bán & tác giả
+    // Phê duyệt Nhà bán và quan hệ thương mại
     Route::get('approvals/vendors', [VendorApprovalController::class, 'index'])->name('approvals.vendors.index');
     Route::patch('approvals/vendors/{id}/approve', [VendorApprovalController::class, 'approveVendor'])->name('approvals.vendors.approve');
     Route::patch('approvals/vendors/{vendor}/transition', [VendorApprovalController::class, 'transitionVendor'])->name('approvals.vendors.transition');
-    Route::patch('approvals/authors/{id}/approve', [VendorApprovalController::class, 'approveAuthor'])->name('approvals.authors.approve');
-    Route::patch('approvals/authors/{author}/transition', [VendorApprovalController::class, 'transitionAuthor'])->name('approvals.authors.transition');
+    Route::patch('used-books/disputes/{dispute}/resolve', [UsedBookDisputeController::class, 'resolve'])->name('used-books.disputes.resolve');
     Route::patch('approvals/partners/{type}/{id}/reject', [VendorApprovalController::class, 'reject'])->name('approvals.partners.reject');
-    Route::get('copyright-claims', [AdminCopyrightClaimController::class, 'index'])->name('copyright.index');
-    Route::patch('copyright-claims/{claim}/transition', [AdminCopyrightClaimController::class, 'transition'])->name('copyright.transition');
+    Route::get('organization-reviews', [OrganizationReviewController::class, 'index'])->name('organization-reviews.index');
+    Route::patch('organizations/{organization}/transition', [OrganizationReviewController::class, 'transitionOrganization'])->name('organizations.transition');
+    Route::patch('organization-relationships/{relationship}/transition', [OrganizationReviewController::class, 'transitionRelationship'])->name('organization-relationships.transition');
     Route::patch('books/{book}/publishing-transition', [AdminBookPublishingController::class, 'transition'])->name('books.publishing.transition');
 
     // Quản lý Tickets hội thoại (Admin)

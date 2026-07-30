@@ -19,7 +19,6 @@ import HelpDeskView from '../views/admin/HelpDeskView.vue'
 import TicketDetailView from '../views/admin/TicketDetailView.vue'
 import CustomerSupportView from '../views/CustomerSupportView.vue'
 import VendorApprovalsView from '../views/admin/VendorApprovalsView.vue'
-import AuthorDashboardView from '../views/vendor/AuthorDashboardView.vue'
 import MembershipTiersView from '../views/admin/MembershipTiersView.vue'
 
 import apiClient from '../services/axios'
@@ -85,26 +84,14 @@ describe('Phase 3 Operational Truth Behavioral Tests', () => {
     expect(setupState.error.value).toContain('Không thể kết nối API chi tiết ticket.')
   })
 
-  it('VendorApprovalsView clears vendor and author lists on API error', async () => {
+  it('VendorApprovalsView clears vendor list on API error', async () => {
     vi.spyOn(apiClient, 'get').mockRejectedValue(new Error('Network error'))
 
     const { setupState } = mountAndCapture(VendorApprovalsView)
-    try { await setupState.fetchApprovals() } catch (err) { expect(err).toBeDefined() }
+    try { await setupState.load() } catch (err) { expect(err).toBeDefined() }
 
-    expect(setupState.pendingVendors.value).toEqual([])
-    expect(setupState.pendingAuthors.value).toEqual([])
-    expect(setupState.error.value).toContain('Không thể kết nối API kiểm duyệt đối tác.')
-  })
-
-  it('AuthorDashboardView sets error state and does not populate fake author metrics on error', async () => {
-    vi.spyOn(apiClient, 'get').mockRejectedValue(new Error('Server error'))
-
-    const { setupState } = mountAndCapture(AuthorDashboardView)
-    try { await setupState.fetchStats() } catch (err) { expect(err).toBeDefined() }
-
-    expect(setupState.profile.value.total_books).toBe(0)
-    expect(setupState.profile.value.pen_name).toBe('')
-    expect(setupState.error.value).toContain('Không thể tải hồ sơ tác giả.')
+    expect(setupState.vendors.value).toEqual([])
+    expect(setupState.error.value).toContain('Không thể tải danh sách hồ sơ Nhà bán.')
   })
 
   it('MembershipTiersView sets error state and does not populate fake tiers on rejection', async () => {

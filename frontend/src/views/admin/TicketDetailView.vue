@@ -150,27 +150,28 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="ticket-detail min-h-screen bg-slate-50 p-6 md:p-8 flex flex-col">
+  <main class="ticket-detail min-h-screen bg-slate-50 p-4 md:p-8 flex flex-col" aria-labelledby="ticket-detail-title">
     <Toast />
     
     <!-- Header -->
     <div class="flex items-center justify-between mb-8 shrink-0">
       <div class="flex items-center gap-3">
-        <Button icon="pi pi-arrow-left" class="p-button-text p-button-secondary p-button-sm" @click="goBack" />
+        <Button icon="pi pi-arrow-left" aria-label="Quay lại danh sách yêu cầu hỗ trợ" class="p-button-text p-button-secondary p-button-sm min-w-11 min-h-11" @click="goBack" />
         <div v-if="ticket">
-          <h1 class="text-xl md:text-2xl font-extrabold text-slate-900">Chi tiết yêu cầu #TK-{{ ticket.id }}</h1>
+          <h1 id="ticket-detail-title" class="text-xl md:text-2xl font-extrabold text-slate-900">Chi tiết yêu cầu #TK-{{ ticket.id }}</h1>
           <p class="text-slate-500 text-xs mt-1">Chủ đề: <strong class="text-slate-700">{{ ticket.subject }}</strong></p>
         </div>
+        <h1 v-else id="ticket-detail-title" class="text-xl md:text-2xl font-extrabold text-slate-900">Chi tiết yêu cầu hỗ trợ</h1>
       </div>
     </div>
 
     <!-- Loading State -->
-    <div v-if="loading" class="flex justify-center p-12 flex-grow items-center">
+    <div v-if="loading" role="status" aria-live="polite" aria-label="Đang tải chi tiết yêu cầu hỗ trợ" class="flex justify-center p-12 flex-grow items-center">
       <i class="pi pi-spin pi-spinner text-3xl text-indigo-600"></i>
     </div>
 
     <!-- Error State -->
-    <div v-else-if="error" class="bg-rose-50 border border-rose-200 rounded-2xl p-8 text-center space-y-4 my-6">
+    <div v-else-if="error" role="alert" class="bg-rose-50 border border-rose-200 rounded-2xl p-8 text-center space-y-4 my-6">
       <i class="pi pi-exclamation-triangle text-4xl text-rose-500"></i>
       <h3 class="text-lg font-bold text-rose-800">Không thể tải chi tiết ticket</h3>
       <p class="text-sm text-rose-600 max-w-md mx-auto">{{ error }}</p>
@@ -183,7 +184,7 @@ onMounted(() => {
     <!-- Main Content -->
     <div v-else-if="ticket" class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start flex-grow min-h-0">
       <!-- Conversation thread -->
-      <div class="lg:col-span-8 flex flex-col bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden h-[600px]">
+      <div class="lg:col-span-8 flex flex-col bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden min-h-[480px] lg:h-[600px]">
         <!-- Thread messages -->
         <div class="flex-grow p-6 overflow-y-auto space-y-4 bg-slate-50/50">
           <div 
@@ -205,7 +206,7 @@ onMounted(() => {
               
               <!-- Attachment preview -->
               <div v-if="msg.has_attachment || msg.attachment" class="mt-2 pt-2 border-t border-slate-100/20 text-xs">
-                <button type="button" @click="downloadAttachment(msg)" class="flex items-center gap-1.5 underline opacity-90 hover:opacity-100 bg-transparent border-none text-inherit cursor-pointer">
+                <button type="button" @click="downloadAttachment(msg)" class="flex min-h-11 items-center gap-1.5 underline opacity-90 hover:opacity-100 bg-transparent border-none text-inherit cursor-pointer">
                   <i class="pi pi-download"></i> Tải / Xem tệp đính kèm
                 </button>
               </div>
@@ -219,9 +220,10 @@ onMounted(() => {
 
         <!-- Input Box -->
         <div class="p-4 border-t border-slate-200 shrink-0 space-y-3 bg-white">
-          <Textarea v-model="replyText" placeholder="Nhập câu trả lời hoặc phản hồi tại đây..." rows="3" class="w-full text-sm resize-none outline-none border-none p-0 focus:ring-0 focus:outline-none" />
+          <label for="ticket-reply" class="sr-only">Nội dung phản hồi yêu cầu hỗ trợ</label>
+          <Textarea id="ticket-reply" v-model="replyText" placeholder="Nhập câu trả lời hoặc phản hồi tại đây..." rows="3" class="w-full text-sm resize-none outline-none border-none p-0 focus:ring-0 focus:outline-none" />
           
-          <div class="flex justify-between items-center pt-2 border-t border-slate-100">
+          <div class="flex flex-col sm:flex-row justify-between sm:items-center gap-3 pt-2 border-t border-slate-100">
             <div>
               <FileUpload mode="basic" accept="image/*" :maxFileSize="5242880" @select="onFileSelect" chooseLabel="Thêm ảnh minh họa" class="p-button-text p-button-sm text-xs" />
               <span v-if="attachment" class="text-[10px] text-indigo-600 font-semibold block mt-1">
@@ -287,11 +289,24 @@ onMounted(() => {
         </div>
       </div>
     </div>
-  </div>
+  </main>
 </template>
 
 <style scoped>
 .ticket-detail {
   font-family: 'Inter', sans-serif;
+}
+
+:deep(.p-button),
+:deep(.p-inputtext) {
+  min-height: 44px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
 }
 </style>

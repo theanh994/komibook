@@ -74,14 +74,6 @@ class User extends Authenticatable
     }
 
     /**
-     * Thông tin tác giả liên kết với tài khoản này.
-     */
-    public function author(): HasOne
-    {
-        return $this->hasOne(Author::class);
-    }
-
-    /**
      * Tất cả yêu cầu hỗ trợ của tài khoản này.
      */
     public function tickets(): HasMany
@@ -126,6 +118,21 @@ class User extends Authenticatable
         return $this->hasMany(UserAddress::class);
     }
 
+    public function warehouseManagerAssignments(): HasMany
+    {
+        return $this->hasMany(WarehouseManagerAssignment::class);
+    }
+
+    public function usedBookSellerProfile(): HasOne
+    {
+        return $this->hasOne(UsedBookSellerProfile::class);
+    }
+
+    public function sellerFulfillmentAddresses(): HasMany
+    {
+        return $this->hasMany(SellerFulfillmentAddress::class);
+    }
+
     /**
      * Danh sách sách yêu thích.
      */
@@ -157,6 +164,14 @@ class User extends Authenticatable
     public function isCustomer(): bool
     {
         return $this->role === 'customer';
+    }
+
+    public function isWarehouseManager(): bool
+    {
+        return $this->warehouseManagerAssignments()->where('status', 'active')
+            ->where(function ($query) {
+                $query->whereNull('expires_at')->orWhere('expires_at', '>', now());
+            })->exists();
     }
 
     /**

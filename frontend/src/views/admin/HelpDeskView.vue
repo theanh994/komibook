@@ -69,7 +69,7 @@ onMounted(() => {
     <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
       <div>
         <h1 class="text-2xl md:text-3xl font-extrabold text-slate-900">Quản lý Yêu cầu Hỗ trợ (Tickets)</h1>
-        <p class="text-slate-500 text-sm mt-1">Tiếp nhận, xử lý và theo dõi các phản hồi từ độc giả và tác giả đối tác.</p>
+        <p class="text-slate-500 text-sm mt-1">Tiếp nhận, xử lý và theo dõi các phản hồi từ độc giả và đối tác kinh doanh.</p>
       </div>
     </div>
 

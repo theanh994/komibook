@@ -6,7 +6,6 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\LoginRequest;
 use App\Http\Requests\Auth\RegisterRequest;
 use App\Http\Resources\UserResource;
-use App\Models\Author;
 use App\Models\User;
 use App\Models\Vendor;
 use App\Services\AccountSessionService;
@@ -120,18 +119,7 @@ class AuthController extends Controller
                 $newUser->forceFill(['email_verified_at' => now()])->save();
             }
 
-            if ($request->desired_role === 'author') {
-                Author::create([
-                    'user_id' => $newUser->id,
-                    'pen_name' => $newUser->name,
-                    'bank_account_number' => null,
-                    'bank_name' => null,
-                    'bank_holder_name' => null,
-                    'identity_document' => null,
-                    'status' => 'pending',
-                    'onboarding_status' => 'draft',
-                ]);
-            } elseif ($request->desired_role === 'vendor') {
+            if ($request->desired_role === 'vendor') {
                 Vendor::withoutGlobalScopes()->create([
                     'user_id' => $newUser->id,
                     'shop_name' => null,
@@ -196,7 +184,7 @@ class AuthController extends Controller
         // Single-device policy clean up tokens nếu có token cũ
         $user->tokens()->delete();
 
-        $user->load(['vendor', 'membershipTier', 'author', 'favoriteCategories']);
+        $user->load(['vendor', 'membershipTier', 'usedBookSellerProfile', 'favoriteCategories', 'warehouseManagerAssignments']);
 
         return response()->json([
             'status' => 'success',
@@ -245,7 +233,7 @@ class AuthController extends Controller
         /** @var User $user */
         $user = $request->user();
 
-        $user->load(['vendor', 'membershipTier', 'author', 'favoriteCategories']);
+        $user->load(['vendor', 'membershipTier', 'usedBookSellerProfile', 'favoriteCategories', 'warehouseManagerAssignments']);
 
         return response()->json([
             'status' => 'success',
@@ -377,7 +365,7 @@ class AuthController extends Controller
                 $request->session()->put('auth.password_confirmed_at', time());
             }
 
-            $user->load(['vendor', 'membershipTier', 'author', 'favoriteCategories']);
+            $user->load(['vendor', 'membershipTier', 'usedBookSellerProfile', 'favoriteCategories']);
 
             return response()->json([
                 'status' => 'success',
@@ -464,7 +452,7 @@ class AuthController extends Controller
                 $request->session()->put('auth.password_confirmed_at', time());
             }
 
-            $user->load(['vendor', 'membershipTier', 'author', 'favoriteCategories']);
+            $user->load(['vendor', 'membershipTier', 'usedBookSellerProfile', 'favoriteCategories']);
 
             return response()->json([
                 'status' => 'success',

@@ -5,6 +5,7 @@ import apiClient from '@/services/axios'
 
 const toast = useToast()
 const loading = ref(true)
+const errorMessage = ref('')
 
 const analyticsData = ref({
   top_selling_books: [],
@@ -14,6 +15,8 @@ const analyticsData = ref({
 })
 
 const fetchAnalytics = async () => {
+  loading.value = true
+  errorMessage.value = ''
   try {
     const res = await apiClient.get('/api/vendor/analytics')
     if (res.data.status === 'success') {
@@ -21,6 +24,7 @@ const fetchAnalytics = async () => {
     }
   } catch (error) {
     toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Không thể tải dữ liệu phân tích.', life: 3000 })
+    errorMessage.value = 'Không thể tải dữ liệu phân tích của gian hàng. Vui lòng thử lại.'
   } finally {
     loading.value = false
   }
@@ -58,6 +62,11 @@ const avgRating = computed(() => {
       </div>
     </div>
 
+    <div v-if="errorMessage" class="mb-lg flex flex-col gap-3 rounded-xl border border-error/30 bg-error-container/30 p-4 text-on-error-container sm:flex-row sm:items-center sm:justify-between" role="alert">
+      <span>{{ errorMessage }}</span>
+      <button type="button" class="min-h-11 rounded-lg border border-error/40 px-4 font-bold" @click="fetchAnalytics">Thử lại</button>
+    </div>
+
     <!-- Loading Skeleton -->
     <div v-if="loading" class="grid grid-cols-1 md:grid-cols-12 gap-gutter animate-pulse">
       <div class="md:col-span-8 bg-surface-container-lowest h-64 rounded-xl"></div>
@@ -65,7 +74,7 @@ const avgRating = computed(() => {
     </div>
 
     <!-- Bento Grid Layout -->
-    <div v-else class="grid grid-cols-1 md:grid-cols-12 gap-gutter animate-slide-up">
+    <div v-else-if="!errorMessage" class="grid grid-cols-1 md:grid-cols-12 gap-gutter animate-slide-up">
       <!-- Top Books (Span 8) -->
       <div class="md:col-span-8 bg-surface-container-lowest rounded-xl p-md shadow-[0px_12px_24px_0px_rgba(26,58,90,0.04)] border border-surface-container-high">
         <h3 class="font-headline-md text-[18px] text-primary mb-4">Sách bán chạy nhất</h3>
@@ -80,7 +89,12 @@ const avgRating = computed(() => {
             </thead>
             <tbody class="divide-y divide-outline-variant/10 text-body-md">
               <tr v-for="book in analyticsData.top_selling_books" :key="book.id" class="hover:bg-surface-container-low">
-                <td class="py-3 font-medium text-on-surface">{{ book.title }}</td>
+                <td class="py-3 font-medium text-on-surface">
+                  <span class="flex items-center gap-3">
+                    <img v-if="book.cover_image" :src="book.cover_image" :alt="`Bìa ${book.title}`" class="h-14 w-10 shrink-0 object-contain" />
+                    <span>{{ book.title }}</span>
+                  </span>
+                </td>
                 <td class="py-3 text-right">{{ book.total_sold }}</td>
                 <td class="py-3 text-right text-primary font-bold">{{ formatVND(book.total_revenue) }}</td>
               </tr>

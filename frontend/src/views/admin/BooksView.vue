@@ -214,8 +214,9 @@ onMounted(() => {
             <i class="pi pi-search absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
             <InputText
               v-model="filterTitle"
+              aria-label="Tìm sách theo tên, tác giả, gian hàng hoặc ISBN"
               placeholder="Tìm theo tên sách, tác giả, gian hàng, ISBN..."
-              class="w-full !pl-10 !pr-4 !py-2 !h-10 !bg-white !border-slate-200 !rounded-xl !text-sm"
+              class="w-full !pl-10 !pr-4 !py-2 !h-11 !bg-white !border-slate-200 !rounded-xl !text-sm"
               @keyup.enter="onFilter"
             />
           </div>
@@ -227,8 +228,9 @@ onMounted(() => {
             optionLabel="label"
             optionValue="value"
             placeholder="Tất cả danh mục"
+            aria-label="Lọc theo danh mục"
             showClear
-            class="!h-10 min-w-[170px] !rounded-xl"
+            class="!h-11 min-w-[170px] !rounded-xl"
             @change="onFilter"
           />
 
@@ -239,8 +241,9 @@ onMounted(() => {
             optionLabel="label"
             optionValue="value"
             placeholder="Loại sách"
+            aria-label="Lọc theo loại sách"
             showClear
-            class="!h-10 min-w-[130px] !rounded-xl"
+            class="!h-11 min-w-[130px] !rounded-xl"
             @change="onFilter"
           />
 
@@ -251,8 +254,9 @@ onMounted(() => {
             optionLabel="label"
             optionValue="value"
             placeholder="Trạng thái"
+            aria-label="Lọc theo trạng thái sách"
             showClear
-            class="!h-10 min-w-[140px] !rounded-xl"
+            class="!h-11 min-w-[140px] !rounded-xl"
             @change="onFilter"
           />
 
@@ -260,7 +264,8 @@ onMounted(() => {
             icon="pi pi-filter-slash"
             severity="secondary"
             text
-            class="!h-10 !w-10 !rounded-xl"
+            aria-label="Xóa bộ lọc sách"
+            class="!h-11 !w-11 !rounded-xl"
             v-tooltip.top="'Xóa bộ lọc'"
             @click="resetFilter"
           />
@@ -306,7 +311,7 @@ onMounted(() => {
                 <a
                   :href="`/book/${data.slug}`"
                   target="_blank"
-                  class="font-bold text-sm text-slate-800 hover:text-indigo-600 transition-colors line-clamp-1 text-decoration-none"
+                  class="min-h-11 font-bold text-sm text-slate-800 hover:text-indigo-600 transition-colors line-clamp-1 text-decoration-none flex items-center"
                 >
                   {{ data.title }}
                 </a>

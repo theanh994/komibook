@@ -106,12 +106,12 @@ onMounted(() => {
         <p class="text-slate-500 text-sm mt-1">Quản lý tích điểm khách hàng thân thiết, ưu đãi chiết khấu và lợi ích VIP.</p>
       </div>
       <div class="flex gap-2">
-        <Button label="Thêm hạng mới" icon="pi pi-plus" class="p-button-primary bg-indigo-600 hover:bg-indigo-700 text-white font-bold" @click="openCreateTier" />
+        <Button label="Thêm hạng mới" icon="pi pi-plus" class="min-h-11 p-button-primary bg-indigo-600 hover:bg-indigo-700 text-white font-bold" @click="openCreateTier" />
       </div>
     </div>
 
     <!-- Error State -->
-    <div v-if="error" class="bg-rose-50 border border-rose-200 rounded-2xl p-6 text-center space-y-3 mb-8">
+    <div v-if="error" role="alert" class="bg-rose-50 border border-rose-200 rounded-2xl p-6 text-center space-y-3 mb-8">
       <h3 class="text-base font-bold text-rose-800">Không thể tải danh sách hạng thành viên</h3>
       <p class="text-xs text-rose-600">{{ error }}</p>
       <Button label="Thử lại" icon="pi pi-refresh" class="p-button-danger p-button-sm text-xs bg-rose-600 text-white" @click="fetchTiers" />
@@ -123,11 +123,11 @@ onMounted(() => {
         <h3 class="font-bold text-slate-800 text-sm">Cấu hình cấp độ VIP & Quyền lợi</h3>
       </div>
 
-      <div v-if="loading" class="flex justify-center p-12">
+      <div v-if="loading" role="status" aria-live="polite" class="flex justify-center p-12">
         <i class="pi pi-spin pi-spinner text-3xl text-indigo-600"></i>
       </div>
 
-      <div v-else-if="!error" class="overflow-x-auto">
+      <div v-else-if="!error" class="overflow-x-auto" role="region" aria-label="Danh sách hạng thành viên" tabindex="0">
         <table class="w-full text-left border-collapse text-sm">
           <thead>
             <tr class="bg-slate-50 text-xs font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200">
@@ -150,8 +150,8 @@ onMounted(() => {
               <td class="p-4 text-slate-600 text-xs max-w-sm">{{ tier.benefits || '—' }}</td>
               <td class="p-4 text-center">
                 <div class="flex gap-2 justify-center">
-                  <Button label="Sửa" icon="pi pi-pencil" class="p-button-text p-button-sm p-1 text-xs" @click="openEditTier(tier)" />
-                  <Button label="Xóa" icon="pi pi-trash" class="p-button-text p-button-danger p-button-sm p-1 text-xs text-rose-600" @click="deleteTier(tier.id)" />
+                  <Button label="Sửa" icon="pi pi-pencil" class="min-h-11 p-button-text p-button-sm px-3 text-xs" @click="openEditTier(tier)" />
+                  <Button label="Xóa" icon="pi pi-trash" class="min-h-11 p-button-text p-button-danger p-button-sm px-3 text-xs text-rose-600" @click="deleteTier(tier.id)" />
                 </div>
               </td>
             </tr>
@@ -167,24 +167,24 @@ onMounted(() => {
     <Dialog v-model:visible="showEditDialog" modal :header="selectedTier.id ? 'Sửa hạng thành viên' : 'Thêm hạng thành viên mới'" :style="{ width: '90vw', maxWidth: '500px' }">
       <div class="space-y-4">
         <div class="flex flex-col gap-1.5">
-          <label class="text-xs font-bold text-slate-500">Tên hạng thành viên <span class="text-rose-500">*</span></label>
-          <InputText v-model="selectedTier.name" placeholder="Ví dụ: Vàng, Kim Cương" class="w-full text-sm" />
+          <label for="membership-name" class="text-xs font-bold text-slate-500">Tên hạng thành viên <span class="text-rose-500">*</span></label>
+          <InputText id="membership-name" v-model="selectedTier.name" placeholder="Ví dụ: Vàng, Kim Cương" class="w-full min-h-11 text-sm" />
         </div>
         
         <div class="grid grid-cols-2 gap-4">
           <div class="flex flex-col gap-1.5">
-            <label class="text-xs font-bold text-slate-500">Điểm tích lũy tối thiểu</label>
-            <input type="number" v-model="selectedTier.min_points" class="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-lg text-xs" />
+            <label for="membership-points" class="text-xs font-bold text-slate-500">Điểm tích lũy tối thiểu</label>
+            <input id="membership-points" type="number" v-model="selectedTier.min_points" class="w-full min-h-11 px-3 py-1.5 bg-white border border-slate-300 rounded-lg text-xs" />
           </div>
           <div class="flex flex-col gap-1.5">
-            <label class="text-xs font-bold text-slate-500">Chiết khấu đơn hàng (%)</label>
-            <input type="number" v-model="selectedTier.discount_percent" class="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-lg text-xs" />
+            <label for="membership-discount" class="text-xs font-bold text-slate-500">Chiết khấu đơn hàng (%)</label>
+            <input id="membership-discount" type="number" v-model="selectedTier.discount_percent" class="w-full min-h-11 px-3 py-1.5 bg-white border border-slate-300 rounded-lg text-xs" />
           </div>
         </div>
 
         <div class="flex flex-col gap-1.5">
-          <label class="text-xs font-bold text-slate-500">Quyền lợi và Lợi ích nổi bật</label>
-          <InputText v-model="selectedTier.benefits" placeholder="Nhập các quyền lợi, cách nhau bằng dấu phẩy..." class="w-full text-sm" />
+          <label for="membership-benefits" class="text-xs font-bold text-slate-500">Quyền lợi và Lợi ích nổi bật</label>
+          <InputText id="membership-benefits" v-model="selectedTier.benefits" placeholder="Nhập các quyền lợi, cách nhau bằng dấu phẩy..." class="w-full min-h-11 text-sm" />
         </div>
       </div>
       

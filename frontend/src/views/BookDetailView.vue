@@ -9,15 +9,15 @@
     <div class="w-full px-gutter max-w-[1280px] mx-auto py-6 relative z-10">
 
       <!-- Compact Breadcrumb -->
-      <nav class="mb-4 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-outline/60 animate-fade-in">
-        <router-link to="/" class="hover:text-primary transition-all flex items-center gap-1 group">
+      <nav class="mb-4 flex items-center gap-1 overflow-x-auto text-xs font-bold text-outline animate-fade-in" aria-label="Đường dẫn">
+        <router-link to="/" class="flex min-h-11 min-w-11 items-center justify-center transition-colors hover:text-primary" aria-label="Trang chủ">
           <span class="material-symbols-outlined text-[18px] group-hover:scale-110 transition-transform">home</span>
         </router-link>
         <span class="material-symbols-outlined text-[12px]">chevron_right</span>
-        <router-link to="/catalog" class="hover:text-primary transition-all">Danh mục</router-link>
+        <router-link to="/catalog" class="inline-flex min-h-11 items-center px-1 transition-colors hover:text-primary">Danh mục</router-link>
         <template v-if="displayCategories.length > 0">
           <span class="material-symbols-outlined text-[12px]">chevron_right</span>
-          <router-link            :to="{ name: 'catalog', query: { category_id: displayCategories[0].id } }"            class="text-primary hover:underline hover:opacity-80 transition-all cursor-pointer"
+          <router-link            :to="{ name: 'catalog', query: { category_id: displayCategories[0].id } }"            class="inline-flex min-h-11 items-center px-1 text-primary transition-colors hover:underline"
           >
             {{ displayCategories[0].name }}
           </router-link>
@@ -104,7 +104,8 @@
                     @mouseleave="onMouseLeave"
                     @dblclick="openLightbox"
                   >
-                    <img :src="activeImageUrl" :alt="book.title" class="w-full h-full object-contain mx-auto select-none rounded-none pointer-events-none" />
+                    <img v-if="activeImageUrl" :src="activeImageUrl" :alt="book.title" class="w-full h-full object-contain mx-auto select-none rounded-none pointer-events-none" />
+                    <span v-else class="material-symbols-outlined text-5xl text-outline" aria-hidden="true">image</span>
                     <!-- Lens Overlay when Hovering -->
                     <div                      v-if="isZooming"                      class="absolute border-2 border-primary bg-primary/20 pointer-events-none z-30 rounded-none shadow-md backdrop-blur-[1px]"
                       :style="{                        width: lensWidth + 'px',                        height: lensHeight + 'px',
@@ -149,7 +150,7 @@
               <div v-for="stat in quickStats" :key="stat.label" class="bg-surface-container-lowest rounded-2xl p-3 text-center border border-outline-variant/10 shadow-sm hover:scale-105 transition-all">
                 <span class="material-symbols-outlined text-primary text-xl mb-1">{{ stat.icon }}</span>
                 <p class="text-sm font-bold text-on-surface leading-none mb-1">{{ stat.value }}</p>
-                <p class="text-[9px] font-bold uppercase tracking-wider text-outline opacity-60">{{ stat.label }}</p>
+                <p class="text-xs font-bold uppercase tracking-wider text-outline">{{ stat.label }}</p>
               </div>
             </div>
           </div>
@@ -161,12 +162,15 @@
               <div class="border-b border-outline-variant/10 pb-6 mb-6">
                 <div class="flex items-center gap-2 mb-3">
                   <router-link                    v-for="cat in displayCategories"                    :key="cat.id"                    :to="{ name: 'catalog', query: { category_id: cat.id } }"
-                    class="text-[10px] bg-primary/10 text-primary hover:bg-primary hover:text-white font-bold px-3 py-1 rounded-full uppercase tracking-wider transition-all cursor-pointer no-underline"
+                    class="inline-flex min-h-11 items-center rounded-full bg-primary/10 px-3 text-xs font-bold uppercase tracking-wider text-primary no-underline transition-colors hover:bg-primary hover:text-white"
                   >
                     {{ cat.name }}
                   </router-link>
-                  <span v-if="book.type === 'ebook'" class="text-[10px] bg-secondary/10 text-secondary font-bold px-3 py-1 rounded-full uppercase tracking-wider flex items-center gap-1">
+                  <span v-if="book.type === 'ebook'" class="flex min-h-11 items-center gap-1 rounded-full bg-secondary/10 px-3 text-xs font-bold uppercase tracking-wider text-secondary">
                     <span class="material-symbols-outlined text-[14px]">auto_stories</span> E-book Digital
+                  </span>
+                  <span v-if="book.type === 'ebook'" class="flex min-h-11 items-center rounded-full bg-primary/10 px-3 text-xs font-bold uppercase tracking-wider text-primary">
+                    Phiên bản {{ book.latest_ebook_version?.version || 1 }}
                   </span>
                 </div>
 
@@ -174,7 +178,7 @@
                   {{ book.title }}
                 </h1>
 
-                <!-- Real Ratings Star Bar & Author Info -->
+                <!-- Điểm đánh giá và thông tin người viết của ấn phẩm -->
                 <div class="flex flex-wrap items-center gap-4 text-xs">
                    <div class="flex items-center gap-1.5 bg-surface-container-low px-3 py-1.5 rounded-full border border-outline-variant/10">
                       <div class="flex">
@@ -187,7 +191,7 @@
                    <div class="h-4 w-[1px] bg-outline-variant/30"></div>
 
                    <div>
-                      <p class="text-[8px] font-bold uppercase tracking-widest text-outline opacity-50">Tác giả</p>
+                      <p class="text-xs font-bold uppercase tracking-widest text-outline">Tác giả</p>
                       <p class="text-base font-bold text-on-surface tracking-tight">{{ book.author }}</p>
                    </div>
                 </div>
@@ -197,7 +201,7 @@
               <div class="bg-surface-container-low/50 rounded-2xl p-6 border border-outline-variant/10 mb-6">
                  <div class="flex flex-col sm:flex-row items-center justify-between gap-6">
                     <div class="text-center sm:text-left">
-                       <p class="text-[9px] font-bold uppercase tracking-widest text-primary mb-1">Giá bán niêm yết</p>
+                       <p class="mb-1 text-xs font-bold uppercase tracking-widest text-primary">Giá bán niêm yết</p>
                        <div class="flex items-center gap-3">
                           <span class="text-3xl font-bold text-primary tracking-tight">{{ formatCurrency(book.sale_price || book.price) }}</span>
                           <span v-if="book.sale_price && book.price > book.sale_price" class="text-lg text-outline/50 line-through font-bold">{{ formatCurrency(book.price) }}</span>
@@ -216,7 +220,7 @@
                             <span class="material-symbols-outlined text-[20px]">remove_shopping_cart</span>
                             Sách đã hết hàng (Tạm ngừng bán)
                           </div>
-                          <button @click="toggleWishlist" class="w-12 h-12 rounded-xl border border-outline-variant/30 flex items-center justify-center hover:bg-surface-container-high transition-all shadow-sm cursor-pointer" title="Thêm vào yêu thích">
+                          <button @click="toggleWishlist" class="w-12 h-12 rounded-xl border border-outline-variant/30 flex items-center justify-center hover:bg-surface-container-high transition-all shadow-sm cursor-pointer" :aria-label="wishlistStore.isFavorite(book?.id) ? 'Bỏ khỏi yêu thích' : 'Thêm vào yêu thích'">
                             <span class="material-symbols-outlined text-[22px]" :class="wishlistStore.isFavorite(book?.id) ? 'text-error fill-1' : 'text-outline'">favorite</span>
                           </button>
                        </template>
@@ -228,7 +232,7 @@
                           <button @click="buyNow" class="bg-primary text-on-primary px-8 py-3.5 rounded-xl font-bold text-xs uppercase tracking-wider shadow-md shadow-primary/20 hover:scale-105 active:scale-95 transition-all cursor-pointer border-none">
                             Mua ngay
                           </button>
-                          <button @click="toggleWishlist" class="w-12 h-12 rounded-xl border border-outline-variant/30 flex items-center justify-center hover:bg-surface-container-high transition-all shadow-sm cursor-pointer">
+                          <button @click="toggleWishlist" class="w-12 h-12 rounded-xl border border-outline-variant/30 flex items-center justify-center hover:bg-surface-container-high transition-all shadow-sm cursor-pointer" :aria-label="wishlistStore.isFavorite(book?.id) ? 'Bỏ khỏi yêu thích' : 'Thêm vào yêu thích'">
                             <span class="material-symbols-outlined text-[22px]" :class="wishlistStore.isFavorite(book?.id) ? 'text-error fill-1' : 'text-outline'">favorite</span>
                           </button>
                        </template>
@@ -239,10 +243,31 @@
               <!-- Metadata Specifications Grid -->
               <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6 py-4 border-y border-outline-variant/10">
                 <div v-for="meta in bookMeta" :key="meta.label" class="space-y-1 p-2 rounded-xl hover:bg-surface-container-low/40 transition-colors">
-                   <p class="text-[8px] font-bold uppercase tracking-wider text-outline opacity-60">{{ meta.label }}</p>
+                   <p class="text-xs font-bold uppercase tracking-wider text-outline">{{ meta.label }}</p>
                    <p class="text-sm font-bold text-on-surface tracking-tight">{{ meta.value }}</p>
                 </div>
               </div>
+
+              <section class="mb-6 rounded-2xl border border-outline-variant/30 bg-surface-container-low p-5" aria-labelledby="commercial-parties-title">
+                <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p class="text-xs font-bold uppercase tracking-wider text-primary">Nguồn sách đã khai báo</p>
+                    <h2 id="commercial-parties-title" class="mt-1 text-lg font-bold text-on-surface">Thông tin xuất bản và cung ứng</h2>
+                  </div>
+                  <router-link v-if="book.vendor?.slug" :to="{ name: 'catalog', query: { vendor: book.vendor.slug } }" class="inline-flex min-h-11 items-center gap-2 rounded-xl border border-primary px-4 text-sm font-bold text-primary no-underline transition-colors hover:bg-primary hover:text-on-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
+                    <span class="material-symbols-outlined text-lg" aria-hidden="true">storefront</span>
+                    Xem gian hàng {{ book.vendor.name }}
+                  </router-link>
+                </div>
+                <div v-if="book.commercial_parties && Object.keys(book.commercial_parties).length" class="mt-5 grid gap-3 md:grid-cols-3">
+                  <router-link v-for="(party, role) in book.commercial_parties" :key="role" :to="{ name: 'organization-public', params: { slug: party.slug } }" class="min-h-24 rounded-xl border border-outline-variant/40 bg-surface-container-lowest p-4 no-underline transition-shadow duration-200 hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
+                    <p class="text-xs font-semibold uppercase tracking-wider text-on-surface-variant">{{ role === 'publisher' ? 'Nhà xuất bản' : role === 'supplier' ? 'Nhà cung cấp' : 'Đơn vị chịu trách nhiệm được khai báo' }}</p>
+                    <p class="mt-2 font-bold text-on-surface">{{ party.display_name }}</p>
+                    <p class="mt-1 text-xs text-primary"><span class="material-symbols-outlined mr-1 align-middle text-sm" aria-hidden="true">verified</span>Đã xác minh</p>
+                  </router-link>
+                </div>
+                <p v-else class="mt-4 rounded-xl bg-surface-container p-4 text-sm text-on-surface-variant">Sản phẩm legacy đang được đối chiếu hồ sơ xuất bản và chuỗi cung ứng.</p>
+              </section>
 
               <!-- Compact Description -->
               <div class="w-full max-w-full overflow-hidden">
@@ -258,12 +283,12 @@
               <div v-if="bookTags && bookTags.length > 0" class="mt-6 pt-4 border-t border-outline-variant/10">
                 <div class="flex flex-wrap gap-2 items-center">
                   <span class="text-xs font-bold text-on-surface-variant mr-1">Tags:</span>
-                  <span                    v-for="tag in bookTags"                    :key="tag"                    @click="onTagClick(tag)"
-                    class="bg-surface-container-low text-on-surface-variant hover:text-white hover:bg-[#00b14f] hover:border-[#00b14f] transition-all text-xs font-semibold px-3 py-1 rounded-full cursor-pointer border border-outline-variant/20 shadow-xs active:scale-95 flex items-center gap-1 select-none"
+                  <button                    v-for="tag in bookTags"                    :key="tag"                    type="button"                    @click="onTagClick(tag)"
+                    class="flex min-h-11 items-center gap-1 rounded-full border border-outline-variant/20 bg-surface-container-low px-3 text-xs font-semibold text-on-surface-variant shadow-xs transition-colors hover:border-secondary hover:bg-secondary hover:text-on-secondary"
                     title="Bấm để lọc các sách liên quan"
                   >
                     #{{ tag }}
-                  </span>
+                  </button>
                 </div>
               </div>
 
@@ -287,7 +312,7 @@
 
                     <div>
                       <button                        v-if="chapter.is_free"                        @click="openPreviewChapter(chapter)"
-                        class="px-3 py-1 bg-emerald-50 text-emerald-700 border border-emerald-100 hover:bg-emerald-600 hover:text-white rounded-lg text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer"
+                        class="min-h-11 rounded-lg border border-emerald-100 bg-emerald-50 px-3 text-xs font-black uppercase tracking-wider text-emerald-700 transition-colors hover:bg-emerald-600 hover:text-white"
                       >
                         Đọc thử
                       </button>
@@ -315,7 +340,7 @@
                   </h3>
                   <p class="text-xs text-on-surface-variant font-medium opacity-60">Đánh giá từ các độc giả đã trải nghiệm tác phẩm.</p>
                 </div>
-                <button @click="showReviewModal = true" class="bg-primary text-on-primary px-5 py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider hover:bg-primary/90 transition-all shadow-sm cursor-pointer border-none">
+                <button @click="showReviewModal = true" class="min-h-11 rounded-xl border-none bg-primary px-5 text-xs font-bold uppercase tracking-wider text-on-primary shadow-sm transition-colors hover:bg-primary/90">
                   Viết đánh giá
                 </button>
               </header>
@@ -370,15 +395,15 @@
                   </span>
                   <button                    type="button"
                     :disabled="seriesPageIndex === 0"                    @click="prevSeriesPage"
-                    class="w-9 h-9 rounded-xl border border-outline-variant/30 flex items-center justify-center bg-surface-container-low text-on-surface disabled:opacity-30 disabled:cursor-not-allowed hover:bg-primary hover:text-on-primary hover:border-primary transition-all cursor-pointer shadow-xs"
-                    title="Tập trước"
+                    class="flex h-11 w-11 items-center justify-center rounded-xl border border-outline-variant/30 bg-surface-container-low text-on-surface shadow-xs transition-colors hover:border-primary hover:bg-primary hover:text-on-primary disabled:cursor-not-allowed disabled:opacity-30"
+                    aria-label="Trang series trước"
                   >
                     <span class="material-symbols-outlined text-lg">chevron_left</span>
                   </button>
                   <button                    type="button"
                     :disabled="seriesPageIndex >= totalSeriesPages - 1"                    @click="nextSeriesPage"
-                    class="w-9 h-9 rounded-xl border border-outline-variant/30 flex items-center justify-center bg-surface-container-low text-on-surface disabled:opacity-30 disabled:cursor-not-allowed hover:bg-primary hover:text-on-primary hover:border-primary transition-all cursor-pointer shadow-xs"
-                    title="Tập tiếp theo"
+                    class="flex h-11 w-11 items-center justify-center rounded-xl border border-outline-variant/30 bg-surface-container-low text-on-surface shadow-xs transition-colors hover:border-primary hover:bg-primary hover:text-on-primary disabled:cursor-not-allowed disabled:opacity-30"
+                    aria-label="Trang series tiếp theo"
                   >
                     <span class="material-symbols-outlined text-lg">chevron_right</span>
                   </button>
@@ -394,7 +419,7 @@
                 >
                   <!-- Cover Image: Edge-to-edge top, square corners at top, no grey background -->
                   <div class="relative w-full aspect-[3/4.2] overflow-hidden bg-surface-variant/10">
-                    <img                      :src="getCoverUrl(sBook.cover_image)"                      :alt="sBook.title"                      class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"                    />
+                    <img                      :src="getCoverUrl(sBook.cover_image)"                      :alt="sBook.title"                      class="h-full w-full rounded-none object-contain p-2"                    />
                     <span v-if="sBook.sale_price && sBook.price > sBook.sale_price" class="absolute top-2 right-2 bg-secondary text-on-secondary text-[10px] font-extrabold px-2 py-0.5 rounded-md shadow-sm z-10">
                       -{{ Math.round((1 - sBook.sale_price / sBook.price) * 100) }}%
                     </span>
@@ -444,7 +469,7 @@
             >
               <!-- Cover Image: Edge-to-edge top, square corners at top -->
               <div class="relative w-full aspect-[3/4.2] overflow-hidden bg-surface-variant/10">
-                <img v-if="rBook.cover_image" :src="getCoverUrl(rBook.cover_image)" :alt="rBook.title" class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" loading="lazy" />
+                <img v-if="rBook.cover_image" :src="getCoverUrl(rBook.cover_image)" :alt="rBook.title" class="h-full w-full rounded-none object-contain p-2" loading="lazy" />
                 <div v-else class="absolute inset-0 flex items-center justify-center"><span class="material-symbols-outlined text-outline text-4xl">image</span></div>
                 <span v-if="rBook.sale_price && rBook.price > rBook.sale_price" class="absolute top-2 right-2 bg-secondary text-on-secondary text-[10px] font-extrabold px-2 py-0.5 rounded-md shadow-sm z-10">
                   -{{ Math.round((1 - rBook.sale_price / rBook.price) * 100) }}%
@@ -475,7 +500,9 @@
           <label class="block text-xs font-bold uppercase text-outline mb-2">Số sao đánh giá</label>
           <div class="flex items-center gap-2">
              <button               v-for="star in 5"               :key="star"               type="button"               @click="reviewForm.rating = star"
-               class="p-1 border-none bg-transparent cursor-pointer"
+               class="flex h-11 w-11 items-center justify-center border-none bg-transparent"
+               :aria-label="`${star} sao`"
+               :aria-pressed="reviewForm.rating === star"
              >
                 <span class="material-symbols-outlined text-2xl" :style="{ 'font-variation-settings': star <= reviewForm.rating ? `'FILL' 1` : `'FILL' 0`, color: star <= reviewForm.rating ? '#ba0035' : '#c3c6ce' }">star</span>
              </button>
@@ -492,8 +519,8 @@
 
       <template #footer>
         <div class="flex justify-end gap-3 pt-2">
-          <button @click="showReviewModal = false" class="px-4 py-2 rounded-lg text-xs font-bold text-outline hover:bg-surface-container-high border-none bg-transparent cursor-pointer">Hủy</button>
-          <button @click="submitReview" :disabled="isSubmittingReview" class="px-6 py-2 bg-primary text-on-primary rounded-lg text-xs font-bold uppercase tracking-wider shadow border-none cursor-pointer">
+          <button @click="showReviewModal = false" class="min-h-11 rounded-lg border-none bg-transparent px-4 text-xs font-bold text-outline hover:bg-surface-container-high">Hủy</button>
+          <button @click="submitReview" :disabled="isSubmittingReview" class="min-h-11 rounded-lg border-none bg-primary px-6 text-xs font-bold uppercase tracking-wider text-on-primary shadow">
             {{ isSubmittingReview ? 'Đang gửi...' : 'Gửi đánh giá' }}
           </button>
         </div>
@@ -509,7 +536,7 @@
       <template #footer>
         <div class="p-3 bg-indigo-50/50 rounded-xl border border-indigo-100 flex items-center justify-between text-xs text-slate-600 w-full mt-2">
           <span>Đọc thử miễn phí KomiBook DRM.</span>
-          <button @click="previewDialogVisible = false" class="px-4 py-2 bg-primary text-on-primary rounded-lg font-bold text-[10px] uppercase tracking-widest border-none cursor-pointer">Đóng</button>
+          <button @click="previewDialogVisible = false" class="min-h-11 rounded-lg border-none bg-primary px-4 text-xs font-bold uppercase tracking-widest text-on-primary">Đóng</button>
         </div>
       </template>
     </Dialog>
@@ -644,7 +671,7 @@ const lightboxVisible = ref(false)
 const allImages = computed(() => {
   if (!book.value) return []
   const list = [book.value.cover_image, ...(book.value.gallery_images || [])].filter(Boolean)
-  return list.length ? list : ['https://images.unsplash.com/photo-1543002588-bfa74002ed7e?q=80&w=600&auto=format&fit=crop']
+  return list
 })
 
 const activeImageUrl = computed(() => {
@@ -694,7 +721,7 @@ const onMouseLeave = () => {
 }
 
 const openLightbox = () => {
-  lightboxVisible.value = true
+  if (activeImageUrl.value) lightboxVisible.value = true
 }
 
 const openPreviewChapter = (chapter) => {
@@ -755,7 +782,7 @@ const bookTags = computed(() => {
 const bookMeta = computed(() => {
   if (!book.value) return []
   const meta = [
-    { label: 'Nhà cung cấp', value: book.value.vendor?.name || 'KomiBook Studio' },
+    { label: 'Nhà cung cấp', value: book.value.commercial_parties?.supplier?.display_name || 'Đang xác minh' },
   ]
 
   if (book.value.translator) {
@@ -835,7 +862,7 @@ const checkEbookOwnership = async (bookId) => {
 
 const fetchAuthorBooks = async (bookId) => {
   try {
-    const res = await apiClient.get(`/api/books/${bookId}/author`)
+    const res = await apiClient.get(`/api/books/${bookId}/contributors`)
     relatedAuthorBooks.value = res.data.data || []
   } catch (error) {
     console.warn('Không thể tải sách cùng tác giả:', error)

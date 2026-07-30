@@ -7,6 +7,7 @@ const toast = useToast()
 
 const period = ref('Tháng Này (' + new Date().toLocaleDateString('vi-VN', { month: '2-digit', year: 'numeric' }) + ')')
 const loading = ref(true)
+const error = ref('')
 
 const reportData = ref({
   kpi: { total_revenue: 0, monthly_revenue: 0, total_orders: 0, completed_orders: 0, total_customers: 0, avg_order_value: 0 },
@@ -18,13 +19,16 @@ const reportData = ref({
 
 const fetchReport = async () => {
   loading.value = true
+  error.value = ''
   try {
     const res = await apiClient.get('/api/admin/finance-report')
     if (res.data.status === 'success') {
       reportData.value = res.data.data
     }
-  } catch (error) {
-    toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Không thể tải báo cáo tài chính.', life: 3000 })
+  } catch (requestError) {
+    const message = requestError.response?.data?.message || 'Không thể tải báo cáo tài chính.'
+    error.value = message
+    toast.add({ severity: 'error', summary: 'Lỗi', detail: message, life: 3000 })
   } finally {
     loading.value = false
   }
@@ -60,11 +64,17 @@ const kpiCards = computed(() => [
     </header>
 
     <!-- Loading Skeleton -->
-    <div v-if="loading" class="grid grid-cols-1 md:grid-cols-3 gap-lg mb-xl">
+    <div v-if="loading" role="status" aria-live="polite" aria-label="Đang tải báo cáo tài chính" class="grid grid-cols-1 md:grid-cols-3 gap-lg mb-xl">
       <div v-for="i in 3" :key="i" class="bg-surface-container-lowest h-32 rounded-xl shadow-card border border-outline-variant/20 animate-pulse"></div>
     </div>
 
     <!-- KPI Cards -->
+    <div v-else-if="error" role="alert" class="mb-xl rounded-xl border border-error/20 bg-error/5 p-6 text-center">
+      <p class="font-bold text-error">Không thể tải báo cáo tài chính</p>
+      <p class="mt-2 text-sm text-on-surface-variant">{{ error }}</p>
+      <button type="button" class="mt-4 min-h-11 rounded-xl bg-error px-5 font-bold text-white" @click="fetchReport">Thử lại</button>
+    </div>
+
     <div v-else class="grid grid-cols-1 md:grid-cols-3 gap-lg mb-xl animate-slide-up">
       <div
         v-for="(card, idx) in kpiCards" :key="idx"
@@ -85,11 +95,11 @@ const kpiCards = computed(() => [
     </div>
 
     <!-- Charts & Vendors Section -->
-    <div v-if="!loading" class="grid grid-cols-1 lg:grid-cols-3 gap-lg mb-xl animate-slide-up delay-100">
+    <div v-if="!loading && !error" class="grid grid-cols-1 lg:grid-cols-3 gap-lg mb-xl animate-slide-up delay-100">
       <!-- Top Vendors -->
       <div class="col-span-1 lg:col-span-2 bg-surface-container-lowest rounded-xl shadow-card border border-outline-variant/20 p-lg overflow-hidden">
         <h3 class="font-headline-md text-headline-md text-on-surface mb-6">Top Nhà Bán Hàng (Theo Doanh Thu)</h3>
-        <div class="overflow-x-auto">
+        <div class="overflow-x-auto" role="region" aria-label="Xếp hạng nhà bán theo doanh thu" tabindex="0">
           <table class="w-full text-left border-collapse">
             <thead>
               <tr class="text-on-surface-variant text-sm border-b border-outline-variant/30">
@@ -150,4 +160,12 @@ const kpiCards = computed(() => [
 .animate-slide-up { opacity: 0; transform: translateY(15px); animation: slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 @keyframes slideUp { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-in,
+  .animate-slide-up {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+}
 </style>

@@ -40,22 +40,22 @@ onMounted(() => {
 
 <template>
   <div class="print-page min-h-screen bg-slate-100 py-10 px-4 flex justify-center">
-    <div v-if="loading" class="flex flex-col items-center justify-center p-12 gap-3">
+    <div v-if="loading" role="status" aria-live="polite" class="flex flex-col items-center justify-center p-12 gap-3">
       <i class="pi pi-spin pi-spinner text-3xl text-slate-500"></i>
       <p class="text-xs text-slate-500 font-semibold">Đang tải thông tin phiếu điều chuyển...</p>
     </div>
 
-    <div v-else-if="error || !transfer" class="bg-white max-w-md w-full p-8 rounded-2xl border border-slate-200 shadow-md text-center my-auto space-y-4">
+    <div v-else-if="error || !transfer" role="alert" class="bg-white max-w-md w-full p-8 rounded-2xl border border-slate-200 shadow-md text-center my-auto space-y-4">
       <div class="w-12 h-12 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mx-auto">
         <i class="pi pi-exclamation-triangle text-xl"></i>
       </div>
-      <h3 class="text-base font-bold text-slate-900">Không thể tải phiếu điều chuyển</h3>
+      <h1 class="text-base font-bold text-slate-900">Không thể tải phiếu điều chuyển</h1>
       <p class="text-xs text-slate-500 leading-relaxed">{{ error || 'Phiếu điều chuyển không tồn tại hoặc lỗi hệ thống.' }}</p>
       <div class="pt-2 flex justify-center gap-3">
-        <button class="px-4 py-2 bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg hover:bg-slate-300 transition-colors border-none cursor-pointer" @click="window.close()">
+        <button type="button" class="min-h-11 px-4 py-2 bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg hover:bg-slate-300 transition-colors border-none cursor-pointer" @click="window.close()">
           Đóng tab
         </button>
-        <button class="px-4 py-2 bg-indigo-600 text-white text-xs font-semibold rounded-lg hover:bg-indigo-700 transition-colors border-none cursor-pointer" @click="fetchTransferDetails">
+        <button type="button" class="min-h-11 px-4 py-2 bg-indigo-600 text-white text-xs font-semibold rounded-lg hover:bg-indigo-700 transition-colors border-none cursor-pointer" @click="fetchTransferDetails">
           Thử lại
         </button>
       </div>
@@ -159,10 +159,10 @@ onMounted(() => {
 
       <!-- Floating Print Controls (Hidden on print) -->
       <div class="no-print flex justify-end gap-3 border-t border-slate-100 pt-4 mt-auto">
-        <button class="px-4 py-2 border border-indigo-600 text-indigo-600 rounded text-xs font-semibold hover:bg-slate-50 border-none cursor-pointer" @click="window.close()">
+        <button type="button" class="min-h-11 px-4 py-2 border border-indigo-600 text-indigo-600 rounded text-xs font-semibold hover:bg-slate-50 border-none cursor-pointer" @click="window.close()">
           Đóng tab
         </button>
-        <button class="px-5 py-2 bg-indigo-600 text-white rounded text-xs font-semibold hover:opacity-90 flex items-center gap-1.5 border-none cursor-pointer" @click="window.print()">
+        <button type="button" class="min-h-11 px-5 py-2 bg-indigo-600 text-white rounded text-xs font-semibold hover:opacity-90 flex items-center gap-1.5 border-none cursor-pointer" @click="window.print()">
           <i class="pi pi-print"></i> In phiếu
         </button>
       </div>

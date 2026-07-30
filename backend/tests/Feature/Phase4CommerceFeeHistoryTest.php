@@ -45,8 +45,36 @@ class Phase4CommerceFeeHistoryTest extends TestCase
         $before = CommerceFeeSchedule::count();
         $this->actingAs($this->admin)->postJson('/api/admin/fee-schedules/preview', [
             'base_amount' => 100000, 'commission_rate' => 15, 'service_fee_rate' => 3,
-        ])->assertOk()->assertJsonPath('data.commission_amount', 15000)->assertJsonPath('data.service_fee_amount', 3000)->assertJsonPath('data.total_amount', 103000);
+        ])->assertOk()
+            ->assertJsonPath('data.base_amount', 100000)
+            ->assertJsonPath('data.seller_gross', 100000)
+            ->assertJsonPath('data.commission_amount', 15000)
+            ->assertJsonPath('data.service_fee_amount', 3000)
+            ->assertJsonPath('data.total_amount', 103000)
+            ->assertJsonPath('data.customer_pays', 103000)
+            ->assertJsonPath('data.seller_net', 85000)
+            ->assertJsonPath('data.platform_net_before_tax', 18000)
+            ->assertJsonPath('data.tax_rate', 0)
+            ->assertJsonPath('data.tax_amount', 0)
+            ->assertJsonPath('data.tax_configured', false);
         $this->assertSame($before, CommerceFeeSchedule::count());
+    }
+
+    public function test_preview_rounds_each_vnd_fee_half_up_and_keeps_compatibility_fields(): void
+    {
+        $response = $this->actingAs($this->admin)->postJson('/api/admin/fee-schedules/preview', [
+            'base_amount' => 105,
+            'commission_rate' => 10,
+            'service_fee_rate' => 10,
+        ])->assertOk();
+
+        $response->assertJsonPath('data.commission_amount', 11)
+            ->assertJsonPath('data.service_fee_amount', 11)
+            ->assertJsonPath('data.seller_net', 94)
+            ->assertJsonPath('data.platform_net_before_tax', 22)
+            ->assertJsonPath('data.customer_pays', 116)
+            ->assertJsonPath('data.base_amount', 105)
+            ->assertJsonPath('data.total_amount', 116);
     }
 
     public function test_schedule_and_audit_are_immutable_and_conflicting_operation_rolls_back(): void

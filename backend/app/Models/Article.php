@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class Article extends Model
 {
-    protected $fillable = ['author_id', 'article_category_id', 'title', 'slug', 'excerpt', 'body', 'cover_image', 'status', 'revision', 'home_featured', 'seo_title', 'seo_description', 'scheduled_at', 'published_at', 'review_reason'];
+    protected $fillable = ['created_by', 'article_category_id', 'title', 'slug', 'excerpt', 'body', 'cover_image', 'status', 'revision', 'home_featured', 'seo_title', 'seo_description', 'scheduled_at', 'published_at', 'review_reason'];
 
     protected $hidden = ['review_reason'];
 
@@ -41,8 +41,8 @@ class Article extends Model
         return $this->hasMany(ArticleEvent::class);
     }
 
-    public function author()
+    public function creator()
     {
-        return $this->belongsTo(User::class, 'author_id');
+        return $this->belongsTo(User::class, 'created_by');
     }
 }

@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { useAuthStore } from '../stores/auth'
 import apiClient from '../services/axios'
-import { evaluateRouteGuard, runRouteGuard, getPostLoginRedirect } from '../router/guard'
+import { evaluateRouteGuard, getDashboardRedirect, getPostLoginRedirect, runRouteGuard } from '../router/guard'
 
 describe('Auth Store & Guard Matrix Tests', () => {
   beforeEach(() => {
@@ -18,6 +18,23 @@ describe('Auth Store & Guard Matrix Tests', () => {
     })
 
     await authStore.fetchUser()
+
+    expect(authStore.user).toBeNull()
+    expect(authStore.userFetched).toBe(true)
+    expect(authStore.isAuthenticated).toBe(false)
+  })
+
+  it('login fails visibly when the session cannot be confirmed by /api/auth/me', async () => {
+    const authStore = useAuthStore()
+    vi.spyOn(apiClient, 'get')
+      .mockResolvedValueOnce({ data: null })
+      .mockRejectedValueOnce({ response: { status: 401, data: { message: 'Unauthenticated' } } })
+    vi.spyOn(apiClient, 'post').mockResolvedValueOnce({
+      data: { status: 'success', message: 'Đăng nhập thành công.' },
+    })
+
+    await expect(authStore.login({ email: 'admin@example.test', password: 'secret' }))
+      .rejects.toMatchObject({ response: { status: 401 } })
 
     expect(authStore.user).toBeNull()
     expect(authStore.userFetched).toBe(true)
@@ -134,19 +151,31 @@ describe('Auth Store & Guard Matrix Tests', () => {
     expect(adminResult).toBe(true)
   })
 
-  it('uses approved_author capability independently from the legacy vendor role', () => {
-    const authorRoute = { path: '/author/dashboard', meta: { requiresAuth: true, capability: 'approved_author' } }
+  it('routes each account to the correct default management channel', () => {
+    expect(getDashboardRedirect({
+      isAdmin: true,
+      isActiveVendor: true,
+    })).toEqual({ name: 'admin-dashboard' })
 
-    expect(evaluateRouteGuard(authorRoute, {
-      isAuthenticated: true,
-      userRole: 'customer',
-      capabilities: { approved_author: true, active_vendor: false },
-    })).toBe(true)
+    expect(getDashboardRedirect({
+      isAdmin: false,
+      isActiveVendor: true,
+    })).toEqual({ name: 'vendor-dashboard' })
 
-    expect(evaluateRouteGuard(authorRoute, {
-      isAuthenticated: true,
-      userRole: 'vendor',
-      capabilities: { approved_author: false, active_vendor: true },
-    })).toEqual({ name: 'author-register' })
+    expect(getDashboardRedirect({
+      isAdmin: false,
+      isActiveVendor: true,
+    })).toEqual({ name: 'vendor-dashboard' })
+
+    expect(getDashboardRedirect({
+      isAdmin: false,
+      isActiveVendor: false,
+      isWarehouseManager: true,
+    })).toEqual({ name: 'warehouse-manager-dashboard' })
+
+    expect(getDashboardRedirect({
+      isAdmin: false,
+      isActiveVendor: false,
+    })).toEqual({ name: 'home' })
   })
 })

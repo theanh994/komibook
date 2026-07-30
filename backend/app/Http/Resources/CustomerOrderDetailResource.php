@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\Support\PublicMediaUrl;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -47,11 +48,7 @@ class CustomerOrderDetailResource extends JsonResource
                     $bookData = [
                         'id' => $item->book->id,
                         'title' => $item->book->title,
-                        'cover_image' => $item->book->cover_image
-                            ? (str_starts_with($item->book->cover_image, 'http') || str_starts_with($item->book->cover_image, '/storage/')
-                                ? $item->book->cover_image
-                                : '/storage/'.$item->book->cover_image)
-                            : null,
+                        'cover_image' => PublicMediaUrl::storage($item->book->cover_image),
                         'type' => $item->book->type,
                     ];
                 }

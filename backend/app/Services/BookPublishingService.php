@@ -77,6 +77,9 @@ class BookPublishingService
                     'chapter_snapshot' => $locked->chapters()->get(['id', 'title', 'content', 'order', 'is_free', 'current_revision'])->toArray(),
                     'published_at' => now(),
                 ]);
+                if ($locked->isEbook()) {
+                    app(EbookVersionService::class)->release($locked, $actor, $reason);
+                }
             }
 
             UserNotification::firstOrCreate(

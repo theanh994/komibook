@@ -3,10 +3,11 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Book;
 use App\Models\StockTransfer;
 use App\Models\StockTransferItem;
+use App\Models\Warehouse;
 use App\Models\WarehouseStock;
-use App\Models\Book;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -20,7 +21,7 @@ class StockTransferController extends Controller
 
         return response()->json([
             'status' => 'success',
-            'data' => $transfers
+            'data' => $transfers,
         ]);
     }
 
@@ -33,7 +34,7 @@ class StockTransferController extends Controller
 
         return response()->json([
             'status' => 'success',
-            'data' => $transfer
+            'data' => $transfer,
         ]);
     }
 
@@ -49,13 +50,18 @@ class StockTransferController extends Controller
         ]);
 
         $vendor = Auth::user()->vendor;
-        $transferCode = 'TRF-' . now()->format('Ymd') . '-' . strtoupper(substr(uniqid(), -4));
+        $fromWarehouse = Warehouse::withoutGlobalScopes()->where('vendor_id', $vendor->id)->findOrFail($request->from_warehouse_id);
+        $toWarehouse = Warehouse::withoutGlobalScopes()->where('vendor_id', $vendor->id)->findOrFail($request->to_warehouse_id);
+        $bookIds = collect($request->items)->pluck('book_id')->map(fn ($id) => (int) $id)->unique();
+        $ownedBookIds = Book::withoutGlobalScopes()->where('vendor_id', $vendor->id)->whereIn('id', $bookIds)->pluck('id');
+        abort_unless($ownedBookIds->count() === $bookIds->count(), 403, 'Phiếu điều chuyển chứa sách không thuộc gian hàng hiện tại.');
+        $transferCode = 'TRF-'.now()->format('Ymd').'-'.strtoupper(substr(uniqid(), -4));
 
-        return DB::transaction(function () use ($request, $vendor, $transferCode) {
+        return DB::transaction(function () use ($request, $vendor, $transferCode, $fromWarehouse, $toWarehouse) {
             $transfer = StockTransfer::create([
                 'vendor_id' => $vendor->id,
-                'from_warehouse_id' => $request->from_warehouse_id,
-                'to_warehouse_id' => $request->to_warehouse_id,
+                'from_warehouse_id' => $fromWarehouse->id,
+                'to_warehouse_id' => $toWarehouse->id,
                 'transfer_code' => $transferCode,
                 'reason' => $request->reason,
                 'status' => 'draft',
@@ -72,7 +78,7 @@ class StockTransferController extends Controller
             return response()->json([
                 'status' => 'success',
                 'message' => 'Lập phiếu điều chuyển nháp thành công.',
-                'data' => $transfer->load('items')
+                'data' => $transfer->load('items'),
             ], 201);
         });
     }
@@ -85,22 +91,23 @@ class StockTransferController extends Controller
         if ($transfer->status !== 'draft') {
             return response()->json([
                 'status' => 'error',
-                'message' => 'Phiếu chuyển chỉ được xuất kho khi ở trạng thái nháp.'
+                'message' => 'Phiếu chuyển chỉ được xuất kho khi ở trạng thái nháp.',
             ], 422);
         }
 
-        return DB::transaction(function () use ($transfer) {
+        return DB::transaction(function () use ($transfer, $vendor) {
+            $ownedWarehouseIds = Warehouse::withoutGlobalScopes()->where('vendor_id', $vendor->id)->pluck('id');
             foreach ($transfer->items as $item) {
                 // Trừ kho xuất
                 $stockFrom = WarehouseStock::where('warehouse_id', $transfer->from_warehouse_id)
                     ->where('book_id', $item->book_id)
                     ->first();
 
-                if (!$stockFrom || $stockFrom->stock < $item->quantity) {
+                if (! $stockFrom || $stockFrom->quantity < $item->quantity) {
                     throw new \Exception("Sách ID {$item->book_id} không đủ số lượng trong kho xuất.");
                 }
 
-                $stockFrom->stock -= $item->quantity;
+                $stockFrom->quantity -= $item->quantity;
                 $stockFrom->save();
             }
 
@@ -109,7 +116,7 @@ class StockTransferController extends Controller
 
             return response()->json([
                 'status' => 'success',
-                'message' => 'Đã xuất kho và chuyển hàng thành công.'
+                'message' => 'Đã xuất kho và chuyển hàng thành công.',
             ]);
         });
     }
@@ -122,11 +129,13 @@ class StockTransferController extends Controller
         if ($transfer->status !== 'shipped') {
             return response()->json([
                 'status' => 'error',
-                'message' => 'Phiếu chuyển chỉ được nhập kho khi ở trạng thái đã xuất hàng.'
+                'message' => 'Phiếu chuyển chỉ được nhập kho khi ở trạng thái đã xuất hàng.',
             ], 422);
         }
 
-        return DB::transaction(function () use ($transfer) {
+        $ownedWarehouseIds = Warehouse::where('vendor_id', $vendor->id)->pluck('id');
+
+        return DB::transaction(function () use ($transfer, $vendor, $ownedWarehouseIds) {
             foreach ($transfer->items as $item) {
                 // Cộng kho nhập
                 $stockTo = WarehouseStock::where('warehouse_id', $transfer->to_warehouse_id)
@@ -134,20 +143,22 @@ class StockTransferController extends Controller
                     ->first();
 
                 if ($stockTo) {
-                    $stockTo->stock += $item->quantity;
+                    $stockTo->quantity += $item->quantity;
                     $stockTo->save();
                 } else {
                     WarehouseStock::create([
                         'warehouse_id' => $transfer->to_warehouse_id,
                         'book_id' => $item->book_id,
-                        'stock' => $item->quantity,
+                        'quantity' => $item->quantity,
                     ]);
                 }
 
                 // Cập nhật lại tồn tổng của sách trong bảng books
-                $book = Book::withoutGlobalScopes()->find($item->book_id);
+                $book = Book::withoutGlobalScopes()->where('vendor_id', $vendor->id)->find($item->book_id);
                 if ($book && $book->type !== 'ebook') {
-                    $totalStock = WarehouseStock::where('book_id', $book->id)->sum('stock');
+                    $totalStock = WarehouseStock::where('book_id', $book->id)
+                        ->whereIn('warehouse_id', $ownedWarehouseIds)
+                        ->sum('quantity');
                     $book->stock = $totalStock;
                     $book->save();
                 }
@@ -158,7 +169,7 @@ class StockTransferController extends Controller
 
             return response()->json([
                 'status' => 'success',
-                'message' => 'Đã xác nhận nhận hàng và nhập kho thành công.'
+                'message' => 'Đã xác nhận nhận hàng và nhập kho thành công.',
             ]);
         });
     }

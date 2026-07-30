@@ -15,6 +15,7 @@ const selected = ref(null)
 const selectedAction = ref(null)
 const note = ref('')
 const filter = ref('active')
+const error = ref('')
 
 const isAdmin = computed(() => route.meta.role === 'admin')
 const apiPrefix = computed(() => isAdmin.value ? '/api/admin/returns' : '/api/vendor/returns')
@@ -35,11 +36,15 @@ const actionsFor = (entry) => (workflowActions[entry.status] || []).filter((acti
 
 const fetchEntries = async () => {
   loading.value = true
+  error.value = ''
   try {
     const response = await apiClient.get(apiPrefix.value)
     entries.value = Array.isArray(response.data?.data) ? response.data.data : []
-  } catch (error) {
-    toast.add({ severity: 'error', summary: 'Không thể tải yêu cầu', detail: error.response?.data?.message || 'Vui lòng thử lại.', life: 3500 })
+  } catch (requestError) {
+    const message = requestError.response?.data?.message || 'Vui lòng thử lại.'
+    entries.value = []
+    error.value = message
+    toast.add({ severity: 'error', summary: 'Không thể tải yêu cầu', detail: message, life: 3500 })
   } finally {
     loading.value = false
   }
@@ -98,7 +103,8 @@ onMounted(fetchEntries)
         <h1 class="text-2xl font-black text-on-background">{{ title }}</h1>
         <p class="text-sm text-on-surface-variant mt-1">Mọi quyết định đều lưu người thực hiện, thời gian và khóa chống lặp.</p>
       </div>
-      <select v-model="filter" class="rounded-xl border border-outline-variant bg-surface px-4 py-2 text-sm">
+      <label for="return-status-filter" class="sr-only">Lọc yêu cầu trả hàng theo trạng thái</label>
+      <select id="return-status-filter" v-model="filter" class="min-h-11 rounded-xl border border-outline-variant bg-surface px-4 py-2 text-sm">
         <option value="active">Đang xử lý</option>
         <option value="closed">Đã kết thúc</option>
         <option value="all">Tất cả</option>
@@ -106,7 +112,12 @@ onMounted(fetchEntries)
     </header>
 
     <div class="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest overflow-hidden">
-      <div v-if="loading" class="p-12 text-center text-on-surface-variant">Đang tải yêu cầu...</div>
+      <div v-if="loading" role="status" aria-live="polite" class="p-12 text-center text-on-surface-variant">Đang tải yêu cầu...</div>
+      <div v-else-if="error" role="alert" class="p-8 text-center">
+        <p class="font-bold text-error">Không thể tải yêu cầu trả hàng</p>
+        <p class="mt-2 text-sm text-on-surface-variant">{{ error }}</p>
+        <button type="button" class="mt-4 min-h-11 rounded-xl bg-error px-5 font-bold text-white" @click="fetchEntries">Thử lại</button>
+      </div>
       <div v-else-if="visibleEntries.length === 0" class="p-12 text-center text-on-surface-variant">Không có yêu cầu trong nhóm này.</div>
       <div v-else class="divide-y divide-outline-variant/30">
         <article v-for="entry in visibleEntries" :key="entry.id" class="p-5 space-y-4">
@@ -137,7 +148,7 @@ onMounted(fetchEntries)
           </p>
 
           <div v-if="actionsFor(entry).length" class="flex flex-wrap gap-2">
-            <button v-for="action in actionsFor(entry)" :key="action.target" type="button" class="rounded-xl border border-primary px-4 py-2 text-xs font-bold text-primary hover:bg-primary hover:text-on-primary" @click="openAction(entry, action)">
+            <button v-for="action in actionsFor(entry)" :key="action.target" type="button" class="min-h-11 rounded-xl border border-primary px-4 py-2 text-xs font-bold text-primary hover:bg-primary hover:text-on-primary" @click="openAction(entry, action)">
               {{ action.label }}
             </button>
           </div>
@@ -155,8 +166,8 @@ onMounted(fetchEntries)
           <textarea v-model="note" rows="4" maxlength="2000" class="w-full rounded-xl border border-outline-variant px-4 py-3" :placeholder="actionNeedsNote ? 'Bắt buộc nhập thông tin' : 'Không bắt buộc'"></textarea>
         </label>
         <div class="flex justify-end gap-2">
-          <button type="button" class="rounded-xl px-4 py-2 text-sm font-bold text-on-surface-variant" @click="closeAction">Đóng</button>
-          <button type="button" :disabled="!canSubmit" class="rounded-xl bg-primary px-4 py-2 text-sm font-bold text-on-primary disabled:opacity-50" @click="submitAction">
+          <button type="button" class="min-h-11 rounded-xl px-4 py-2 text-sm font-bold text-on-surface-variant" @click="closeAction">Đóng</button>
+          <button type="button" :disabled="!canSubmit" class="min-h-11 rounded-xl bg-primary px-4 py-2 text-sm font-bold text-on-primary disabled:opacity-50" @click="submitAction">
             {{ submitting ? 'Đang xử lý...' : 'Xác nhận' }}
           </button>
         </div>

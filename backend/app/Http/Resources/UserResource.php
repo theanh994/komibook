@@ -17,14 +17,14 @@ class UserResource extends JsonResource
      */
     public function toArray(Request $request): array
     {
-        $authorStatus = $this->author?->onboarding_status instanceof \BackedEnum
-            ? $this->author->onboarding_status->value
-            : $this->author?->onboarding_status;
-        $approvedAuthor = $authorStatus === 'approved';
         $vendorStatus = $this->vendor?->onboarding_status instanceof \BackedEnum
             ? $this->vendor->onboarding_status->value
             : $this->vendor?->onboarding_status;
         $activeVendor = $this->vendor?->isActive() ?? false;
+        $activeWarehouseManager = $this->warehouseManagerAssignments
+            ? $this->warehouseManagerAssignments->contains(fn ($assignment) => $assignment->isActive())
+            : false;
+        $activeUsedBookSeller = $this->usedBookSellerProfile?->isActive() ?? false;
 
         return [
             'id' => $this->id,
@@ -41,10 +41,10 @@ class UserResource extends JsonResource
             'created_at' => $this->created_at?->toISOString(),
             'marketing_consent' => $this->marketing_consent_at !== null && $this->marketing_opt_out_at === null,
             'capabilities' => [
-                'author_profile' => $this->author !== null,
-                'approved_author' => $approvedAuthor,
                 'vendor_profile' => $this->vendor !== null,
                 'active_vendor' => $activeVendor,
+                'warehouse_manager' => $activeWarehouseManager,
+                'used_book_seller' => $activeUsedBookSeller,
                 'review_partner_onboarding' => $this->role === 'admin',
             ],
 
@@ -60,14 +60,6 @@ class UserResource extends JsonResource
                 'name' => $this->membershipTier->name,
                 'discount_percent' => $this->membershipTier->discount_percent,
                 'benefits' => $this->membershipTier->benefits,
-            ] : null,
-
-            'author_profile' => $this->author ? [
-                'id' => $this->author->id,
-                'pen_name' => $this->author->pen_name,
-                'bio' => $this->author->bio,
-                'status' => $this->author->status,
-                'onboarding_status' => $authorStatus,
             ] : null,
 
             'vendor_profile' => $this->vendor ? [

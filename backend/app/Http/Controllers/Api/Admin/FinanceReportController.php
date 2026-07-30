@@ -4,12 +4,13 @@ namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Order;
-use App\Models\User;
-use App\Models\Book;
 use App\Models\PayoutRequest;
+use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use RuntimeException;
 
 class FinanceReportController extends Controller
 {
@@ -41,17 +42,17 @@ class FinanceReportController extends Controller
             : 0;
 
         // ── Doanh thu theo tháng (12 tháng gần nhất) ────────────────────
-        $revenueByMonth = Order::withoutGlobalScopes()
+        $periodStart = now()->copy()->subMonthsNoOverflow(11)->startOfMonth();
+        $monthlyRows = Order::withoutGlobalScopes()
             ->where('status', 'completed')
-            ->where('created_at', '>=', now()->subMonths(11)->startOfMonth())
-            ->select(
-                DB::raw("DATE_FORMAT(created_at, '%Y-%m') as month"),
-                DB::raw('SUM(total_amount) as revenue'),
-                DB::raw('COUNT(*) as orders')
-            )
+            ->where('created_at', '>=', $periodStart)
+            ->selectRaw($this->monthBucketExpression().' as month, SUM(total_amount) as revenue, COUNT(*) as orders')
             ->groupBy('month')
             ->orderBy('month')
-            ->get();
+            ->get()
+            ->keyBy('month');
+
+        $revenueByMonth = $this->completeMonthlySeries($monthlyRows, $periodStart);
 
         // ── Doanh thu theo phương thức thanh toán ────────────────────────
         $revenueByPaymentMethod = Order::withoutGlobalScopes()
@@ -62,7 +63,7 @@ class FinanceReportController extends Controller
 
         // ── Top vendors theo doanh thu ───────────────────────────────────
         $topVendors = Order::withoutGlobalScopes()
-            ->where('status', 'completed')
+            ->where('orders.status', 'completed')
             ->join('vendors', 'orders.vendor_id', '=', 'vendors.id')
             ->select('vendors.id', 'vendors.shop_name', DB::raw('SUM(orders.total_amount) as revenue'), DB::raw('COUNT(orders.id) as total_orders'))
             ->groupBy('vendors.id', 'vendors.shop_name')
@@ -72,27 +73,55 @@ class FinanceReportController extends Controller
 
         // ── Thống kê yêu cầu rút tiền ───────────────────────────────────
         $payoutStats = [
-            'pending'  => PayoutRequest::where('status', 'pending')->sum('amount'),
-            'approved' => PayoutRequest::where('status', 'approved')->sum('amount'),
+            'pending' => PayoutRequest::where('status', 'pending')->sum('amount'),
+            'approved' => PayoutRequest::whereIn('status', ['approved', 'processing', 'completed'])->sum('amount'),
             'rejected' => PayoutRequest::where('status', 'rejected')->sum('amount'),
         ];
 
         return response()->json([
             'status' => 'success',
-            'data'   => [
+            'data' => [
                 'kpi' => [
-                    'total_revenue'    => (int) $totalRevenue,
-                    'monthly_revenue'  => (int) $monthlyRevenue,
-                    'total_orders'     => $totalOrders,
+                    'total_revenue' => (int) $totalRevenue,
+                    'monthly_revenue' => (int) $monthlyRevenue,
+                    'total_orders' => $totalOrders,
                     'completed_orders' => $completedOrders,
-                    'total_customers'  => $totalCustomers,
-                    'avg_order_value'  => $avgOrderValue,
+                    'total_customers' => $totalCustomers,
+                    'avg_order_value' => $avgOrderValue,
                 ],
-                'revenue_by_month'          => $revenueByMonth,
+                'revenue_by_month' => $revenueByMonth,
                 'revenue_by_payment_method' => $revenueByPaymentMethod,
-                'top_vendors'               => $topVendors,
-                'payout_stats'              => $payoutStats,
+                'top_vendors' => $topVendors,
+                'payout_stats' => $payoutStats,
             ],
         ]);
+    }
+
+    private function monthBucketExpression(): string
+    {
+        return match (DB::connection()->getDriverName()) {
+            'sqlite' => "strftime('%Y-%m', created_at)",
+            'mysql' => "DATE_FORMAT(created_at, '%Y-%m')",
+            'pgsql' => "TO_CHAR(created_at, 'YYYY-MM')",
+            default => throw new RuntimeException('Unsupported database driver for finance reporting.'),
+        };
+    }
+
+    /**
+     * @param  Collection<string, object>  $monthlyRows
+     * @return Collection<int, array{month: string, revenue: int, orders: int}>
+     */
+    private function completeMonthlySeries(Collection $monthlyRows, mixed $periodStart): Collection
+    {
+        return collect(range(0, 11))->map(function (int $offset) use ($monthlyRows, $periodStart): array {
+            $month = $periodStart->copy()->addMonthsNoOverflow($offset)->format('Y-m');
+            $row = $monthlyRows->get($month);
+
+            return [
+                'month' => $month,
+                'revenue' => (int) ($row->revenue ?? 0),
+                'orders' => (int) ($row->orders ?? 0),
+            ];
+        });
     }
 }

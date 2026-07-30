@@ -9,7 +9,8 @@ const route = useRoute()
 const router = useRouter()
 
 const bookId = route.params.bookId
-const book = ref({ title: 'Tác phẩm tự viết', author_name: 'Tác giả' })
+const apiBase = '/api/vendor/books'
+const book = ref({ title: 'Ấn phẩm', author_name: 'Người viết' })
 const chapters = ref([])
 const activeChapter = ref({ title: 'Chương 1', content: 'Đang tải nội dung...' })
 
@@ -23,15 +24,15 @@ const fetchBookData = async () => {
   loading.value = true
   error.value = null
   try {
-    const bookRes = await apiClient.get(`/api/vendor/books/${bookId}`)
+    const bookRes = await apiClient.get(`${apiBase}/${bookId}`)
     if (bookRes.data?.data) {
       book.value = {
         title: bookRes.data.data.title,
-        author_name: bookRes.data.data.author_name || bookRes.data.data.author || 'Tác giả'
+        author_name: bookRes.data.data.author_name || bookRes.data.data.author || 'Người viết'
       }
     }
 
-    const res = await apiClient.get(`/api/vendor/books/${bookId}/chapters`)
+    const res = await apiClient.get(`${apiBase}/${bookId}/chapters`)
     if (res.data?.status === 'success' && res.data.data && res.data.data.length > 0) {
       chapters.value = res.data.data
       activeChapter.value = res.data.data[0]
@@ -57,28 +58,31 @@ onMounted(() => {
 <template>
   <div class="device-preview h-screen flex flex-col overflow-hidden bg-slate-100">
     <!-- Header -->
-    <header class="bg-white border-b border-slate-200 px-6 py-3 flex justify-between items-center shrink-0 z-20">
+    <header class="bg-white border-b border-slate-200 px-3 sm:px-6 py-3 flex flex-col gap-3 lg:flex-row lg:justify-between lg:items-center shrink-0 z-20">
       <div class="flex items-center gap-3">
-        <Button icon="pi pi-arrow-left" class="p-button-text p-button-secondary p-button-sm" @click="router.push({ name: 'author-live-editor', params: { bookId } })" />
+        <Button icon="pi pi-arrow-left" aria-label="Quay lại trình biên tập" class="p-button-text p-button-secondary p-button-sm min-h-11 min-w-11" @click="router.push({ name: 'vendor-live-editor', params: { bookId } })" />
         <span class="text-sm font-bold text-slate-800">Xem trước độc giả: {{ book.title }}</span>
       </div>
 
       <!-- Device Switcher -->
-      <div class="flex border border-slate-200 rounded-lg overflow-hidden bg-slate-50">
+      <div class="flex max-w-full overflow-x-auto border border-slate-200 rounded-lg bg-slate-50" role="group" aria-label="Thiết bị xem trước">
         <button 
-          :class="['px-4 py-2 text-xs font-bold flex items-center gap-2 transition-colors', currentDevice === 'desktop' ? 'bg-indigo-600 text-white' : 'text-slate-600 hover:bg-slate-150']"
+          :aria-pressed="currentDevice === 'desktop'"
+          :class="['min-h-11 px-4 py-2 text-xs font-bold flex items-center gap-2 transition-colors', currentDevice === 'desktop' ? 'bg-indigo-600 text-white' : 'text-slate-600 hover:bg-slate-150']"
           @click="currentDevice = 'desktop'"
         >
           <i class="pi pi-desktop"></i> Desktop
         </button>
         <button 
-          :class="['px-4 py-2 text-xs font-bold flex items-center gap-2 transition-colors border-x border-slate-200', currentDevice === 'tablet' ? 'bg-indigo-600 text-white' : 'text-slate-600 hover:bg-slate-150']"
+          :aria-pressed="currentDevice === 'tablet'"
+          :class="['min-h-11 px-4 py-2 text-xs font-bold flex items-center gap-2 transition-colors border-x border-slate-200', currentDevice === 'tablet' ? 'bg-indigo-600 text-white' : 'text-slate-600 hover:bg-slate-150']"
           @click="currentDevice = 'tablet'"
         >
           <i class="pi pi-tablet"></i> Tablet
         </button>
         <button 
-          :class="['px-4 py-2 text-xs font-bold flex items-center gap-2 transition-colors', currentDevice === 'mobile' ? 'bg-indigo-600 text-white' : 'text-slate-600 hover:bg-slate-150']"
+          :aria-pressed="currentDevice === 'mobile'"
+          :class="['min-h-11 px-4 py-2 text-xs font-bold flex items-center gap-2 transition-colors', currentDevice === 'mobile' ? 'bg-indigo-600 text-white' : 'text-slate-600 hover:bg-slate-150']"
           @click="currentDevice = 'mobile'"
         >
           <i class="pi pi-mobile"></i> Mobile
@@ -87,20 +91,20 @@ onMounted(() => {
 
       <!-- Actions -->
       <div class="flex gap-2">
-        <Button label="Thoát xem trước" class="p-button-outlined p-button-sm text-xs" @click="router.push({ name: 'author-live-editor', params: { bookId } })" />
+        <Button label="Thoát xem trước" class="p-button-outlined p-button-sm text-xs min-h-11" @click="router.push({ name: 'vendor-live-editor', params: { bookId } })" />
       </div>
     </header>
 
     <!-- Workspace -->
-    <div class="flex flex-1 overflow-hidden">
+    <div class="flex flex-1 flex-col overflow-auto lg:flex-row lg:overflow-hidden">
       <!-- Main Canvas -->
-      <main class="flex-1 overflow-y-auto flex items-center justify-center p-8 bg-slate-200 relative">
+      <main class="flex-1 overflow-y-auto flex items-center justify-center p-2 sm:p-8 bg-slate-200 relative">
         
-        <div v-if="loading" class="flex justify-center p-12">
+        <div v-if="loading" role="status" aria-live="polite" class="flex justify-center p-12">
           <i class="pi pi-spin pi-spinner text-3xl text-indigo-600"></i>
         </div>
 
-        <div v-else-if="error" class="bg-white rounded-2xl p-8 border border-slate-200 shadow-sm text-center max-w-md mx-auto space-y-4">
+        <div v-else-if="error" role="alert" class="bg-white rounded-2xl p-8 border border-slate-200 shadow-sm text-center max-w-md mx-auto space-y-4">
           <div class="w-12 h-12 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mx-auto">
             <i class="pi pi-exclamation-triangle text-xl"></i>
           </div>
@@ -193,7 +197,7 @@ onMounted(() => {
       </main>
 
       <!-- Sidebar settings -->
-      <aside class="w-72 bg-white border-l border-slate-200 p-6 flex flex-col gap-6 shrink-0">
+      <aside class="w-full bg-white border-t border-slate-200 p-4 sm:p-6 flex flex-col gap-6 shrink-0 lg:w-72 lg:border-l lg:border-t-0">
         <div>
           <h3 class="font-bold text-slate-800 text-base mb-1">Cấu hình Đọc thử</h3>
           <p class="text-slate-400 text-xs">Giả lập các cài đặt của người đọc trên thiết bị.</p>
@@ -246,4 +250,5 @@ onMounted(() => {
 .device-preview {
   font-family: 'Inter', sans-serif;
 }
+:deep(.p-button) { min-height: 44px; }
 </style>

@@ -8,6 +8,7 @@ use App\Models\Book;
 use App\Models\Series;
 use App\Services\EbookAccessService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 
 class BookController extends Controller
@@ -26,12 +27,56 @@ class BookController extends Controller
             ->groupBy('books.id')
             ->orderBy('total_sold', 'desc')
             ->limit(8)
-            ->with(['vendor', 'category'])
+            ->with(['vendor', 'category', 'latestEbookVersion'])
             ->get();
 
         return response()->json([
             'status' => 'success',
             'data' => BookResource::collection($books),
+        ]);
+    }
+
+    /**
+     * Home feed recommendations with an explicit, privacy-safe fallback.
+     */
+    public function recommendations()
+    {
+        $user = Auth::guard('sanctum')->user();
+        $favoriteCategoryIds = $user
+            ? $user->favoriteCategories()->pluck('categories.id')
+            : collect();
+
+        $query = Book::withoutGlobalScopes()
+            ->select('books.*')
+            ->sellable()
+            ->with(['vendor', 'category', 'categories', 'latestEbookVersion']);
+
+        $mode = 'popular_fallback';
+        $explanation = 'Phổ biến với độc giả KomiBook';
+
+        if ($favoriteCategoryIds->isNotEmpty()) {
+            $query->where(function ($bookQuery) use ($favoriteCategoryIds) {
+                $bookQuery
+                    ->whereIn('books.category_id', $favoriteCategoryIds)
+                    ->orWhereHas('categories', fn ($categoryQuery) => $categoryQuery->whereIn('categories.id', $favoriteCategoryIds));
+            });
+            $mode = 'favorite_categories';
+            $explanation = 'Dựa trên thể loại bạn đã chọn';
+        }
+
+        $books = $query
+            ->orderByDesc('books.views')
+            ->orderByDesc('books.created_at')
+            ->limit(5)
+            ->get();
+
+        return response()->json([
+            'status' => 'success',
+            'data' => BookResource::collection($books),
+            'recommendation' => [
+                'mode' => $mode,
+                'explanation' => $explanation,
+            ],
         ]);
     }
 
@@ -44,7 +89,7 @@ class BookController extends Controller
         $query = Book::withoutGlobalScopes()
             ->select('books.*')
             ->sellable()
-            ->with(['vendor', 'category', 'categories', 'series']); // Eager loading
+            ->with(['vendor', 'category', 'categories', 'series', 'latestEbookVersion']); // Eager loading
 
         // 2. Lọc theo category_id nếu có params
         if ($request->has('category_id') && $request->category_id !== '') {
@@ -88,6 +133,19 @@ class BookController extends Controller
             $query->where('books.type', $request->type);
         }
 
+        if ($request->filled('provenance')) {
+            $query->where('books.provenance', $request->string('provenance')->toString());
+        }
+
+        if ($request->filled('target_age')) {
+            $targetAge = $request->string('target_age')->toString();
+            $query->whereIn('books.target_age', $this->targetAgeAliases($targetAge));
+        }
+
+        if ($request->boolean('has_sample')) {
+            $query->whereHas('chapters', fn ($chapterQuery) => $chapterQuery->where('is_free', true));
+        }
+
         // 3. Hỗ trợ sắp xếp
         $sort = $request->input('sort', 'newest');
         switch ($sort) {
@@ -129,13 +187,57 @@ class BookController extends Controller
     }
 
     /**
+     * Preserve discovery of books saved before the five public age groups were restored.
+     * Unknown custom values intentionally keep exact-match behavior.
+     *
+     * @return array<int, string>
+     */
+    private function targetAgeAliases(string $targetAge): array
+    {
+        $groups = [
+            'Nhà trẻ - mẫu giáo (0 - 6)' => [
+                'Nhà trẻ - mẫu giáo (0 - 6)',
+                'Nhà trẻ - Mẫu giáo (0 - 6)',
+                '0-5',
+                '0-6',
+            ],
+            'Nhi đồng (6 - 11)' => [
+                'Nhi đồng (6 - 11)',
+                '6-11',
+            ],
+            'Thiếu niên (11 - 15)' => [
+                'Thiếu niên (11 - 15)',
+                '11-15',
+            ],
+            'Tuổi mới lớn (15 - 18)' => [
+                'Tuổi mới lớn (15 - 18)',
+                '12-17',
+                '15-18',
+            ],
+            'Tuổi trưởng thành (Trên 18 tuổi)' => [
+                'Tuổi trưởng thành (Trên 18 tuổi)',
+                'Tuổi trưởng thành (18+)',
+                '18+',
+            ],
+        ];
+
+        foreach ($groups as $aliases) {
+            if (in_array($targetAge, $aliases, true)) {
+                return $aliases;
+            }
+        }
+
+        return [$targetAge];
+    }
+
+    /**
      * Lấy chi tiết một cuốn sách thông qua slug hoặc id.
      */
     public function show($identifier)
     {
         $query = Book::withoutGlobalScopes()
             ->sellable()
-            ->with(['vendor', 'category', 'categories', 'series', 'reviews' => function ($query) {
+            ->with(['vendor', 'category', 'categories', 'series', 'latestEbookVersion', 'activeCommercialParties.organization', 'reviews' => function ($query) {
                 $query->where('active_key', 1)->where('moderation_status', 'published')->with('user');
             }, 'chapters'])
             ->withCount('wishlists');
@@ -187,7 +289,7 @@ class BookController extends Controller
             ->where('series_id', $book->series_id)
             ->where('id', '!=', $book->id)
             ->sellable()
-            ->with(['vendor', 'category', 'categories'])
+            ->with(['vendor', 'category', 'categories', 'latestEbookVersion'])
             ->orderBy('id', 'asc')
             ->limit(12)
             ->get();
@@ -228,7 +330,7 @@ class BookController extends Controller
             });
         }
 
-        $relatedBooks = $query->with(['vendor', 'category', 'categories'])
+        $relatedBooks = $query->with(['vendor', 'category', 'categories', 'latestEbookVersion'])
             ->orderBy('views', 'desc')
             ->limit(5)
             ->get();
@@ -239,7 +341,7 @@ class BookController extends Controller
             $additionalBooks = Book::withoutGlobalScopes()
                 ->whereNotIn('id', $excludeIds)
                 ->sellable()
-                ->with(['vendor', 'category', 'categories'])
+                ->with(['vendor', 'category', 'categories', 'latestEbookVersion'])
                 ->orderBy('views', 'desc')
                 ->limit(5 - $relatedBooks->count())
                 ->get();
@@ -253,23 +355,23 @@ class BookController extends Controller
     }
 
     /**
-     * Lấy danh sách sách cùng Tác giả.
+     * Lấy danh sách sách cùng người viết theo metadata catalog.
      */
-    public function authorBooks($bookId)
+    public function contributorBooks($bookId)
     {
         $book = Book::withoutGlobalScopes()->sellable()->findOrFail($bookId);
 
-        $authorBooks = Book::withoutGlobalScopes()
+        $contributorBooks = Book::withoutGlobalScopes()
             ->where('author', $book->author)
             ->where('id', '!=', $book->id)
             ->sellable()
-            ->with(['vendor', 'category', 'categories'])
+            ->with(['vendor', 'category', 'categories', 'latestEbookVersion'])
             ->limit(10)
             ->get();
 
         return response()->json([
             'status' => 'success',
-            'data' => BookResource::collection($authorBooks),
+            'data' => BookResource::collection($contributorBooks),
         ]);
     }
 

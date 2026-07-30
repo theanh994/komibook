@@ -50,7 +50,17 @@ class CouponController extends Controller
         // 4. Tính toán giảm giá theo danh mục
         $baseAmountForDiscount = $request->total_amount;
 
-        if ($coupon->category_id && $request->has('items')) {
+        if (! empty($coupon->scope_book_ids) && $request->has('items')) {
+            $baseAmountForDiscount = 0;
+            foreach ($request->items as $item) {
+                $bookId = (int) ($item['id'] ?? $item['book_id'] ?? 0);
+                if (in_array($bookId, array_map('intval', $coupon->scope_book_ids), true)) {
+                    $baseAmountForDiscount += ((int) $item['price'] * (int) $item['quantity']);
+                }
+            }
+        }
+
+        if ($coupon->category_id && $request->has('items') && empty($coupon->scope_book_ids)) {
             $baseAmountForDiscount = 0;
             foreach ($request->items as $item) {
                 // Giả sử item có category_id hoặc ta fetch từ DB
