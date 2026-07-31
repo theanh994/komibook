@@ -87,6 +87,11 @@ class Phase7ReconciliationTruthTest extends TestCase
             'shop_name' => 'Phase 7 Payout Shop',
             'slug' => 'phase-7-payout-shop-'.uniqid(),
             'status' => 'active',
+            'payout_bank_name' => 'Komi Bank',
+            'payout_bank_account' => '123456',
+            'payout_bank_holder' => 'Healthy Vendor',
+            'payout_bank_status' => 'verified',
+            'payout_bank_verified_at' => now(),
         ]);
         $vendor->forceFill(['balance' => $balance, 'total_withdrawn' => 0])->save();
 

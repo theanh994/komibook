@@ -4,7 +4,9 @@ namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Organization;
+use App\Models\OrganizationDistributionAgreement;
 use App\Models\VendorOrganizationRelationship;
+use App\Services\DistributionAgreementService;
 use App\Services\OrganizationRelationshipService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -18,6 +20,9 @@ class OrganizationReviewController extends Controller
             'organizations' => Organization::whereIn('status', ['pending_review', 'verified', 'suspended'])
                 ->latest()->paginate(25),
             'relationships' => VendorOrganizationRelationship::with(['organization', 'vendor:id,shop_name,slug'])
+                ->whereIn('status', ['submitted', 'changes_requested', 'verified', 'suspended'])
+                ->latest()->paginate(25),
+            'distribution_agreements' => OrganizationDistributionAgreement::with(['publisher', 'distributor'])
                 ->whereIn('status', ['submitted', 'changes_requested', 'verified', 'suspended'])
                 ->latest()->paginate(25),
         ]]);
@@ -67,6 +72,26 @@ class OrganizationReviewController extends Controller
             $request->user(),
             $validated['reason'] ?? null,
             $validated['operation_key'] ?? 'admin-relationship:'.Str::uuid(),
+        )]);
+    }
+
+    public function transitionDistributionAgreement(
+        Request $request,
+        OrganizationDistributionAgreement $agreement,
+        DistributionAgreementService $service,
+    ) {
+        $validated = $request->validate([
+            'to_status' => ['required', Rule::in(['verified', 'changes_requested', 'rejected', 'suspended', 'revoked'])],
+            'reason' => ['nullable', 'string', 'max:1000'],
+            'operation_key' => ['nullable', 'string', 'max:128'],
+        ]);
+
+        return response()->json(['status' => 'success', 'data' => $service->transition(
+            $agreement,
+            $validated['to_status'],
+            $request->user(),
+            $validated['reason'] ?? null,
+            $validated['operation_key'] ?? 'admin-distribution-agreement:'.Str::uuid(),
         )]);
     }
 }

@@ -447,6 +447,12 @@ const userMenuItems = computed(() => {
       })
     }
 
+    items.push({
+      label: authStore.user?.capabilities?.organization_manager ? 'Tổ chức & phân phối' : 'Đăng ký tổ chức đối tác',
+      icon: 'pi pi-building',
+      command: () => router.push('/organization-portal')
+    })
+
     const vendorProfile = authStore.user?.vendor_profile
     if (!authStore.user?.capabilities?.active_vendor) {
       items.push({

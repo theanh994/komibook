@@ -151,6 +151,39 @@ describe('Auth Store & Guard Matrix Tests', () => {
     expect(adminResult).toBe(true)
   })
 
+  it('redirects an approved-role account without active vendor capability to onboarding', () => {
+    const vendorRoute = {
+      path: '/vendor/dashboard',
+      fullPath: '/vendor/dashboard?from=menu',
+      meta: { requiresAuth: true, role: 'vendor', capability: 'active_vendor' },
+    }
+
+    const result = evaluateRouteGuard(vendorRoute, {
+      isAuthenticated: true,
+      userRole: 'vendor',
+      capabilities: { active_vendor: false },
+    })
+
+    expect(result).toEqual({
+      name: 'vendor-register',
+      query: { redirect: '/vendor/dashboard?from=menu' },
+    })
+  })
+
+  it('redirects a customer with a draft vendor profile to onboarding instead of home', () => {
+    const result = evaluateRouteGuard({
+      path: '/vendor/dashboard',
+      fullPath: '/vendor/dashboard',
+      meta: { requiresAuth: true, role: 'vendor', capability: 'active_vendor' },
+    }, {
+      isAuthenticated: true,
+      userRole: 'customer',
+      capabilities: { vendor_profile: true, active_vendor: false },
+    })
+
+    expect(result).toEqual({ name: 'vendor-register', query: { redirect: '/vendor/dashboard' } })
+  })
+
   it('routes each account to the correct default management channel', () => {
     expect(getDashboardRedirect({
       isAdmin: true,

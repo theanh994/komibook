@@ -8,6 +8,7 @@ const toast = useToast()
 const loading = ref(true)
 const organizations = ref([])
 const relationships = ref([])
+const distributionAgreements = ref([])
 
 const load = async () => {
   loading.value = true
@@ -15,6 +16,7 @@ const load = async () => {
     const response = await apiClient.get('/api/admin/organization-reviews')
     organizations.value = response.data.data.organizations?.data || []
     relationships.value = response.data.data.relationships?.data || []
+    distributionAgreements.value = response.data.data.distribution_agreements?.data || []
   } finally {
     loading.value = false
   }
@@ -33,6 +35,14 @@ const decideRelationship = async (relationship, toStatus) => {
   if (toStatus !== 'verified' && !reason) return
   await apiClient.patch(`/api/admin/organization-relationships/${relationship.id}/transition`, { to_status: toStatus, reason })
   toast.add({ severity: 'success', summary: 'Đã cập nhật quan hệ', life: 2500 })
+  await load()
+}
+
+const decideDistributionAgreement = async (agreement, toStatus) => {
+  const reason = toStatus === 'verified' ? null : window.prompt('Nhập lý do quyết định:')
+  if (toStatus !== 'verified' && !reason) return
+  await apiClient.patch(`/api/admin/distribution-agreements/${agreement.id}/transition`, { to_status: toStatus, reason })
+  toast.add({ severity: 'success', summary: 'Đã cập nhật thỏa thuận phân phối', life: 2500 })
   await load()
 }
 
@@ -56,6 +66,16 @@ onMounted(load)
         <div v-if="!relationships.length" class="rounded-xl border border-outline-variant bg-surface-container-lowest p-6 text-on-surface-variant">Không có quan hệ cần hiển thị.</div>
         <article v-for="relationship in relationships" :key="relationship.id" class="rounded-xl border border-outline-variant bg-surface-container-lowest p-5">
           <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between"><div><h3 class="font-bold">{{ relationship.vendor?.shop_name }} → {{ relationship.organization?.display_name }}</h3><p class="text-sm text-on-surface-variant">{{ relationship.role }} · {{ relationship.status }}</p></div><div class="flex flex-wrap gap-2"><Button v-if="relationship.status !== 'verified'" label="Duyệt quan hệ" icon="pi pi-check" class="min-h-11" @click="decideRelationship(relationship, 'verified')" /><Button label="Yêu cầu bổ sung" severity="secondary" outlined class="min-h-11" @click="decideRelationship(relationship, 'changes_requested')" /><Button label="Thu hồi" severity="danger" outlined class="min-h-11" @click="decideRelationship(relationship, 'revoked')" /></div></div>
+        </article>
+      </section>
+      <section class="space-y-4" aria-labelledby="distribution-agreements-title">
+        <div><h2 id="distribution-agreements-title" class="text-xl font-bold">Thỏa thuận NXB – Nhà phân phối</h2><p class="mt-1 text-sm text-on-surface-variant">Duyệt phạm vi phân phối trước khi Nhà bán gắn chuỗi cung ứng vào listing.</p></div>
+        <div v-if="!distributionAgreements.length" class="rounded-xl border border-outline-variant bg-surface-container-lowest p-6 text-on-surface-variant">Không có thỏa thuận cần hiển thị.</div>
+        <article v-for="agreement in distributionAgreements" :key="agreement.id" class="rounded-xl border border-outline-variant bg-surface-container-lowest p-5">
+          <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div><h3 class="font-bold">{{ agreement.publisher?.display_name }} → {{ agreement.distributor?.display_name }}</h3><p class="text-sm text-on-surface-variant">{{ agreement.scope?.coverage === 'books' ? 'Sách cụ thể' : 'Toàn catalog' }} · {{ agreement.status }}</p></div>
+            <div class="flex flex-wrap gap-2"><Button v-if="agreement.status !== 'verified'" label="Duyệt thỏa thuận" icon="pi pi-check" class="min-h-11" @click="decideDistributionAgreement(agreement, 'verified')" /><Button label="Yêu cầu bổ sung" severity="secondary" outlined class="min-h-11" @click="decideDistributionAgreement(agreement, 'changes_requested')" /><Button label="Thu hồi" severity="danger" outlined class="min-h-11" @click="decideDistributionAgreement(agreement, 'revoked')" /></div>
+          </div>
         </article>
       </section>
     </template>

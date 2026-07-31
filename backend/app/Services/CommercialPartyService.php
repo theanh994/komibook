@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Book;
 use App\Models\BookCommercialParty;
+use App\Models\OrganizationDistributionAgreement;
 use App\Models\User;
 use App\Models\VendorOrganizationRelationship;
 use Illuminate\Support\Facades\DB;
@@ -37,6 +38,25 @@ class CommercialPartyService
                 throw ValidationException::withMessages([$role => 'Tổ chức và quan hệ phải được xác minh, còn hiệu lực.']);
             }
             $this->assertRoleCompatible($role, $relationship);
+        }
+
+        $publisherOrganizationId = (int) $relationships
+            ->get((int) $relationshipIdsByRole['publisher'])->organization_id;
+        $supplierOrganizationId = (int) $relationships
+            ->get((int) $relationshipIdsByRole['supplier'])->organization_id;
+        if ($publisherOrganizationId !== $supplierOrganizationId) {
+            $hasAgreement = OrganizationDistributionAgreement::query()
+                ->where('publisher_organization_id', $publisherOrganizationId)
+                ->where('distributor_organization_id', $supplierOrganizationId)
+                ->where('status', 'verified')
+                ->get()
+                ->contains(fn (OrganizationDistributionAgreement $agreement) => $agreement->isCurrentlyVerified()
+                    && $agreement->coversBook($book->id));
+            if (! $hasAgreement) {
+                throw ValidationException::withMessages([
+                    'supplier' => 'Nhà cung cấp/nhà phân phối chưa có thỏa thuận còn hiệu lực với Nhà xuất bản cho sách này.',
+                ]);
+            }
         }
 
         return DB::transaction(function () use ($book, $relationshipIdsByRole, $relationships, $actor) {

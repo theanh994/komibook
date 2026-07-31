@@ -138,7 +138,17 @@ class Phase4PayoutCampaignOperationsTest extends TestCase
     private function vendorWithBalance(int $balance): array
     {
         $user = User::factory()->create(['role' => 'vendor']);
-        $vendor = Vendor::create(['user_id' => $user->id, 'shop_name' => 'Payout Shop', 'slug' => 'payout-shop-'.uniqid(), 'status' => 'active']);
+        $vendor = Vendor::create([
+            'user_id' => $user->id,
+            'shop_name' => 'Payout Shop',
+            'slug' => 'payout-shop-'.uniqid(),
+            'status' => 'active',
+            'payout_bank_name' => 'Komi Bank',
+            'payout_bank_account' => '123',
+            'payout_bank_holder' => 'Vendor',
+            'payout_bank_status' => 'verified',
+            'payout_bank_verified_at' => now(),
+        ]);
         $vendor->forceFill(['balance' => $balance, 'total_withdrawn' => 0])->save();
 
         return [$user, $vendor];

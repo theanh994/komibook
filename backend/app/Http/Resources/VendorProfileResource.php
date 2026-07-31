@@ -40,6 +40,8 @@ class VendorProfileResource extends JsonResource
             'payout_bank_account' => $this->when($private, $this->payout_bank_account),
             'payout_bank_name' => $this->when($private, $this->payout_bank_name),
             'payout_bank_holder' => $this->when($private, $this->payout_bank_holder),
+            'payout_bank_status' => $this->when($private, $this->payout_bank_status),
+            'payout_bank_verified_at' => $this->when($private, $this->payout_bank_verified_at?->toISOString()),
             'has_business_registration_document' => $private ? filled($this->business_registration_document) : null,
             'has_representative_identity_document' => $private ? filled($this->representative_identity_document) : null,
             'business_registration_document_url' => $private && $this->business_registration_document ? "/api/vendors/{$this->id}/documents/business" : null,

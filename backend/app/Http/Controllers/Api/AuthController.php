@@ -184,7 +184,10 @@ class AuthController extends Controller
         // Single-device policy clean up tokens nếu có token cũ
         $user->tokens()->delete();
 
-        $user->load(['vendor', 'membershipTier', 'usedBookSellerProfile', 'favoriteCategories', 'warehouseManagerAssignments']);
+        $user->load([
+            'vendor', 'membershipTier', 'usedBookSellerProfile', 'favoriteCategories',
+            'warehouseManagerAssignments', 'organizationMemberships',
+        ]);
 
         return response()->json([
             'status' => 'success',

@@ -29,6 +29,7 @@ use App\Http\Controllers\Api\HelpCenterController;
 use App\Http\Controllers\Api\InventoryAuditController;
 use App\Http\Controllers\Api\OrderController;
 use App\Http\Controllers\Api\OrganizationController;
+use App\Http\Controllers\Api\OrganizationPortalController;
 use App\Http\Controllers\Api\PhoneAuthController;
 use App\Http\Controllers\Api\PolicyController;
 use App\Http\Controllers\Api\ProfileController;
@@ -49,8 +50,8 @@ use App\Http\Controllers\Api\Vendor\FlashSaleController;
 use App\Http\Controllers\Api\Vendor\SeriesController;
 use App\Http\Controllers\Api\Vendor\WarehouseController;
 use App\Http\Controllers\Api\Vendor\WarehouseManagerController as VendorWarehouseManagerController;
-use App\Http\Controllers\Api\VendorOnboardingController;
 use App\Http\Controllers\Api\VendorFollowController;
+use App\Http\Controllers\Api\VendorOnboardingController;
 use App\Http\Controllers\Api\VnpayController;
 use App\Http\Controllers\Api\WarehouseDocumentController;
 use App\Http\Controllers\Api\WarehouseManagerPortalController;
@@ -172,6 +173,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::patch('/vendor-onboarding/draft', [VendorOnboardingController::class, 'saveDraft']);
     Route::post('/vendor-onboarding/submit', [VendorOnboardingController::class, 'submit']);
     Route::get('/vendor-onboarding/status', [VendorOnboardingController::class, 'status']);
+    Route::get('/organization-portal', [OrganizationPortalController::class, 'index']);
+    Route::post('/organization-portal/organizations', [OrganizationPortalController::class, 'storeOrganization']);
+    Route::post('/organization-portal/distribution-agreements', [OrganizationPortalController::class, 'storeAgreement']);
     Route::get('/vendors/{vendor}/documents/{type}', [VendorOnboardingController::class, 'downloadDocument']);
     Route::get('/warehouse-manager/assignments', [WarehouseManagerPortalController::class, 'assignments']);
     Route::post('/warehouse-manager/assignments/{assignment}/accept', [WarehouseManagerPortalController::class, 'accept']);
@@ -381,6 +385,7 @@ Route::middleware(['auth:sanctum', 'role:admin'])->prefix('admin')->name('admin.
     Route::get('organization-reviews', [OrganizationReviewController::class, 'index'])->name('organization-reviews.index');
     Route::patch('organizations/{organization}/transition', [OrganizationReviewController::class, 'transitionOrganization'])->name('organizations.transition');
     Route::patch('organization-relationships/{relationship}/transition', [OrganizationReviewController::class, 'transitionRelationship'])->name('organization-relationships.transition');
+    Route::patch('distribution-agreements/{agreement}/transition', [OrganizationReviewController::class, 'transitionDistributionAgreement'])->name('distribution-agreements.transition');
     Route::patch('books/{book}/publishing-transition', [AdminBookPublishingController::class, 'transition'])->name('books.publishing.transition');
 
     // Quản lý Tickets hội thoại (Admin)

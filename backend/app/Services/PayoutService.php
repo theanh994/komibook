@@ -20,6 +20,12 @@ class PayoutService
 
         return DB::transaction(function () use ($vendor, $data, $actor, $operationKey) {
             $lockedVendor = Vendor::withoutGlobalScopes()->whereKey($vendor->id)->lockForUpdate()->firstOrFail();
+            if ($lockedVendor->payout_bank_status !== 'verified'
+                || blank($lockedVendor->payout_bank_account)
+                || blank($lockedVendor->payout_bank_name)
+                || blank($lockedVendor->payout_bank_holder)) {
+                throw new LogicException('Tài khoản ngân hàng nhận doanh thu chưa được xác minh.');
+            }
             $existing = PayoutRequest::withoutGlobalScopes()->where('operation_key', $operationKey)->first();
             if ($existing) {
                 if ($existing->vendor_id !== $vendor->id || $existing->amount !== (int) $data['amount']) {
@@ -36,8 +42,10 @@ class PayoutService
             $lockedVendor->decrement('balance', (int) $data['amount']);
             $payout = PayoutRequest::create([
                 'vendor_id' => $lockedVendor->id, 'operation_key' => $operationKey, 'amount' => (int) $data['amount'],
-                'bank_name' => $data['bank_name'], 'account_number' => $data['account_number'],
-                'account_name' => Str::upper($data['account_name']), 'status' => 'pending',
+                'bank_name' => $lockedVendor->payout_bank_name,
+                'account_number' => $lockedVendor->payout_bank_account,
+                'account_name' => Str::upper($lockedVendor->payout_bank_holder),
+                'status' => 'pending',
             ]);
             PayoutLedgerEntry::create([
                 'payout_request_id' => $payout->id, 'vendor_id' => $lockedVendor->id, 'actor_id' => $actor?->id,

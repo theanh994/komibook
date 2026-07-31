@@ -144,6 +144,12 @@ const router = createRouter({
       meta: { requiresAuth: true }
     },
     {
+      path: '/organization-portal',
+      name: 'organization-portal',
+      component: () => import('@/views/OrganizationPortalView.vue'),
+      meta: { requiresAuth: true, title: 'Tổ chức & phân phối' }
+    },
+    {
       path: '/help-center',
       name: 'help-center',
       component: () => import('@/views/HelpCenterView.vue'),
@@ -430,7 +436,7 @@ const router = createRouter({
     {
       path: '/vendor',
       component: () => import('@/layouts/AdminLayout.vue'),
-      meta: { requiresAuth: true, role: 'vendor', hideHeader: true },
+      meta: { requiresAuth: true, role: 'vendor', capability: 'active_vendor', hideHeader: true },
       children: [
         {
           path: 'dashboard',

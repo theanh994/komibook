@@ -128,13 +128,13 @@ const submitCoupon = async () => {
   error.value = ''
   message.value = ''
   try {
-    const { search, ...fields } = couponForm
     const payload = {
-      ...fields,
+      ...couponForm,
       code: couponForm.code.trim().toUpperCase(),
       category_id: couponForm.scope_type === 'category' ? couponForm.category_id : null,
       scope_book_ids: couponForm.scope_type === 'books' ? couponForm.scope_book_ids : null,
     }
+    delete payload.search
     const response = await apiClient.post('/api/vendor/coupons', payload)
     message.value = response.data.message
     Object.assign(couponForm, {

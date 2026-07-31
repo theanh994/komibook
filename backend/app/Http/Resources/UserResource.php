@@ -25,6 +25,10 @@ class UserResource extends JsonResource
             ? $this->warehouseManagerAssignments->contains(fn ($assignment) => $assignment->isActive())
             : false;
         $activeUsedBookSeller = $this->usedBookSellerProfile?->isActive() ?? false;
+        $organizationManager = $this->organizationMemberships
+            ? $this->organizationMemberships->contains(fn ($membership) => $membership->status === 'active'
+                && in_array($membership->role, ['owner', 'admin', 'catalog_manager'], true))
+            : false;
 
         return [
             'id' => $this->id,
@@ -46,6 +50,7 @@ class UserResource extends JsonResource
                 'warehouse_manager' => $activeWarehouseManager,
                 'used_book_seller' => $activeUsedBookSeller,
                 'review_partner_onboarding' => $this->role === 'admin',
+                'organization_manager' => $organizationManager,
             ],
 
             'favorite_categories' => $this->favoriteCategories ? $this->favoriteCategories->map(fn ($cat) => [
@@ -70,6 +75,7 @@ class UserResource extends JsonResource
                 'description' => $this->vendor->description,
                 'status' => $this->vendor->status,
                 'onboarding_status' => $vendorStatus,
+                'payout_bank_status' => $this->vendor->payout_bank_status,
             ] : null,
         ];
     }

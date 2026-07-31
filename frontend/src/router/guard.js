@@ -16,12 +16,17 @@ export function evaluateRouteGuard(to, { isAuthenticated, userRole, capabilities
     return { name: 'dashboard' }
   }
 
-  // 3. Role-based access control check
-  if (to.meta?.role && userRole !== to.meta.role) {
+  if (to.meta?.capability && !capabilities[to.meta.capability]) {
+    if (to.meta.capability === 'active_vendor') {
+      return { name: 'vendor-register', query: { redirect: to.fullPath } }
+    }
+
     return { name: 'home' }
   }
 
-  if (to.meta?.capability && !capabilities[to.meta.capability]) {
+  // 3. Role-based access control check. Capability is evaluated first so an
+  // incomplete seller application receives an actionable onboarding route.
+  if (to.meta?.role && userRole !== to.meta.role) {
     return { name: 'home' }
   }
 

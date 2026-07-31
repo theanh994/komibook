@@ -53,6 +53,21 @@ class Organization extends Model
         return $this->hasMany(BookCommercialParty::class);
     }
 
+    public function memberships(): HasMany
+    {
+        return $this->hasMany(OrganizationMembership::class);
+    }
+
+    public function publishingAgreements(): HasMany
+    {
+        return $this->hasMany(OrganizationDistributionAgreement::class, 'publisher_organization_id');
+    }
+
+    public function distributionAgreements(): HasMany
+    {
+        return $this->hasMany(OrganizationDistributionAgreement::class, 'distributor_organization_id');
+    }
+
     public function isVerified(): bool
     {
         return $this->status === 'verified' && $this->verified_at !== null;

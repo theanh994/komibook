@@ -34,6 +34,14 @@ class FinanceController extends Controller
 
         return response()->json([
             'balance' => ['available' => max(0, (int) $vendor->balance - $refundHolds), 'pending' => (int) $pendingAmount, 'totalWithdrawn' => (int) $vendor->total_withdrawn, 'refundHolds' => $refundHolds],
+            'payout_account' => [
+                'bank_name' => $vendor->payout_bank_name,
+                'account_holder' => $vendor->payout_bank_holder,
+                'masked_account' => $vendor->payout_bank_account
+                    ? str_repeat('•', max(0, mb_strlen($vendor->payout_bank_account) - 4)).mb_substr($vendor->payout_bank_account, -4)
+                    : null,
+                'status' => $vendor->payout_bank_status,
+            ],
             'payout_requests' => $payoutRequests,
             'fee_policy' => [
                 'schedule' => $feeSchedule,
@@ -51,14 +59,22 @@ class FinanceController extends Controller
     public function requestPayout(Request $request, PayoutService $payouts)
     {
         $validated = $request->validate([
-            'amount' => 'required|integer|min:50000', 'bank_name' => 'required|string|max:255',
-            'account_number' => 'required|string|max:50', 'account_name' => 'required|string|max:255',
+            'amount' => 'required|integer|min:50000',
             'idempotency_key' => 'nullable|string|max:100',
         ]);
         $vendor = $request->user()->vendor;
         if (! $vendor) {
             return response()->json(['message' => 'Vendor profile not found'], 404);
         }
+        if ($vendor->payout_bank_status !== 'verified') {
+            return response()->json(['message' => 'Tài khoản ngân hàng nhận doanh thu chưa được xác minh.'], 422);
+        }
+
+        $validated += [
+            'bank_name' => $vendor->payout_bank_name,
+            'account_number' => $vendor->payout_bank_account,
+            'account_name' => $vendor->payout_bank_holder,
+        ];
 
         try {
             $payout = $payouts->reserve($vendor, $validated, $request->user(), $validated['idempotency_key'] ?? $request->header('Idempotency-Key'));

@@ -38,6 +38,9 @@ class Vendor extends Model
         'payout_bank_account',
         'payout_bank_name',
         'payout_bank_holder',
+        'payout_bank_status',
+        'payout_bank_verified_at',
+        'payout_bank_verified_by',
         'terms_accepted_at',
         'submitted_at',
         'review_started_at',
@@ -69,6 +72,7 @@ class Vendor extends Model
             'rejected_at' => 'datetime',
             'suspended_at' => 'datetime',
             'revoked_at' => 'datetime',
+            'payout_bank_verified_at' => 'datetime',
         ];
     }
 

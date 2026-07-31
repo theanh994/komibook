@@ -123,6 +123,19 @@ class User extends Authenticatable
         return $this->hasMany(WarehouseManagerAssignment::class);
     }
 
+    public function organizationMemberships(): HasMany
+    {
+        return $this->hasMany(OrganizationMembership::class);
+    }
+
+    public function isOrganizationManager(): bool
+    {
+        return $this->organizationMemberships()
+            ->where('status', 'active')
+            ->whereIn('role', ['owner', 'admin', 'catalog_manager'])
+            ->exists();
+    }
+
     public function usedBookSellerProfile(): HasOne
     {
         return $this->hasOne(UsedBookSellerProfile::class);

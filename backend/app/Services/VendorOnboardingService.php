@@ -60,6 +60,11 @@ class VendorOnboardingService
             if ($timestamp) {
                 $updates[$timestamp] = now();
             }
+            if ($target === VendorOnboardingStatus::Approved) {
+                $updates['payout_bank_status'] = 'verified';
+                $updates['payout_bank_verified_at'] = now();
+                $updates['payout_bank_verified_by'] = $actor->id;
+            }
             if ($target === VendorOnboardingStatus::Resubmitted) {
                 $updates['application_version'] = $locked->application_version + 1;
             }

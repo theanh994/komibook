@@ -14,6 +14,7 @@ const balance = ref({
 
 const payoutRequests = ref([])
 const feePolicy = ref(null)
+const payoutAccount = ref({ status: 'unverified', bank_name: null, masked_account: null, account_holder: null })
 const loading = ref(false)
 const errorMessage = ref('')
 
@@ -21,9 +22,6 @@ const errorMessage = ref('')
 const isWithdrawModalOpen = ref(false)
 const withdrawForm = ref({
   amount: 100000,
-  bank_name: '',
-  account_number: '',
-  account_name: '',
   idempotency_key: null
 })
 
@@ -36,6 +34,7 @@ const fetchFinanceData = async () => {
     balance.value = res.data.balance
     payoutRequests.value = res.data.payout_requests
     feePolicy.value = res.data.fee_policy || null
+    payoutAccount.value = res.data.payout_account || payoutAccount.value
   } catch (err) {
     toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Không thể tải dữ liệu tài chính.', life: 3000 })
     errorMessage.value = 'Không thể tải số dư và lịch sử payout. Không sử dụng dữ liệu minh họa thay thế.'
@@ -49,8 +48,8 @@ const handleWithdrawRequest = async () => {
     toast.add({ severity: 'warn', summary: 'Cảnh báo', detail: 'Số dư khả dụng của bạn không đủ.', life: 3000 })
     return
   }
-  if (!withdrawForm.value.bank_name || !withdrawForm.value.account_number || !withdrawForm.value.account_name) {
-    toast.add({ severity: 'warn', summary: 'Cảnh báo', detail: 'Vui lòng điền đầy đủ thông tin nhận tiền.', life: 3000 })
+  if (payoutAccount.value.status !== 'verified') {
+    toast.add({ severity: 'warn', summary: 'Chưa thể rút tiền', detail: 'Tài khoản ngân hàng nhận doanh thu chưa được xác minh.', life: 3000 })
     return
   }
 
@@ -60,7 +59,7 @@ const handleWithdrawRequest = async () => {
     toast.add({ severity: 'success', summary: 'Thành công', detail: 'Yêu cầu rút tiền đã được gửi thành công.', life: 3000 })
     isWithdrawModalOpen.value = false
     // Reset form
-    withdrawForm.value = { amount: 100000, bank_name: '', account_number: '', account_name: '', idempotency_key: null }
+    withdrawForm.value = { amount: 100000, idempotency_key: null }
     fetchFinanceData()
   } catch (err) {
     const errMsg = err.response?.data?.message || 'Không thể tạo yêu cầu rút tiền.'
@@ -86,13 +85,32 @@ onMounted(() => {
         <p class="font-body-lg text-body-lg text-on-surface-variant">Theo dõi và yêu cầu rút tiền từ doanh thu bán sách của bạn.</p>
       </div>
       <button 
+        :disabled="payoutAccount.status !== 'verified'"
         @click="isWithdrawModalOpen = true"
-        class="bg-primary text-on-primary font-headline-md text-headline-md px-lg py-md rounded-lg shadow-sm hover:bg-opacity-90 transition-all flex items-center gap-sm"
+        class="flex min-h-11 items-center gap-sm rounded-lg bg-primary px-lg py-md font-headline-md text-headline-md text-on-primary shadow-sm transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
       >
         <span class="material-symbols-outlined">account_balance_wallet</span>
         Gửi yêu cầu rút tiền
       </button>
     </div>
+
+    <section class="mb-xl rounded-xl border border-outline-variant/30 bg-surface-container-lowest p-lg" aria-labelledby="payout-account-title">
+      <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h3 id="payout-account-title" class="text-xl font-black text-on-surface">Tài khoản nhận doanh thu</h3>
+          <p v-if="payoutAccount.masked_account" class="mt-2 text-sm text-on-surface-variant">
+            {{ payoutAccount.bank_name }} · {{ payoutAccount.masked_account }} · {{ payoutAccount.account_holder }}
+          </p>
+          <p v-else class="mt-2 text-sm text-on-surface-variant">Chưa có tài khoản ngân hàng trong hồ sơ Nhà bán.</p>
+        </div>
+        <span class="rounded-full bg-surface-container px-3 py-2 text-sm font-bold text-on-surface">
+          {{ payoutAccount.status === 'verified' ? 'Đã xác minh' : 'Chưa xác minh' }}
+        </span>
+      </div>
+      <p v-if="payoutAccount.status !== 'verified'" class="mt-4 rounded-lg bg-error-container/30 p-3 text-sm text-on-error-container" role="alert">
+        Hãy cập nhật hồ sơ Nhà bán và chờ Admin xác minh tài khoản nhận tiền trước khi tạo yêu cầu rút.
+      </p>
+    </section>
 
     <div v-if="errorMessage" class="mb-lg flex flex-col gap-3 rounded-xl border border-error/30 bg-error-container/30 p-4 text-on-error-container sm:flex-row sm:items-center sm:justify-between" role="alert">
       <span>{{ errorMessage }}</span>
@@ -229,17 +247,10 @@ onMounted(() => {
             <label class="text-label-md font-medium text-on-surface">Số tiền rút (VND)</label>
             <input v-model.number="withdrawForm.amount" type="number" min="50000" class="border border-outline p-md rounded-lg focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"/>
           </div>
-          <div class="flex flex-col gap-xs">
-            <label class="text-label-md font-medium text-on-surface">Tên ngân hàng</label>
-            <input v-model="withdrawForm.bank_name" type="text" placeholder="Ví dụ: Vietcombank, Techcombank" class="border border-outline p-md rounded-lg focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"/>
-          </div>
-          <div class="flex flex-col gap-xs">
-            <label class="text-label-md font-medium text-on-surface">Số tài khoản nhận</label>
-            <input v-model="withdrawForm.account_number" type="text" placeholder="Nhập số tài khoản" class="border border-outline p-md rounded-lg focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"/>
-          </div>
-          <div class="flex flex-col gap-xs">
-            <label class="text-label-md font-medium text-on-surface">Tên chủ tài khoản</label>
-            <input v-model="withdrawForm.account_name" type="text" placeholder="VIET HOA KHONG DAU" class="border border-outline p-md rounded-lg focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"/>
+          <div class="rounded-lg border border-outline-variant bg-surface-container-low p-md">
+            <p class="text-sm font-semibold text-on-surface">Tài khoản đã xác minh</p>
+            <p class="mt-1 text-sm text-on-surface-variant">{{ payoutAccount.bank_name }} · {{ payoutAccount.masked_account }} · {{ payoutAccount.account_holder }}</p>
+            <p class="mt-2 text-xs leading-5 text-on-surface-variant">Yêu cầu sẽ chụp lại tài khoản này để đối soát. Không thể thay số tài khoản ngay trong lúc rút tiền.</p>
           </div>
         </div>
         <div class="p-lg bg-surface-container-low flex justify-end gap-md">

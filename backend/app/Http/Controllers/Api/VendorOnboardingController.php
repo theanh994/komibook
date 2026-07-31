@@ -20,6 +20,10 @@ class VendorOnboardingController extends Controller
         $vendor = Vendor::withoutGlobalScopes()->where('user_id', $request->user()->id)->first();
         $validated = $request->validate($this->rules($vendor, false));
         $vendor ??= new Vendor(['user_id' => $request->user()->id]);
+        $bankChanged = ! $vendor->exists
+            || $vendor->payout_bank_account !== $validated['payout_bank_account']
+            || $vendor->payout_bank_name !== $validated['payout_bank_name']
+            || $vendor->payout_bank_holder !== $validated['payout_bank_holder'];
         $state = $vendor->exists ? ($vendor->onboarding_status ?? VendorOnboardingStatus::Draft) : VendorOnboardingStatus::Draft;
         if (! in_array($state, [VendorOnboardingStatus::Draft, VendorOnboardingStatus::ChangesRequested], true)) {
             throw ValidationException::withMessages(['profile' => 'Hồ sơ nhà bán không thể được gửi lại ở trạng thái này.']);
@@ -35,6 +39,9 @@ class VendorOnboardingController extends Controller
             'payout_bank_account' => $validated['payout_bank_account'],
             'payout_bank_name' => $validated['payout_bank_name'],
             'payout_bank_holder' => $validated['payout_bank_holder'],
+            'payout_bank_status' => $bankChanged ? 'unverified' : $vendor->payout_bank_status,
+            'payout_bank_verified_at' => $bankChanged ? null : $vendor->payout_bank_verified_at,
+            'payout_bank_verified_by' => $bankChanged ? null : $vendor->payout_bank_verified_by,
             'terms_accepted_at' => now(),
             'status' => 'inactive',
             'onboarding_status' => $state,
@@ -61,6 +68,8 @@ class VendorOnboardingController extends Controller
             throw ValidationException::withMessages(['profile' => 'Hồ sơ nhà bán hiện không thể chỉnh sửa.']);
         }
         $validated = $request->validate($this->rules($vendor, true));
+        $bankChanged = collect(['payout_bank_account', 'payout_bank_name', 'payout_bank_holder'])
+            ->contains(fn ($field) => array_key_exists($field, $validated) && $vendor->{$field} !== $validated[$field]);
         foreach (['shop_name', 'slug', 'description', 'business_model', 'legal_name', 'tax_code', 'payout_bank_account', 'payout_bank_name', 'payout_bank_holder'] as $field) {
             if (array_key_exists($field, $validated)) {
                 $vendor->{$field} = $validated[$field];
@@ -73,6 +82,11 @@ class VendorOnboardingController extends Controller
         }
         if ($request->boolean('terms_accepted')) {
             $vendor->terms_accepted_at = now();
+        }
+        if ($bankChanged) {
+            $vendor->payout_bank_status = 'unverified';
+            $vendor->payout_bank_verified_at = null;
+            $vendor->payout_bank_verified_by = null;
         }
         $vendor->status = 'inactive';
         $vendor->onboarding_status = $state;
