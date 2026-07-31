@@ -17,13 +17,13 @@ class OrganizationReviewController extends Controller
     public function index()
     {
         return response()->json(['status' => 'success', 'data' => [
-            'organizations' => Organization::whereIn('status', ['pending_review', 'verified', 'suspended'])
+            'organizations' => Organization::whereIn('status', ['pending_review', 'verified', 'demo_accepted', 'suspended'])
                 ->latest()->paginate(25),
             'relationships' => VendorOrganizationRelationship::with(['organization', 'vendor:id,shop_name,slug'])
-                ->whereIn('status', ['submitted', 'changes_requested', 'verified', 'suspended'])
+                ->whereIn('status', ['submitted', 'changes_requested', 'verified', 'demo_accepted', 'suspended'])
                 ->latest()->paginate(25),
             'distribution_agreements' => OrganizationDistributionAgreement::with(['publisher', 'distributor'])
-                ->whereIn('status', ['submitted', 'changes_requested', 'verified', 'suspended'])
+                ->whereIn('status', ['submitted', 'changes_requested', 'verified', 'demo_accepted', 'suspended'])
                 ->latest()->paginate(25),
         ]]);
     }
@@ -31,18 +31,24 @@ class OrganizationReviewController extends Controller
     public function transitionOrganization(Request $request, Organization $organization)
     {
         $validated = $request->validate([
-            'to_status' => ['required', Rule::in(['verified', 'rejected', 'suspended', 'archived'])],
+            'to_status' => ['required', Rule::in(['verified', 'demo_accepted', 'rejected', 'suspended', 'archived'])],
             'reason' => ['nullable', 'string', 'max:1000'],
         ]);
         if (in_array($validated['to_status'], ['rejected', 'suspended', 'archived'], true) && blank($validated['reason'] ?? null)) {
             return response()->json(['message' => 'Phải nhập lý do cho quyết định này.'], 422);
+        }
+        if ($validated['to_status'] === 'demo_accepted' && $organization->data_mode !== 'demo') {
+            return response()->json(['message' => 'Chỉ hồ sơ dữ liệu demo mới được duyệt mô phỏng.'], 422);
+        }
+        if ($validated['to_status'] === 'verified' && $organization->data_mode === 'demo') {
+            return response()->json(['message' => 'Dữ liệu demo không được đánh dấu là đã xác minh pháp lý.'], 422);
         }
         $updates = [
             'status' => $validated['to_status'],
             'last_review_reason' => $validated['reason'] ?? null,
             'verified_by' => $request->user()->id,
         ];
-        if ($validated['to_status'] === 'verified') {
+        if (in_array($validated['to_status'], ['verified', 'demo_accepted'], true)) {
             $updates['verified_at'] = now();
             $updates['suspended_at'] = null;
         } elseif ($validated['to_status'] === 'suspended') {
@@ -61,7 +67,7 @@ class OrganizationReviewController extends Controller
         OrganizationRelationshipService $service,
     ) {
         $validated = $request->validate([
-            'to_status' => ['required', Rule::in(['verified', 'changes_requested', 'rejected', 'suspended', 'revoked'])],
+            'to_status' => ['required', Rule::in(['verified', 'demo_accepted', 'changes_requested', 'rejected', 'suspended', 'revoked'])],
             'reason' => ['nullable', 'string', 'max:1000'],
             'operation_key' => ['nullable', 'string', 'max:128'],
         ]);
@@ -81,7 +87,7 @@ class OrganizationReviewController extends Controller
         DistributionAgreementService $service,
     ) {
         $validated = $request->validate([
-            'to_status' => ['required', Rule::in(['verified', 'changes_requested', 'rejected', 'suspended', 'revoked'])],
+            'to_status' => ['required', Rule::in(['verified', 'demo_accepted', 'changes_requested', 'rejected', 'suspended', 'revoked'])],
             'reason' => ['nullable', 'string', 'max:1000'],
             'operation_key' => ['nullable', 'string', 'max:128'],
         ]);

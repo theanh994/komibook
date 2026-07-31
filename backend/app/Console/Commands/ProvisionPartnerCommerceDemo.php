@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Models\Organization;
+use App\Models\OrganizationDistributionAgreement;
 use App\Models\OrganizationMembership;
 use App\Models\User;
 use App\Models\Vendor;
@@ -146,13 +147,16 @@ class ProvisionPartnerCommerceDemo extends Command
                         $vendor->update([
                             'business_model' => 'direct_publisher',
                             'primary_organization_id' => $organization->id,
-                            'payout_bank_status' => 'unverified',
+                            'is_demo' => true,
+                            'demo_wallet_code' => 'DEMO-VENDOR-'.str_pad((string) $vendor->id, 4, '0', STR_PAD_LEFT),
+                            'payout_bank_status' => 'demo_disabled',
                             'payout_bank_verified_at' => null,
                             'payout_bank_verified_by' => null,
                         ]);
                         $this->createSelfRelationship($vendor, $organization);
                     }
                 }
+                $this->createDemoPartnerships();
             });
         } catch (Throwable $exception) {
             Storage::disk('private')->delete(self::CREDENTIALS_PATH);
@@ -175,7 +179,8 @@ class ProvisionPartnerCommerceDemo extends Command
             'display_name' => $displayName,
             'slug' => $slug,
             'organization_types' => $types,
-            'status' => 'draft',
+            'status' => 'demo_accepted',
+            'data_mode' => 'demo',
         ]);
         OrganizationMembership::create([
             'user_id' => $user->id,
@@ -189,7 +194,7 @@ class ProvisionPartnerCommerceDemo extends Command
 
     private function createDraftVendor(User $user, Organization $organization, string $businessModel): Vendor
     {
-        return Vendor::withoutGlobalScopes()->create([
+        $vendor = Vendor::withoutGlobalScopes()->create([
             'user_id' => $user->id,
             'shop_name' => null,
             'slug' => null,
@@ -198,7 +203,14 @@ class ProvisionPartnerCommerceDemo extends Command
             'business_model' => $businessModel,
             'primary_organization_id' => $organization->id,
             'payout_bank_status' => 'unverified',
+            'is_demo' => true,
         ]);
+        $vendor->update([
+            'demo_wallet_code' => 'DEMO-VENDOR-'.str_pad((string) $vendor->id, 4, '0', STR_PAD_LEFT),
+            'payout_bank_status' => 'demo_disabled',
+        ]);
+
+        return $vendor;
     }
 
     private function createSelfRelationship(Vendor $vendor, Organization $organization): void
@@ -207,9 +219,52 @@ class ProvisionPartnerCommerceDemo extends Command
             'vendor_id' => $vendor->id,
             'organization_id' => $organization->id,
             'role' => 'self_legal_entity',
-            'status' => 'draft',
+            'status' => 'demo_accepted',
+            'is_demo' => true,
+            'evidence_mode' => 'demo_statement',
+            'demo_reference' => 'DEMO-SELF-'.str_pad((string) $vendor->id, 4, '0', STR_PAD_LEFT),
             'operation_key' => "demo-self-organization:{$vendor->id}:{$organization->id}",
         ]);
+    }
+
+    private function createDemoPartnerships(): void
+    {
+        foreach ([
+            ['ipm-demo', 'nxb-lao-dong-demo'],
+            ['ipm-demo', 'nxb-ha-noi-demo'],
+            ['fahasa-demo', 'nxb-kim-dong-demo'],
+            ['fahasa-demo', 'nxb-tre-demo'],
+            ['fahasa-demo', 'nxb-giao-duc-demo'],
+        ] as [$distributorSlug, $publisherSlug]) {
+            $distributor = Organization::where('slug', $distributorSlug)->firstOrFail();
+            $publisher = Organization::where('slug', $publisherSlug)->firstOrFail();
+            $vendor = Vendor::withoutGlobalScopes()->where('primary_organization_id', $distributor->id)->firstOrFail();
+            $reference = strtoupper(str_replace('-demo', '', $distributorSlug).'-'.str_replace('-demo', '', $publisherSlug));
+
+            VendorOrganizationRelationship::create([
+                'vendor_id' => $vendor->id,
+                'organization_id' => $publisher->id,
+                'role' => 'publisher_partner',
+                'status' => 'demo_accepted',
+                'is_demo' => true,
+                'evidence_mode' => 'demo_statement',
+                'demo_reference' => "DEMO-REL-{$reference}",
+                'scope' => ['coverage' => 'catalog', 'notice' => 'simulated'],
+                'last_review_reason' => 'Quan hệ mô phỏng phục vụ báo cáo và kiểm thử nghiệp vụ.',
+                'operation_key' => "demo-mapping:relationship:{$distributorSlug}:{$publisherSlug}",
+            ]);
+            OrganizationDistributionAgreement::create([
+                'publisher_organization_id' => $publisher->id,
+                'distributor_organization_id' => $distributor->id,
+                'status' => 'demo_accepted',
+                'is_demo' => true,
+                'evidence_mode' => 'demo_statement',
+                'demo_reference' => "DEMO-AGR-{$reference}",
+                'scope' => ['coverage' => 'catalog', 'notice' => 'simulated'],
+                'last_review_reason' => 'Thỏa thuận mô phỏng; không có giá trị pháp lý.',
+                'operation_key' => "demo-mapping:agreement:{$distributorSlug}:{$publisherSlug}",
+            ]);
+        }
     }
 
     private function buildCredentialsCsv(array $credentials): string

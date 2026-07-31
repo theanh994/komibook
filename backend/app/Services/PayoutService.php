@@ -20,6 +20,9 @@ class PayoutService
 
         return DB::transaction(function () use ($vendor, $data, $actor, $operationKey) {
             $lockedVendor = Vendor::withoutGlobalScopes()->whereKey($vendor->id)->lockForUpdate()->firstOrFail();
+            if ($lockedVendor->is_demo) {
+                throw new LogicException('Ví đối soát demo không được phép tạo yêu cầu rút tiền thật.');
+            }
             if ($lockedVendor->payout_bank_status !== 'verified'
                 || blank($lockedVendor->payout_bank_account)
                 || blank($lockedVendor->payout_bank_name)

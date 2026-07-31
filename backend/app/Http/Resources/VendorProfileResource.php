@@ -25,6 +25,8 @@ class VendorProfileResource extends JsonResource
             'application_version' => $this->application_version,
             'business_model' => $this->business_model,
             'primary_organization_id' => $this->primary_organization_id,
+            'is_demo' => (bool) $this->is_demo,
+            'demo_wallet_code' => $this->when($private, $this->demo_wallet_code),
             'last_review_reason' => $this->last_review_reason,
             'terms_accepted_at' => $this->terms_accepted_at?->toISOString(),
             'submitted_at' => $this->submitted_at?->toISOString(),

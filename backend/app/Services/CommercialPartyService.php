@@ -34,7 +34,7 @@ class CommercialPartyService
 
         foreach (self::ROLES as $role) {
             $relationship = $relationships->get((int) $relationshipIdsByRole[$role]);
-            if (! $relationship?->isCurrentlyVerified() || ! $relationship->organization?->isVerified()) {
+            if (! $relationship?->isCurrentlyVerified() || ! $relationship->organization?->isOperationallyAccepted()) {
                 throw ValidationException::withMessages([$role => 'Tổ chức và quan hệ phải được xác minh, còn hiệu lực.']);
             }
             $this->assertRoleCompatible($role, $relationship);
@@ -48,7 +48,7 @@ class CommercialPartyService
             $hasAgreement = OrganizationDistributionAgreement::query()
                 ->where('publisher_organization_id', $publisherOrganizationId)
                 ->where('distributor_organization_id', $supplierOrganizationId)
-                ->where('status', 'verified')
+                ->whereIn('status', ['verified', 'demo_accepted'])
                 ->get()
                 ->contains(fn (OrganizationDistributionAgreement $agreement) => $agreement->isCurrentlyVerified()
                     && $agreement->coversBook($book->id));

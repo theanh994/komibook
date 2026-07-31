@@ -30,6 +30,8 @@ class Vendor extends Model
         'onboarding_status',
         'business_model',
         'primary_organization_id',
+        'is_demo',
+        'demo_wallet_code',
         'application_version',
         'legal_name',
         'tax_code',
@@ -73,6 +75,7 @@ class Vendor extends Model
             'suspended_at' => 'datetime',
             'revoked_at' => 'datetime',
             'payout_bank_verified_at' => 'datetime',
+            'is_demo' => 'boolean',
         ];
     }
 

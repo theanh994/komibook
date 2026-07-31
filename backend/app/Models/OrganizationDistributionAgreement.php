@@ -12,8 +12,8 @@ class OrganizationDistributionAgreement extends Model
     use HasFactory;
 
     protected $fillable = [
-        'publisher_organization_id', 'distributor_organization_id', 'status', 'scope',
-        'evidence_document', 'effective_from', 'effective_until', 'reviewed_by',
+        'publisher_organization_id', 'distributor_organization_id', 'status', 'is_demo', 'evidence_mode', 'scope',
+        'evidence_document', 'demo_reference', 'effective_from', 'effective_until', 'reviewed_by',
         'submitted_at', 'verified_at', 'revoked_at', 'last_review_reason', 'operation_key',
     ];
 
@@ -23,6 +23,7 @@ class OrganizationDistributionAgreement extends Model
     {
         return [
             'scope' => 'array',
+            'is_demo' => 'boolean',
             'effective_from' => 'date',
             'effective_until' => 'date',
             'submitted_at' => 'datetime',
@@ -48,8 +49,8 @@ class OrganizationDistributionAgreement extends Model
 
     public function isCurrentlyVerified(): bool
     {
-        return $this->status === 'verified'
-            && $this->verified_at !== null
+        return in_array($this->status, ['verified', 'demo_accepted'], true)
+            && ($this->status === 'demo_accepted' ? $this->is_demo : $this->verified_at !== null)
             && $this->revoked_at === null
             && ($this->effective_from === null || $this->effective_from->isPast())
             && ($this->effective_until === null || $this->effective_until->endOfDay()->isFuture());

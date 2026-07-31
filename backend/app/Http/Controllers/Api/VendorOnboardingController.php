@@ -19,11 +19,12 @@ class VendorOnboardingController extends Controller
     {
         $vendor = Vendor::withoutGlobalScopes()->where('user_id', $request->user()->id)->first();
         $validated = $request->validate($this->rules($vendor, false));
+        $isDemo = (bool) $vendor?->is_demo;
+        $bankChanged = ! $isDemo && (! $vendor?->exists
+            || $vendor?->payout_bank_account !== ($validated['payout_bank_account'] ?? null)
+            || $vendor?->payout_bank_name !== ($validated['payout_bank_name'] ?? null)
+            || $vendor?->payout_bank_holder !== ($validated['payout_bank_holder'] ?? null));
         $vendor ??= new Vendor(['user_id' => $request->user()->id]);
-        $bankChanged = ! $vendor->exists
-            || $vendor->payout_bank_account !== $validated['payout_bank_account']
-            || $vendor->payout_bank_name !== $validated['payout_bank_name']
-            || $vendor->payout_bank_holder !== $validated['payout_bank_holder'];
         $state = $vendor->exists ? ($vendor->onboarding_status ?? VendorOnboardingStatus::Draft) : VendorOnboardingStatus::Draft;
         if (! in_array($state, [VendorOnboardingStatus::Draft, VendorOnboardingStatus::ChangesRequested], true)) {
             throw ValidationException::withMessages(['profile' => 'Hồ sơ nhà bán không thể được gửi lại ở trạng thái này.']);
@@ -36,10 +37,10 @@ class VendorOnboardingController extends Controller
             'business_model' => $validated['business_model'] ?? $vendor->business_model ?? 'bookstore',
             'legal_name' => $validated['legal_name'],
             'tax_code' => $validated['tax_code'],
-            'payout_bank_account' => $validated['payout_bank_account'],
-            'payout_bank_name' => $validated['payout_bank_name'],
-            'payout_bank_holder' => $validated['payout_bank_holder'],
-            'payout_bank_status' => $bankChanged ? 'unverified' : $vendor->payout_bank_status,
+            'payout_bank_account' => $validated['payout_bank_account'] ?? $vendor->payout_bank_account,
+            'payout_bank_name' => $validated['payout_bank_name'] ?? $vendor->payout_bank_name,
+            'payout_bank_holder' => $validated['payout_bank_holder'] ?? $vendor->payout_bank_holder,
+            'payout_bank_status' => $vendor->is_demo ? 'demo_disabled' : ($bankChanged ? 'unverified' : $vendor->payout_bank_status),
             'payout_bank_verified_at' => $bankChanged ? null : $vendor->payout_bank_verified_at,
             'payout_bank_verified_by' => $bankChanged ? null : $vendor->payout_bank_verified_by,
             'terms_accepted_at' => now(),
@@ -64,7 +65,7 @@ class VendorOnboardingController extends Controller
     {
         $vendor = Vendor::withoutGlobalScopes()->firstOrNew(['user_id' => $request->user()->id]);
         $state = $vendor->exists ? ($vendor->onboarding_status ?? VendorOnboardingStatus::Draft) : VendorOnboardingStatus::Draft;
-        if (! in_array($state, [VendorOnboardingStatus::Draft, VendorOnboardingStatus::ChangesRequested], true)) {
+        if (! in_array($state, [VendorOnboardingStatus::Draft, VendorOnboardingStatus::ChangesRequested, VendorOnboardingStatus::Approved], true)) {
             throw ValidationException::withMessages(['profile' => 'Hồ sơ nhà bán hiện không thể chỉnh sửa.']);
         }
         $validated = $request->validate($this->rules($vendor, true));
@@ -84,12 +85,14 @@ class VendorOnboardingController extends Controller
             $vendor->terms_accepted_at = now();
         }
         if ($bankChanged) {
-            $vendor->payout_bank_status = 'unverified';
+            $vendor->payout_bank_status = $vendor->is_demo ? 'demo_disabled' : 'unverified';
             $vendor->payout_bank_verified_at = null;
             $vendor->payout_bank_verified_by = null;
         }
-        $vendor->status = 'inactive';
-        $vendor->onboarding_status = $state;
+        if ($state !== VendorOnboardingStatus::Approved) {
+            $vendor->status = 'inactive';
+            $vendor->onboarding_status = $state;
+        }
         $vendor->save();
 
         return response()->json(['status' => 'success', 'data' => new VendorProfileResource($vendor)]);
@@ -132,6 +135,7 @@ class VendorOnboardingController extends Controller
     private function rules(?Vendor $vendor, bool $partial): array
     {
         $presence = $partial ? 'sometimes' : 'required';
+        $financialPresence = $vendor?->is_demo ? 'nullable' : $presence;
 
         return [
             'shop_name' => [$presence, 'string', 'max:255'],
@@ -142,9 +146,9 @@ class VendorOnboardingController extends Controller
             'tax_code' => [$presence, 'string', 'max:64'],
             'business_registration_document' => [$partial ? 'sometimes' : 'nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:5120'],
             'representative_identity_document' => [$partial ? 'sometimes' : 'nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:5120'],
-            'payout_bank_account' => [$presence, 'string', 'max:64'],
-            'payout_bank_name' => [$presence, 'string', 'max:255'],
-            'payout_bank_holder' => [$presence, 'string', 'max:255'],
+            'payout_bank_account' => [$financialPresence, 'string', 'max:64'],
+            'payout_bank_name' => [$financialPresence, 'string', 'max:255'],
+            'payout_bank_holder' => [$financialPresence, 'string', 'max:255'],
             'terms_accepted' => [$partial ? 'sometimes' : 'accepted'],
             'operation_key' => ['nullable', 'string', 'max:100'],
         ];

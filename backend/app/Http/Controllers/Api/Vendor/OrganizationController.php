@@ -3,8 +3,8 @@
 namespace App\Http\Controllers\Api\Vendor;
 
 use App\Http\Controllers\Controller;
-use App\Models\Organization;
 use App\Models\Book;
+use App\Models\Organization;
 use App\Models\VendorOrganizationRelationship;
 use App\Services\CommercialPartyService;
 use App\Services\OrganizationRelationshipService;
@@ -20,10 +20,13 @@ class OrganizationController extends Controller
     {
         $vendor = $request->user()->vendor()->withoutGlobalScopes()->firstOrFail();
         $relationships = $vendor->organizationRelationships()->with('organization')->latest()->get();
+        $relationships->each(fn (VendorOrganizationRelationship $relationship) => $relationship->organization?->makeVisible(['tax_code', 'license_number']));
 
         return response()->json(['status' => 'success', 'data' => [
             'business_model' => $vendor->business_model,
             'primary_organization_id' => $vendor->primary_organization_id,
+            'is_demo' => (bool) $vendor->is_demo,
+            'demo_wallet_code' => $vendor->is_demo ? $vendor->demo_wallet_code : null,
             'relationships' => $relationships,
         ]]);
     }
@@ -40,6 +43,8 @@ class OrganizationController extends Controller
             'license_number' => ['nullable', 'string', 'max:128'],
             'description' => ['nullable', 'string', 'max:5000'],
             'website' => ['nullable', 'url', 'max:255'],
+            'public_source_url' => ['nullable', 'url', 'max:255'],
+            'public_source_checked_at' => ['nullable', 'date', 'before_or_equal:today'],
             'logo' => ['nullable', 'file', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
             'verification_document' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:5120'],
         ]);
@@ -80,6 +85,75 @@ class OrganizationController extends Controller
         }
 
         return response()->json(['status' => 'success', 'data' => $result], 201);
+    }
+
+    public function updateOrganization(Request $request, Organization $organization)
+    {
+        $vendor = $request->user()->vendor()->withoutGlobalScopes()->firstOrFail();
+        $relationship = $vendor->organizationRelationships()
+            ->where('organization_id', $organization->id)
+            ->where('role', 'self_legal_entity')
+            ->firstOrFail();
+        abort_unless(in_array($organization->status, ['draft', 'pending_review', 'changes_requested', 'demo_accepted'], true), 422);
+
+        $validated = $request->validate([
+            'legal_name' => ['required', 'string', 'max:255'],
+            'display_name' => ['required', 'string', 'max:255'],
+            'slug' => ['required', 'string', 'max:255', 'regex:/^[a-z0-9]+(?:-[a-z0-9]+)*$/', Rule::unique('organizations', 'slug')->ignore($organization->id)],
+            'organization_types' => ['required', 'array', 'min:1'],
+            'organization_types.*' => [Rule::in(['publisher', 'supplier', 'distributor', 'bookstore'])],
+            'tax_code' => ['nullable', 'string', 'max:64'],
+            'license_number' => ['nullable', 'string', 'max:128'],
+            'description' => ['nullable', 'string', 'max:5000'],
+            'website' => ['nullable', 'url', 'max:255'],
+            'public_source_url' => ['nullable', 'url', 'max:255'],
+            'public_source_checked_at' => ['nullable', 'date', 'before_or_equal:today'],
+            'logo' => ['nullable', 'file', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
+            'verification_document' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:5120'],
+        ]);
+
+        $newLogo = $request->file('logo')?->store('organizations/logos', 'public');
+        $newVerification = $request->file('verification_document')?->store('organizations/verification', 'private');
+        $oldLogo = $organization->logo;
+        $oldVerification = $organization->verification_document;
+
+        try {
+            DB::transaction(function () use ($organization, $relationship, $validated, $newLogo, $newVerification) {
+                unset($validated['logo'], $validated['verification_document']);
+                if ($newLogo) {
+                    $validated['logo'] = $newLogo;
+                }
+                if ($newVerification) {
+                    $validated['verification_document'] = $newVerification;
+                }
+                if ($organization->data_mode !== 'demo') {
+                    $validated['status'] = 'pending_review';
+                    $validated['submitted_at'] = now();
+                    $relationship->update(['status' => 'submitted', 'submitted_at' => now()]);
+                }
+                $organization->update($validated);
+            });
+        } catch (\Throwable $exception) {
+            if ($newLogo) {
+                Storage::disk('public')->delete($newLogo);
+            }
+            if ($newVerification) {
+                Storage::disk('private')->delete($newVerification);
+            }
+            throw $exception;
+        }
+
+        if ($newLogo && $oldLogo) {
+            Storage::disk('public')->delete($oldLogo);
+        }
+        if ($newVerification && $oldVerification) {
+            Storage::disk('private')->delete($oldVerification);
+        }
+
+        return response()->json(['status' => 'success', 'data' => [
+            'organization' => $organization->fresh(),
+            'relationship' => $relationship->fresh('organization'),
+        ]]);
     }
 
     public function storeRelationship(Request $request)

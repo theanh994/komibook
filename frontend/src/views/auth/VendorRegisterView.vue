@@ -16,6 +16,8 @@ const reason = ref(null)
 const termsAccepted = ref(false)
 const hasBusinessDocument = ref(false)
 const hasRepresentativeDocument = ref(false)
+const isDemo = ref(false)
+const demoWalletCode = ref('')
 const businessDocument = ref(null)
 const representativeDocument = ref(null)
 const form = ref({
@@ -41,6 +43,8 @@ const loadStatus = async () => {
       termsAccepted.value = Boolean(profile.terms_accepted_at)
       hasBusinessDocument.value = Boolean(profile.has_business_registration_document)
       hasRepresentativeDocument.value = Boolean(profile.has_representative_identity_document)
+      isDemo.value = Boolean(profile.is_demo)
+      demoWalletCode.value = profile.demo_wallet_code || ''
       Object.keys(form.value).forEach((key) => { form.value[key] = profile[key] || '' })
     }
   } catch (exception) {
@@ -58,7 +62,7 @@ const submit = async () => {
     toast.add({ severity: 'warn', summary: 'Thiếu xác nhận', detail: 'Vui lòng chấp nhận điều khoản nhà bán.', life: 3000 })
     return
   }
-  if ((!businessDocument.value && !hasBusinessDocument.value) || (!representativeDocument.value && !hasRepresentativeDocument.value)) {
+  if (!isDemo.value && ((!businessDocument.value && !hasBusinessDocument.value) || (!representativeDocument.value && !hasRepresentativeDocument.value))) {
     toast.add({ severity: 'warn', summary: 'Thiếu tài liệu', detail: 'Vui lòng cung cấp đủ hồ sơ pháp lý và giấy tờ người đại diện.', life: 3000 })
     return
   }
@@ -69,9 +73,11 @@ const submit = async () => {
     payload.append('terms_accepted', '1')
     if (businessDocument.value) payload.append('business_registration_document', businessDocument.value)
     if (representativeDocument.value) payload.append('representative_identity_document', representativeDocument.value)
-    const response = await apiClient.post('/api/vendor-onboarding/register', payload)
+    if (status.value === 'approved') payload.append('_method', 'PATCH')
+    const endpoint = status.value === 'approved' ? '/api/vendor-onboarding/draft' : '/api/vendor-onboarding/register'
+    const response = await apiClient.post(endpoint, payload)
     status.value = response.data.data.onboarding_status
-    toast.add({ severity: 'success', summary: 'Đã gửi', detail: 'Hồ sơ nhà bán đã được gửi để kiểm duyệt.', life: 3000 })
+    toast.add({ severity: 'success', summary: status.value === 'approved' ? 'Đã lưu' : 'Đã gửi', detail: status.value === 'approved' ? 'Thông tin gian hàng đã được cập nhật.' : 'Hồ sơ nhà bán đã được gửi để kiểm duyệt.', life: 3000 })
   } catch (exception) {
     toast.add({ severity: 'error', summary: 'Lỗi', detail: exception.response?.data?.message || 'Không thể gửi hồ sơ.', life: 3500 })
   } finally {
@@ -102,11 +108,13 @@ onMounted(loadStatus)
       <div v-else-if="['submitted', 'resubmitted', 'under_review'].includes(status)" class="mt-8 rounded-xl border border-amber-200 bg-amber-50 p-6 text-amber-900">
         Hồ sơ đang được kiểm duyệt. Bạn chưa thể vận hành gian hàng cho đến khi được phê duyệt.
       </div>
-      <div v-else-if="['approved', 'suspended', 'revoked', 'rejected'].includes(status)" class="mt-8 rounded-xl border border-slate-200 p-6">
+      <div v-else-if="['suspended', 'revoked', 'rejected'].includes(status)" class="mt-8 rounded-xl border border-slate-200 p-6">
         <strong>Trạng thái: {{ status }}</strong><p v-if="reason" class="mt-2 text-sm">{{ reason }}</p>
       </div>
 
       <form v-else class="mt-8 space-y-6" @submit.prevent="submit">
+        <div v-if="status === 'approved'" class="rounded-xl border border-emerald-300 bg-emerald-50 p-4 text-sm leading-6 text-emerald-950"><strong>Gian hàng đang hoạt động.</strong> Bạn có thể bổ sung thông tin còn thiếu mà không làm mất trạng thái đã duyệt.</div>
+        <div v-if="isDemo" class="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm leading-6 text-amber-950" role="note"><strong>Hồ sơ demo – không dùng cho giao dịch pháp lý.</strong> Không tải giấy tờ giả hoặc nhập tài khoản ngân hàng ngẫu nhiên. Doanh thu trình diễn dùng ví <strong>{{ demoWalletCode }}</strong> và chức năng rút tiền thật bị khóa.</div>
         <div v-if="status === 'changes_requested'" class="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"><strong>Cần bổ sung:</strong> {{ reason }}</div>
         <div class="rounded-xl bg-surface-container p-4" aria-label="Tiến độ hồ sơ"><p class="text-sm font-semibold text-primary">Biểu mẫu đăng ký · Gian hàng và mô hình hoạt động</p><p class="mt-1 text-sm text-on-surface-variant">Sau khi hồ sơ Nhà bán được duyệt, bạn tiếp tục xác minh Nhà xuất bản và Nhà cung cấp cho sản phẩm.</p></div>
         <div class="grid gap-4 md:grid-cols-2">
@@ -119,16 +127,16 @@ onMounted(loadStatus)
         <div><label for="vendor-description" class="mb-2 block text-sm font-semibold">Mô tả gian hàng</label><Textarea id="vendor-description" v-model="form.description" rows="3" class="w-full" /></div>
         <p class="text-sm font-semibold text-on-surface">Tài liệu xác minh</p>
         <div class="grid gap-4 md:grid-cols-2">
-          <FileUpload mode="basic" accept=".pdf,image/*" :maxFileSize="5242880" chooseLabel="Đăng ký kinh doanh" @select="selectBusiness" />
-          <FileUpload mode="basic" accept=".pdf,image/*" :maxFileSize="5242880" chooseLabel="Giấy tờ người đại diện" @select="selectRepresentative" />
+          <FileUpload mode="basic" accept=".pdf,image/*" :maxFileSize="5242880" :chooseLabel="isDemo ? 'Tài liệu thật (không bắt buộc)' : 'Đăng ký kinh doanh'" @select="selectBusiness" />
+          <FileUpload mode="basic" accept=".pdf,image/*" :maxFileSize="5242880" :chooseLabel="isDemo ? 'Giấy tờ thật (không bắt buộc)' : 'Giấy tờ người đại diện'" @select="selectRepresentative" />
         </div>
         <div class="grid gap-4 md:grid-cols-3">
-          <div><label for="vendor-bank-name" class="mb-2 block text-sm font-semibold">Ngân hàng</label><InputText id="vendor-bank-name" v-model="form.payout_bank_name" class="w-full" required /></div>
-          <div><label for="vendor-bank-account" class="mb-2 block text-sm font-semibold">Số tài khoản</label><InputText id="vendor-bank-account" v-model="form.payout_bank_account" class="w-full" required /></div>
-          <div><label for="vendor-bank-holder" class="mb-2 block text-sm font-semibold">Chủ tài khoản</label><InputText id="vendor-bank-holder" v-model="form.payout_bank_holder" class="w-full" required /></div>
+          <div><label for="vendor-bank-name" class="mb-2 block text-sm font-semibold">Ngân hàng{{ isDemo ? ' (không áp dụng cho demo)' : '' }}</label><InputText id="vendor-bank-name" v-model="form.payout_bank_name" class="w-full" :required="!isDemo" :disabled="isDemo" /></div>
+          <div><label for="vendor-bank-account" class="mb-2 block text-sm font-semibold">Số tài khoản</label><InputText id="vendor-bank-account" v-model="form.payout_bank_account" class="w-full" :required="!isDemo" :disabled="isDemo" /></div>
+          <div><label for="vendor-bank-holder" class="mb-2 block text-sm font-semibold">Chủ tài khoản</label><InputText id="vendor-bank-holder" v-model="form.payout_bank_holder" class="w-full" :required="!isDemo" :disabled="isDemo" /></div>
         </div>
         <label class="flex min-h-11 items-center gap-3 text-sm text-on-surface-variant"><input v-model="termsAccepted" type="checkbox" class="h-5 w-5" /> Tôi xác nhận thông tin đúng và chấp nhận điều khoản Nhà bán.</label>
-        <Button type="submit" label="Gửi hồ sơ kiểm duyệt" icon="pi pi-send" :loading="saving" class="min-h-11" />
+        <Button type="submit" :label="status === 'approved' ? 'Lưu thông tin gian hàng' : 'Gửi hồ sơ kiểm duyệt'" icon="pi pi-send" :loading="saving" class="min-h-11" />
       </form>
     </section>
   </main>

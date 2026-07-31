@@ -249,6 +249,7 @@ Route::middleware(['auth:sanctum', 'role:vendor', 'active-vendor'])->prefix('ven
     Route::patch('warehouse-managers/{assignment}/transition', [VendorWarehouseManagerController::class, 'transition'])->name('warehouse-managers.transition');
     Route::get('organizations', [App\Http\Controllers\Api\Vendor\OrganizationController::class, 'index'])->name('organizations.index');
     Route::post('organizations', [App\Http\Controllers\Api\Vendor\OrganizationController::class, 'storeOrganization'])->name('organizations.store');
+    Route::patch('organizations/{organization}', [App\Http\Controllers\Api\Vendor\OrganizationController::class, 'updateOrganization'])->name('organizations.update');
     Route::post('organization-relationships', [App\Http\Controllers\Api\Vendor\OrganizationController::class, 'storeRelationship'])->name('organization-relationships.store');
     Route::post('organization-relationships/{relationship}/submit', [App\Http\Controllers\Api\Vendor\OrganizationController::class, 'submit'])->name('organization-relationships.submit');
     Route::put('books/{book}/commercial-parties', [App\Http\Controllers\Api\Vendor\OrganizationController::class, 'assignBookParties'])->name('books.commercial-parties.update');

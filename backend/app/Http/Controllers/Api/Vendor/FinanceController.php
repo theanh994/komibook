@@ -41,6 +41,8 @@ class FinanceController extends Controller
                     ? str_repeat('•', max(0, mb_strlen($vendor->payout_bank_account) - 4)).mb_substr($vendor->payout_bank_account, -4)
                     : null,
                 'status' => $vendor->payout_bank_status,
+                'is_demo' => (bool) $vendor->is_demo,
+                'demo_wallet_code' => $vendor->is_demo ? $vendor->demo_wallet_code : null,
             ],
             'payout_requests' => $payoutRequests,
             'fee_policy' => [
@@ -65,6 +67,9 @@ class FinanceController extends Controller
         $vendor = $request->user()->vendor;
         if (! $vendor) {
             return response()->json(['message' => 'Vendor profile not found'], 404);
+        }
+        if ($vendor->is_demo) {
+            return response()->json(['message' => 'Ví đối soát demo không được phép tạo yêu cầu rút tiền thật.'], 422);
         }
         if ($vendor->payout_bank_status !== 'verified') {
             return response()->json(['message' => 'Tài khoản ngân hàng nhận doanh thu chưa được xác minh.'], 422);

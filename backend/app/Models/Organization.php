@@ -22,6 +22,9 @@ class Organization extends Model
         'logo',
         'website',
         'status',
+        'data_mode',
+        'public_source_url',
+        'public_source_checked_at',
         'verified_by',
         'submitted_at',
         'verified_at',
@@ -36,6 +39,7 @@ class Organization extends Model
     {
         return [
             'organization_types' => 'array',
+            'public_source_checked_at' => 'date',
             'submitted_at' => 'datetime',
             'verified_at' => 'datetime',
             'suspended_at' => 'datetime',
@@ -56,6 +60,12 @@ class Organization extends Model
     public function memberships(): HasMany
     {
         return $this->hasMany(OrganizationMembership::class);
+    }
+
+    public function isOperationallyAccepted(): bool
+    {
+        return $this->status === 'verified'
+            || ($this->data_mode === 'demo' && $this->status === 'demo_accepted');
     }
 
     public function publishingAgreements(): HasMany

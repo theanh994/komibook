@@ -13,10 +13,11 @@ class OrganizationRelationshipService
 {
     private const TRANSITIONS = [
         'draft' => ['submitted'],
-        'submitted' => ['verified', 'changes_requested', 'rejected'],
+        'submitted' => ['verified', 'demo_accepted', 'changes_requested', 'rejected'],
         'changes_requested' => ['submitted'],
         'verified' => ['suspended', 'revoked'],
-        'suspended' => ['verified', 'revoked'],
+        'demo_accepted' => ['suspended', 'revoked'],
+        'suspended' => ['verified', 'demo_accepted', 'revoked'],
         'rejected' => [],
         'revoked' => [],
     ];
@@ -50,12 +51,18 @@ class OrganizationRelationshipService
                 && $actor->role !== 'admin') {
                 abort(403, 'Chỉ quản trị viên được duyệt hoặc thu hồi quan hệ tổ chức.');
             }
+            if ($target === 'demo_accepted' && (! $locked->is_demo || $actor->role !== 'admin')) {
+                throw ValidationException::withMessages(['status' => 'Chỉ Admin được duyệt mô phỏng cho quan hệ đã đánh dấu demo.']);
+            }
+            if ($target === 'verified' && $locked->is_demo) {
+                throw ValidationException::withMessages(['status' => 'Quan hệ demo không được đánh dấu là đã xác minh pháp lý.']);
+            }
 
             $updates = ['status' => $target, 'last_review_reason' => $reason];
             if ($target === 'submitted') {
                 $updates['submitted_at'] = now();
             }
-            if ($target === 'verified') {
+            if (in_array($target, ['verified', 'demo_accepted'], true)) {
                 $updates['verified_at'] = now();
                 $updates['revoked_at'] = null;
                 $updates['reviewed_by'] = $actor->id;

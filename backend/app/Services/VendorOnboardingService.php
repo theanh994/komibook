@@ -61,9 +61,9 @@ class VendorOnboardingService
                 $updates[$timestamp] = now();
             }
             if ($target === VendorOnboardingStatus::Approved) {
-                $updates['payout_bank_status'] = 'verified';
-                $updates['payout_bank_verified_at'] = now();
-                $updates['payout_bank_verified_by'] = $actor->id;
+                $updates['payout_bank_status'] = $locked->is_demo ? 'demo_disabled' : 'verified';
+                $updates['payout_bank_verified_at'] = $locked->is_demo ? null : now();
+                $updates['payout_bank_verified_by'] = $locked->is_demo ? null : $actor->id;
             }
             if ($target === VendorOnboardingStatus::Resubmitted) {
                 $updates['application_version'] = $locked->application_version + 1;
@@ -99,10 +99,11 @@ class VendorOnboardingService
 
     private function assertComplete(Vendor $vendor): void
     {
-        $required = [
-            'shop_name', 'slug', 'legal_name', 'tax_code', 'business_registration_document',
-            'representative_identity_document', 'payout_bank_account', 'payout_bank_name', 'payout_bank_holder',
-        ];
+        $required = ['shop_name', 'slug', 'legal_name', 'tax_code'];
+        if (! $vendor->is_demo) {
+            $required = [...$required, 'business_registration_document', 'representative_identity_document',
+                'payout_bank_account', 'payout_bank_name', 'payout_bank_holder'];
+        }
         $missing = collect($required)->filter(fn (string $field): bool => blank($vendor->{$field}))->values();
         if (! $vendor->terms_accepted_at) {
             $missing->push('terms_accepted_at');

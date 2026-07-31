@@ -33,9 +33,14 @@ onMounted(load)
       <header class="rounded-2xl border border-outline-variant bg-surface-container-lowest p-6 md:p-10">
         <div class="flex flex-col gap-6 sm:flex-row sm:items-center">
           <img v-if="organization.logo" :src="organization.logo" :alt="`Logo ${organization.display_name}`" width="112" height="112" class="h-28 w-28 rounded-xl object-contain" />
-          <div><div class="flex flex-wrap items-center gap-2"><span v-for="type in organization.organization_types" :key="type" class="rounded-full bg-secondary-container px-3 py-1 text-sm font-semibold text-on-secondary-container">{{ type }}</span><span class="rounded-full bg-primary-container px-3 py-1 text-sm font-semibold text-on-primary-container"><i class="pi pi-verified mr-1" aria-hidden="true"></i>Đã xác minh</span></div><h1 class="mt-3 text-3xl font-bold text-on-surface md:text-4xl">{{ organization.display_name }}</h1><p v-if="organization.description" class="mt-3 max-w-3xl leading-relaxed text-on-surface-variant">{{ organization.description }}</p></div>
+          <div><div class="flex flex-wrap items-center gap-2"><span v-for="type in organization.organization_types" :key="type" class="rounded-full bg-secondary-container px-3 py-1 text-sm font-semibold text-on-secondary-container">{{ type }}</span><span v-if="organization.data_mode === 'demo'" class="rounded-full border border-amber-300 bg-amber-50 px-3 py-1 text-sm font-semibold text-amber-900"><i class="pi pi-info-circle mr-1" aria-hidden="true"></i>Dữ liệu mô phỏng</span><span v-else class="rounded-full bg-primary-container px-3 py-1 text-sm font-semibold text-on-primary-container"><i class="pi pi-verified mr-1" aria-hidden="true"></i>Đã xác minh</span></div><h1 class="mt-3 text-3xl font-bold text-on-surface md:text-4xl">{{ organization.display_name }}</h1><p v-if="organization.description" class="mt-3 max-w-3xl leading-relaxed text-on-surface-variant">{{ organization.description }}</p></div>
         </div>
       </header>
+      <aside v-if="organization.data_mode === 'demo'" class="mt-4 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm leading-6 text-amber-950" role="note">
+        <strong>Dữ liệu mô phỏng phục vụ trình diễn hệ thống.</strong> Thông tin quan hệ thương mại trên trang này không phải tuyên bố hợp tác có giá trị pháp lý.
+        <a v-if="organization.public_source_url" :href="organization.public_source_url" target="_blank" rel="noopener noreferrer" class="ml-1 font-semibold underline">Xem nguồn thông tin công khai</a>
+        <span v-if="organization.public_source_checked_at"> (kiểm tra ngày {{ organization.public_source_checked_at }})</span>
+      </aside>
       <section class="mt-8">
         <h2 class="text-2xl font-bold text-on-surface">Gian hàng đối tác</h2>
         <div v-if="!organization.partner_shops?.length" class="mt-4 rounded-xl border border-outline-variant p-6 text-on-surface-variant">Chưa có gian hàng đối tác đang hoạt động.</div>

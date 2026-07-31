@@ -45,10 +45,13 @@ class PartnerCommerceDemoProvisioningTest extends TestCase
         $this->assertSame(5, Vendor::withoutGlobalScopes()->where('onboarding_status', 'draft')->count());
         $this->assertSame('direct_publisher', $legacyVendor->fresh()->business_model);
         $this->assertSame('active', $legacyVendor->fresh()->status);
-        $this->assertSame('unverified', $legacyVendor->fresh()->payout_bank_status);
+        $this->assertSame('demo_disabled', $legacyVendor->fresh()->payout_bank_status);
         $this->assertSame(8, Organization::count());
         $this->assertDatabaseCount('organization_memberships', 8);
-        $this->assertDatabaseCount('vendor_organization_relationships', 6);
+        $this->assertDatabaseCount('vendor_organization_relationships', 11);
+        $this->assertDatabaseCount('organization_distribution_agreements', 5);
+        $this->assertSame(6, Vendor::withoutGlobalScopes()->where('is_demo', true)->count());
+        $this->assertSame(8, Organization::where('data_mode', 'demo')->count());
         Storage::disk('private')->assertExists(ProvisionPartnerCommerceDemo::CREDENTIALS_PATH);
 
         $this->artisan('demo:provision-partner-commerce')->assertSuccessful();

@@ -16,8 +16,11 @@ class VendorOrganizationRelationship extends Model
         'organization_id',
         'role',
         'status',
+        'is_demo',
+        'evidence_mode',
         'scope',
         'evidence_document',
+        'demo_reference',
         'effective_from',
         'effective_until',
         'reviewed_by',
@@ -34,6 +37,7 @@ class VendorOrganizationRelationship extends Model
     {
         return [
             'scope' => 'array',
+            'is_demo' => 'boolean',
             'effective_from' => 'date',
             'effective_until' => 'date',
             'submitted_at' => 'datetime',
@@ -59,8 +63,8 @@ class VendorOrganizationRelationship extends Model
 
     public function isCurrentlyVerified(): bool
     {
-        return $this->status === 'verified'
-            && $this->verified_at !== null
+        return in_array($this->status, ['verified', 'demo_accepted'], true)
+            && ($this->status === 'demo_accepted' ? $this->is_demo : $this->verified_at !== null)
             && $this->revoked_at === null
             && ($this->effective_from === null || $this->effective_from->isPast())
             && ($this->effective_until === null || $this->effective_until->endOfDay()->isFuture());
