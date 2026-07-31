@@ -46,3 +46,12 @@ Ngày triển khai: 2026-08-01 (Asia/Saigon)
 ## Trạng thái
 
 Production đã chuyển sang commit `5ceb730`. Tổ chức và hồ sơ Nhà bán demo vẫn ở trạng thái nháp/chưa xác minh theo đúng nguyên tắc: dữ liệu demo không tự cấp quyền bán hoặc quyền rút tiền.
+
+## Sửa lỗi asset và router sau cutover
+
+Ngày 2026-08-01, frontend được chuyển tiếp sang release `f368f2ae4396b41baea30802ecdd604b117f80d7` để xử lý dứt điểm hai lỗi liên quan:
+
+- Tất cả asset và chunk lazy-load được đặt dưới namespace bất biến `/assets/releases/f368f2a/`, tránh trình duyệt hoặc CDN giữ phản hồi 404 từ một lần cutover chưa hoàn tất.
+- Vue Router dùng gốc điều hướng độc lập `/`; asset base không còn làm đường dẫn `/login` biến thành `/assets/releases/.../login`.
+
+Gate bổ sung: 116 frontend test đạt, lint đạt, build với asset base phiên bản hóa đạt. Trên production, liên kết đăng nhập trả `href=/login`; mở và tải lại `/login` đều render một form và một ô email, không có lỗi console.
