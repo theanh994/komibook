@@ -37,4 +37,14 @@ describe('Phase 8 warehouse and commercial-party surfaces', () => {
     expect(sidebar).not.toContain('Chuyển Sang Kênh Tác Giả')
     expect(guard).not.toContain('isAuthor')
   })
+
+  it('explains the public organization path and submits public and private files separately', () => {
+    const organizations = source('src/views/vendor/OrganizationPartnersView.vue')
+
+    expect(organizations).toContain('Đường dẫn hồ sơ công khai')
+    expect(organizations).toContain('Website chính thức')
+    expect(organizations).toContain("payload.append('logo', logoFile.value)")
+    expect(organizations).toContain("payload.append('verification_document', verificationDocument.value)")
+    expect(organizations).toContain('khách hàng không thể xem hoặc tải xuống')
+  })
 })

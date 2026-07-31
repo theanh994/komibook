@@ -40,7 +40,7 @@ class BookPublishingService
             if ($target === BookPublicationStatus::ChangesRequested && blank($reason)) {
                 throw ValidationException::withMessages(['reason' => 'Review feedback is required.']);
             }
-            if (in_array($target, [BookPublicationStatus::SubmittedForReview, BookPublicationStatus::Resubmitted, BookPublicationStatus::Published], true)) {
+            if (in_array($target, [BookPublicationStatus::SubmittedForReview, BookPublicationStatus::Resubmitted, BookPublicationStatus::Scheduled, BookPublicationStatus::Published], true)) {
                 $this->eligibility->assertEligible($locked);
             }
             if ($target === BookPublicationStatus::Scheduled && (! $scheduledFor || now()->gte($scheduledFor))) {

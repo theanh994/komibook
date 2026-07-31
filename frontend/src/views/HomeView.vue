@@ -85,6 +85,31 @@
       </div>
     </section>
 
+    <section v-if="upcomingFlashSale" class="mx-auto w-full max-w-[1280px] px-4 py-8 md:px-gutter" aria-labelledby="upcoming-flash-title">
+      <div class="overflow-hidden rounded-2xl border border-secondary/30 bg-gradient-to-r from-primary to-slate-800 p-5 text-white shadow-lg md:p-7">
+        <div class="grid gap-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+          <div>
+            <p class="text-sm font-bold uppercase tracking-[0.16em] text-rose-200">Flash Sale sắp diễn ra</p>
+            <h2 id="upcoming-flash-title" class="mt-2 text-2xl font-bold md:text-3xl">{{ upcomingFlashSale.title }}</h2>
+            <p class="mt-2 text-sm text-slate-200">Bắt đầu lúc {{ formatFlashTime(upcomingFlashSale.start_time) }}. Tối đa 4 gian hàng được xếp theo lượt truy cập.</p>
+            <div v-if="upcomingFlashSale.vendor_spotlights?.length" class="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <router-link v-for="vendor in upcomingFlashSale.vendor_spotlights" :key="vendor.id" :to="{ name: 'vendor-storefront', params: { slug: vendor.slug } }" class="flex min-h-16 items-center gap-3 rounded-xl bg-white/10 p-3 text-white no-underline transition-colors hover:bg-white/20">
+                <img v-if="vendor.logo" :src="vendor.logo" :alt="`Logo ${vendor.shop_name}`" class="h-10 w-10 rounded-lg bg-white object-contain" />
+                <span v-else class="material-symbols-outlined grid h-10 w-10 place-items-center rounded-lg bg-white/10" aria-hidden="true">storefront</span>
+                <span class="min-w-0 truncate text-sm font-bold">{{ vendor.shop_name }}</span>
+              </router-link>
+            </div>
+          </div>
+          <div class="rounded-xl bg-white/10 p-4 text-center" aria-live="polite">
+            <p class="text-xs font-bold uppercase tracking-wider text-slate-200">Còn lại</p>
+            <div class="mt-2 flex items-center justify-center gap-2 font-mono text-2xl font-black">
+              <span>{{ upcomingCountdown.days }} ngày</span><span aria-hidden="true">:</span><span>{{ upcomingCountdown.hours }}</span><span aria-hidden="true">:</span><span>{{ upcomingCountdown.minutes }}</span><span aria-hidden="true">:</span><span>{{ upcomingCountdown.seconds }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <!-- ═══ RECOMMENDATION ═══ -->
     <section class="mx-auto w-full max-w-[1280px] px-4 py-8 md:px-gutter md:py-xl" aria-labelledby="recommendation-title">
       <div class="mb-6 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
@@ -126,56 +151,6 @@
           @toggle-wishlist="toggleWishlist"
           />
         </div>
-      </div>
-    </section>
-
-    <!-- ═══ VENDOR FEED ═══ -->
-    <section class="mx-auto w-full max-w-[1280px] px-4 py-8 md:px-gutter md:py-xl" aria-labelledby="vendor-feed-title">
-      <div class="mb-6 flex items-end justify-between gap-4">
-        <div>
-          <p class="text-sm font-bold uppercase tracking-[0.16em] text-secondary">Từ cộng đồng xuất bản</p>
-          <h2 id="vendor-feed-title" class="mt-2 text-2xl font-bold tracking-tight text-primary md:text-3xl">Bản tin mới từ NXB &amp; Nhà bán</h2>
-        </div>
-        <router-link to="/blog" class="inline-flex min-h-11 shrink-0 items-center gap-1 text-sm font-bold text-primary no-underline">
-          Xem tất cả <span class="material-symbols-outlined text-[18px]" aria-hidden="true">chevron_right</span>
-        </router-link>
-      </div>
-
-      <div v-if="loadingVendorFeed" class="grid gap-5 md:grid-cols-2 lg:grid-cols-3" role="status" aria-label="Đang tải bản tin">
-        <div v-for="i in 3" :key="i" class="overflow-hidden rounded-2xl border border-outline-variant/30 bg-surface-container-lowest">
-          <Skeleton height="180px" borderRadius="0" />
-          <div class="space-y-3 p-5"><Skeleton height="16px" width="40%" /><Skeleton height="24px" /><Skeleton height="14px" /></div>
-        </div>
-      </div>
-      <div v-else-if="vendorFeedError" class="ui-state-panel" role="alert">
-        <span class="material-symbols-outlined text-3xl text-error" aria-hidden="true">newspaper</span>
-        <p class="mt-2 font-bold">Chưa thể tải bản tin</p>
-        <button type="button" class="ui-button ui-button-secondary mt-4" @click="fetchVendorFeed">Thử lại</button>
-      </div>
-      <div v-else-if="vendorArticles.length === 0" class="ui-state-panel">
-        <span class="material-symbols-outlined text-3xl text-outline" aria-hidden="true">article</span>
-        <p class="mt-2 font-bold">Chưa có bản tin đã xuất bản</p>
-        <p class="mt-2 text-sm text-on-surface-variant">Bài viết chỉ xuất hiện sau khi hoàn tất kiểm duyệt.</p>
-      </div>
-      <div v-else class="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
-        <article v-for="article in vendorArticles" :key="article.id" class="overflow-hidden rounded-2xl border border-outline-variant/30 bg-surface-container-lowest shadow-sm">
-          <div class="flex aspect-[16/9] items-center justify-center bg-primary-container">
-            <img v-if="article.cover_image" :src="getCoverUrl(article.cover_image)" :alt="article.title" class="h-full w-full object-cover" loading="lazy" />
-            <span v-else class="material-symbols-outlined text-5xl text-on-primary-container" aria-hidden="true">auto_stories</span>
-          </div>
-          <div class="p-5">
-            <div class="flex flex-wrap items-center gap-2 text-sm text-on-surface-variant">
-              <span class="font-bold text-primary">{{ articlePublisher(article) }}</span>
-              <span aria-hidden="true">•</span>
-              <span>{{ article.category?.name || 'Bản tin' }}</span>
-            </div>
-            <h3 class="mt-3 text-xl font-bold leading-snug text-on-surface">{{ article.title }}</h3>
-            <p class="mt-3 line-clamp-3 text-sm leading-6 text-on-surface-variant">{{ article.excerpt }}</p>
-            <router-link :to="`/blog/${article.slug}`" class="mt-5 inline-flex min-h-11 items-center gap-1 font-bold text-primary no-underline">
-              Đọc bài viết <span class="material-symbols-outlined text-[18px]" aria-hidden="true">arrow_forward</span>
-            </router-link>
-          </div>
-        </article>
       </div>
     </section>
 
@@ -227,6 +202,15 @@
           </div>
         </section>
       </div>
+    </section>
+
+    <!-- ═══ NEWS AT THE END OF THE FEED ═══ -->
+    <section class="mx-auto w-full max-w-[1280px] px-4 py-8 md:px-gutter md:py-xl" aria-labelledby="vendor-feed-title">
+      <div class="mb-6 flex items-end justify-between gap-4"><div><p class="text-sm font-bold uppercase tracking-[0.16em] text-secondary">Từ cộng đồng xuất bản</p><h2 id="vendor-feed-title" class="mt-2 text-2xl font-bold tracking-tight text-primary md:text-3xl">Tin tức mới nhất</h2></div><router-link to="/blog" class="inline-flex min-h-11 shrink-0 items-center gap-1 text-sm font-bold text-primary no-underline">Xem tất cả <span class="material-symbols-outlined text-[18px]" aria-hidden="true">chevron_right</span></router-link></div>
+      <div v-if="loadingVendorFeed" class="grid gap-5 md:grid-cols-2 lg:grid-cols-3" role="status" aria-label="Đang tải bản tin"><div v-for="i in 3" :key="i" class="overflow-hidden rounded-2xl border border-outline-variant/30 bg-surface-container-lowest"><Skeleton height="180px" borderRadius="0" /><div class="space-y-3 p-5"><Skeleton height="16px" width="40%" /><Skeleton height="24px" /><Skeleton height="14px" /></div></div></div>
+      <div v-else-if="vendorFeedError" class="ui-state-panel" role="alert"><p class="font-bold">Chưa thể tải tin tức</p><button type="button" class="ui-button ui-button-secondary mt-4" @click="fetchEditorialFeed">Thử lại</button></div>
+      <div v-else-if="vendorArticles.length === 0" class="ui-state-panel"><p class="font-bold">Chưa có bản tin đã xuất bản</p></div>
+      <div v-else class="grid gap-5 md:grid-cols-2 lg:grid-cols-3"><article v-for="article in vendorArticles" :key="article.id" class="overflow-hidden rounded-2xl border border-outline-variant/30 bg-surface-container-lowest shadow-sm"><div class="flex aspect-[16/9] items-center justify-center bg-primary-container"><img v-if="article.cover_image" :src="getCoverUrl(article.cover_image)" :alt="article.title" class="h-full w-full object-cover" loading="lazy" /><span v-else class="material-symbols-outlined text-5xl text-on-primary-container" aria-hidden="true">auto_stories</span></div><div class="p-5"><div class="flex flex-wrap items-center gap-2 text-sm text-on-surface-variant"><span class="font-bold text-primary">{{ articlePublisher(article) }}</span><span aria-hidden="true">•</span><span>{{ article.category?.name || 'Bản tin' }}</span></div><h3 class="mt-3 text-xl font-bold leading-snug text-on-surface">{{ article.title }}</h3><p class="mt-3 line-clamp-3 text-sm leading-6 text-on-surface-variant">{{ article.excerpt }}</p><router-link :to="`/blog/${article.slug}`" class="mt-5 inline-flex min-h-11 items-center gap-1 font-bold text-primary no-underline">Đọc bài viết <span class="material-symbols-outlined text-[18px]" aria-hidden="true">arrow_forward</span></router-link></div></article></div>
     </section>
 
     <!-- ═══ TOP SELLING SECTION ═══ -->
@@ -555,7 +539,7 @@
 </template>
 
 <script setup>
-import { computed, ref, onMounted } from 'vue'
+import { computed, ref, onBeforeUnmount, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import apiClient from '@/services/axios'
 import { readApiList } from '@/services/apiContract'
@@ -636,13 +620,6 @@ const commerceGroups = [
     to: { name: 'catalog', query: { type: 'physical' } },
   },
   {
-    key: 'ebook-samples',
-    title: 'Góc ebook đọc thử',
-    subtitle: 'Đọc một phần nội dung trước khi quyết định.',
-    params: { type: 'ebook', has_sample: 1, per_page: 5 },
-    to: { name: 'catalog', query: { type: 'ebook' } },
-  },
-  {
     key: 'used-books',
     title: 'Sách cũ giá tốt',
     subtitle: 'Sách vật lý đã qua sử dụng, được mô tả tình trạng rõ ràng.',
@@ -656,8 +633,11 @@ const commerceState = ref(Object.fromEntries(
 
 // ─── State ──────────────────────────────────────────────────────────
 const activeFlashSale = ref(null)
+const upcomingFlashSale = ref(null)
 const countdown = ref({ hours: '00', minutes: '00', seconds: '00' })
+const upcomingCountdown = ref({ days: '00', hours: '00', minutes: '00', seconds: '00' })
 let countdownInterval = null
+let upcomingCountdownInterval = null
 
 const books = ref([])
 const loadingBooks = ref(false)
@@ -672,17 +652,25 @@ const quickViewVersion = ref('standard')
 const quickViewQty = ref(1)
 
 // ─── Fetch API ──────────────────────────────────────────────────────
-const fetchHeroArticles = async () => {
+const fetchEditorialFeed = async () => {
   heroError.value = false
+  loadingVendorFeed.value = true
+  vendorFeedError.value = false
   try {
     const response = await apiClient.get('/api/articles', {
-      params: { home_featured: 1, per_page: 5 },
+      params: { per_page: 8 },
     })
-    heroArticles.value = response.data?.data?.data || []
+    const articles = response.data?.data?.data || []
+    heroArticles.value = articles.filter((article) => article.home_featured).slice(0, 5)
+    vendorArticles.value = articles.slice(0, 6)
     currentHeroIndex.value = 0
   } catch {
     heroError.value = true
+    vendorFeedError.value = true
     heroArticles.value = []
+    vendorArticles.value = []
+  } finally {
+    loadingVendorFeed.value = false
   }
 }
 
@@ -710,20 +698,6 @@ const nextHero = () => {
   currentHeroIndex.value = (currentHeroIndex.value + 1) % heroSlides.value.length
 }
 
-const fetchVendorFeed = async () => {
-  loadingVendorFeed.value = true
-  vendorFeedError.value = false
-  try {
-    const response = await apiClient.get('/api/articles', { params: { per_page: 6 } })
-    vendorArticles.value = response.data?.data?.data || []
-  } catch {
-    vendorFeedError.value = true
-    vendorArticles.value = []
-  } finally {
-    loadingVendorFeed.value = false
-  }
-}
-
 const articlePublisher = (article) => {
   return article.creator?.vendor?.shop_name
     || article.creator?.name
@@ -745,8 +719,40 @@ const fetchCommerceGroup = async (group) => {
   }
 }
 
-const fetchCommerceFeed = () => {
-  commerceGroups.forEach((group) => fetchCommerceGroup(group))
+const fetchCommerceFeed = async () => {
+  commerceGroups.forEach((group) => {
+    commerceState.value[group.key].loading = true
+    commerceState.value[group.key].error = false
+  })
+
+  try {
+    const response = await apiClient.get('/api/books', {
+      params: { sort: 'popular', per_page: 60 },
+    })
+    const allBooks = readApiList(response.data)
+    const byNewest = (items) => [...items].sort((left, right) => (
+      new Date(right.published_at || right.created_at || 0) - new Date(left.published_at || left.created_at || 0)
+    ))
+    const ebooks = allBooks.filter((book) => book.type === 'ebook')
+    const physicalBooks = allBooks.filter((book) => book.type === 'physical')
+
+    commerceState.value['bestselling-ebook'].items = ebooks.slice(0, 5)
+    commerceState.value['bestselling-physical'].items = physicalBooks.slice(0, 5)
+    commerceState.value['newest-ebook'].items = byNewest(ebooks).slice(0, 5)
+    commerceState.value['newest-physical'].items = byNewest(physicalBooks).slice(0, 5)
+    commerceState.value['used-books'].items = physicalBooks.filter((book) => (
+      book.provenance === 'used_resale' || book.product_origin === 'used_resale'
+    )).slice(0, 5)
+  } catch {
+    commerceGroups.forEach((group) => {
+      commerceState.value[group.key].items = []
+      commerceState.value[group.key].error = true
+    })
+  } finally {
+    commerceGroups.forEach((group) => {
+      commerceState.value[group.key].loading = false
+    })
+  }
 }
 
 const fetchFlashSales = async () => {
@@ -757,16 +763,48 @@ const fetchFlashSales = async () => {
     const active = flashSales.find(fs => {
       const start = new Date(fs.start_time)
       const end = new Date(fs.end_time)
-      return (start <= now && end > now)
+      return fs.status === 'active' && start <= now && end > now
     })
     if (active) {
       activeFlashSale.value = active
       startCountdown(new Date(active.end_time))
     }
+    const upcoming = flashSales.find((fs) => fs.status === 'enrollment_open' && new Date(fs.start_time) > now)
+    upcomingFlashSale.value = upcoming || null
+    if (upcoming) startUpcomingCountdown(new Date(upcoming.start_time))
   } catch (e) {
     console.error('Failed to fetch flash sales', e)
   }
 }
+
+const startUpcomingCountdown = (startTime) => {
+  if (upcomingCountdownInterval) clearInterval(upcomingCountdownInterval)
+  const update = () => {
+    const diff = startTime - new Date()
+    if (diff <= 0) {
+      clearInterval(upcomingCountdownInterval)
+      upcomingFlashSale.value = null
+      fetchFlashSales()
+      return
+    }
+    upcomingCountdown.value = {
+      days: String(Math.floor(diff / 86400000)).padStart(2, '0'),
+      hours: String(Math.floor((diff % 86400000) / 3600000)).padStart(2, '0'),
+      minutes: String(Math.floor((diff % 3600000) / 60000)).padStart(2, '0'),
+      seconds: String(Math.floor((diff % 60000) / 1000)).padStart(2, '0'),
+    }
+  }
+  update()
+  upcomingCountdownInterval = setInterval(update, 1000)
+}
+
+const formatFlashTime = (value) => new Intl.DateTimeFormat('vi-VN', {
+  hour: '2-digit',
+  minute: '2-digit',
+  day: '2-digit',
+  month: '2-digit',
+  year: 'numeric',
+}).format(new Date(value))
 
 const startCountdown = (endTime) => {
   if (countdownInterval) clearInterval(countdownInterval)
@@ -900,12 +938,16 @@ const quickViewAddToCart = () => {
 
 // ─── Init ───────────────────────────────────────────────────────────
 onMounted(() => {
-  fetchHeroArticles()
+  fetchEditorialFeed()
   fetchRecommendations()
-  fetchVendorFeed()
   fetchCommerceFeed()
   fetchFlashSales()
   wishlistStore.fetchWishlistIds()
+})
+
+onBeforeUnmount(() => {
+  if (countdownInterval) clearInterval(countdownInterval)
+  if (upcomingCountdownInterval) clearInterval(upcomingCountdownInterval)
 })
 </script>
 

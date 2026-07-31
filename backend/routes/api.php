@@ -12,7 +12,9 @@ use App\Http\Controllers\Api\Admin\ReconciliationController;
 use App\Http\Controllers\Api\Admin\SystemConfigController;
 use App\Http\Controllers\Api\Admin\UserController;
 use App\Http\Controllers\Api\Admin\VendorApprovalController;
+use App\Http\Controllers\Api\ArticleCommentController;
 use App\Http\Controllers\Api\ArticleController;
+use App\Http\Controllers\Api\ArticleSubmissionController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\BookAnnotationController;
 use App\Http\Controllers\Api\BookController;
@@ -39,6 +41,8 @@ use App\Http\Controllers\Api\UsedBookDisputeController;
 use App\Http\Controllers\Api\UsedBookSellerController;
 use App\Http\Controllers\Api\UserNotificationController;
 use App\Http\Controllers\Api\Vendor\AnalyticsController;
+use App\Http\Controllers\Api\Vendor\ArticleAnalyticsController;
+use App\Http\Controllers\Api\Vendor\CouponController as VendorCouponController;
 use App\Http\Controllers\Api\Vendor\DashboardController;
 use App\Http\Controllers\Api\Vendor\FinanceController;
 use App\Http\Controllers\Api\Vendor\FlashSaleController;
@@ -46,9 +50,10 @@ use App\Http\Controllers\Api\Vendor\SeriesController;
 use App\Http\Controllers\Api\Vendor\WarehouseController;
 use App\Http\Controllers\Api\Vendor\WarehouseManagerController as VendorWarehouseManagerController;
 use App\Http\Controllers\Api\VendorOnboardingController;
-use App\Http\Controllers\Api\WarehouseManagerPortalController;
-use App\Http\Controllers\Api\WarehouseDocumentController;
+use App\Http\Controllers\Api\VendorFollowController;
 use App\Http\Controllers\Api\VnpayController;
+use App\Http\Controllers\Api\WarehouseDocumentController;
+use App\Http\Controllers\Api\WarehouseManagerPortalController;
 use App\Http\Controllers\Api\WishlistController;
 use Illuminate\Support\Facades\Route;
 
@@ -80,6 +85,8 @@ Route::get('/books/{slug}', [BookController::class, 'show']);
 Route::get('/books/{id}/series', [BookController::class, 'seriesBooks']);
 Route::get('/books/{id}/contributors', [BookController::class, 'contributorBooks']);
 Route::get('/books/{id}/related', [BookController::class, 'relatedBooks']);
+Route::get('/vendors/{slug}', [VendorFollowController::class, 'storefront']);
+Route::post('/vendors/{vendor}/visit', [VendorFollowController::class, 'recordVisit'])->middleware('throttle:30,1');
 
 // Help Center công khai
 Route::get('/help-center/articles', [HelpCenterController::class, 'index']);
@@ -87,6 +94,9 @@ Route::get('/help-center/articles/{id}', [HelpCenterController::class, 'show']);
 Route::post('/help-center/articles/{id}/helpful', [HelpCenterController::class, 'helpful']);
 Route::get('/articles', [ArticleController::class, 'index']);
 Route::get('/articles/{slug}', [ArticleController::class, 'show']);
+Route::post('/articles/{slug}/comments', [ArticleCommentController::class, 'store'])->middleware('throttle:10,1');
+Route::post('/articles/{slug}/track', [ArticleController::class, 'track'])->middleware('throttle:30,1');
+Route::post('/article-submissions', [ArticleSubmissionController::class, 'store'])->middleware(['auth:sanctum', 'throttle:5,1']);
 Route::get('/organizations', [OrganizationController::class, 'index']);
 Route::get('/organizations/{slug}', [OrganizationController::class, 'show']);
 
@@ -149,6 +159,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/notifications', [UserNotificationController::class, 'index']);
     Route::patch('/notifications/{id}/read', [UserNotificationController::class, 'markAsRead']);
     Route::post('/notifications/read-all', [UserNotificationController::class, 'markAllAsRead']);
+    Route::get('/vendors/{vendor}/follow', [VendorFollowController::class, 'status']);
+    Route::post('/vendors/{vendor}/follow', [VendorFollowController::class, 'toggle']);
 
     Route::get('/used-book-seller/listings', [UsedBookSellerController::class, 'index']);
     Route::post('/used-book-seller/listings', [UsedBookSellerController::class, 'store']);
@@ -185,6 +197,13 @@ Route::middleware('auth:sanctum')->group(function () {
 Route::middleware(['auth:sanctum', 'role:vendor', 'active-vendor'])->prefix('vendor')->name('vendor.')->group(function () {
     // Thống kê dashboard
     Route::get('dashboard-stats', [DashboardController::class, 'stats'])->name('dashboard.stats');
+    Route::get('articles/analytics', ArticleAnalyticsController::class)->name('articles.analytics');
+    Route::get('articles', [App\Http\Controllers\Api\Vendor\ArticleController::class, 'index'])->name('articles.index');
+    Route::post('articles', [App\Http\Controllers\Api\Vendor\ArticleController::class, 'store'])->name('articles.store');
+    Route::get('articles/{article}', [App\Http\Controllers\Api\Vendor\ArticleController::class, 'show'])->name('articles.show');
+    Route::patch('articles/{article}', [App\Http\Controllers\Api\Vendor\ArticleController::class, 'update'])->name('articles.update');
+    Route::post('articles/{article}/submit', [App\Http\Controllers\Api\Vendor\ArticleController::class, 'submit'])->name('articles.submit');
+    Route::post('articles/{article}/media', [App\Http\Controllers\Api\Vendor\ArticleController::class, 'media'])->name('articles.media');
 
     Route::post('books/bulk-series', [App\Http\Controllers\Api\Vendor\BookController::class, 'bulkSeries'])->name('books.bulkSeries');
     Route::post('books/bulk-discount', [App\Http\Controllers\Api\Vendor\BookController::class, 'bulkDiscount'])->name('books.bulkDiscount');
@@ -239,8 +258,13 @@ Route::middleware(['auth:sanctum', 'role:vendor', 'active-vendor'])->prefix('ven
 
     // Đăng ký Flash Sale
     Route::get('flash-sales', [FlashSaleController::class, 'index'])->name('flash-sales.index');
+    Route::get('flash-sale-requests', [FlashSaleController::class, 'requests'])->name('flash-sale-requests.index');
+    Route::post('flash-sale-requests', [FlashSaleController::class, 'requestCampaign'])->name('flash-sale-requests.store');
     Route::get('flash-sales/{flash_sale}/registered-books', [FlashSaleController::class, 'registeredBooks'])->name('flash-sales.registered-books');
     Route::post('flash-sales/{flash_sale}/register', [FlashSaleController::class, 'register'])->name('flash-sales.register');
+    Route::get('coupons', [VendorCouponController::class, 'index'])->name('coupons.index');
+    Route::post('coupons', [VendorCouponController::class, 'store'])->name('coupons.store');
+    Route::patch('coupons/{coupon}', [VendorCouponController::class, 'update'])->name('coupons.update');
 
     // Quản lý chương sách tự viết (Chapters)
     Route::get('books/{book}/chapters', [ChapterController::class, 'index'])->name('books.chapters.index');
@@ -284,8 +308,15 @@ Route::middleware(['auth:sanctum', 'role:admin'])->prefix('admin')->name('admin.
 
     Route::get('articles', [AdminArticleController::class, 'index'])->name('cms.articles.index');
     Route::post('articles', [AdminArticleController::class, 'store'])->name('cms.articles.store');
+    Route::get('articles/analytics', App\Http\Controllers\Api\Admin\ArticleAnalyticsController::class)->name('cms.articles.analytics');
+    Route::get('articles/{article}', [AdminArticleController::class, 'show'])->name('cms.articles.show');
     Route::patch('articles/{article}', [AdminArticleController::class, 'update'])->name('cms.articles.update');
     Route::patch('articles/{article}/transition', [AdminArticleController::class, 'transition'])->name('cms.articles.transition');
+    Route::post('articles/{article}/media', [AdminArticleController::class, 'media'])->name('cms.articles.media');
+    Route::get('article-comments', [App\Http\Controllers\Api\Admin\ArticleCommentController::class, 'index'])->name('cms.comments.index');
+    Route::patch('article-comments/{comment}', [App\Http\Controllers\Api\Admin\ArticleCommentController::class, 'moderate'])->name('cms.comments.moderate');
+    Route::get('article-submissions', [App\Http\Controllers\Api\Admin\ArticleSubmissionController::class, 'index'])->name('cms.submissions.index');
+    Route::patch('article-submissions/{submission}', [App\Http\Controllers\Api\Admin\ArticleSubmissionController::class, 'moderate'])->name('cms.submissions.moderate');
 
     // Thống kê tổng quan
     Route::get('stats', [App\Http\Controllers\Api\Admin\DashboardController::class, 'stats'])->name('stats');
@@ -294,6 +325,7 @@ Route::middleware(['auth:sanctum', 'role:admin'])->prefix('admin')->name('admin.
     Route::get('users', [UserController::class, 'index'])->name('users.index');
     Route::get('users/{id}', [UserController::class, 'show'])->name('users.show');
     Route::patch('users/{id}/role', [UserController::class, 'updateRole'])->name('users.updateRole');
+    Route::delete('users/{id}/sessions', [UserController::class, 'terminateSessions'])->name('users.terminateSessions');
     Route::get('reviews/moderation', [ReviewController::class, 'moderationQueue'])->name('reviews.moderation.index');
     Route::patch('reviews/{review}/moderate', [ReviewController::class, 'moderate'])->middleware(['verified-email', 'recent-auth'])->name('reviews.moderation.update');
 
@@ -309,6 +341,8 @@ Route::middleware(['auth:sanctum', 'role:admin'])->prefix('admin')->name('admin.
     // Quản lý Coupons và Flash Sales
     Route::apiResource('coupons', App\Http\Controllers\Api\Admin\CouponController::class);
     Route::apiResource('flash-sales', App\Http\Controllers\Api\Admin\FlashSaleController::class);
+    Route::get('flash-sale-requests', [App\Http\Controllers\Api\Admin\FlashSaleController::class, 'vendorRequests']);
+    Route::patch('flash-sale-requests/{promotionRequest}', [App\Http\Controllers\Api\Admin\FlashSaleController::class, 'decideVendorRequest']);
     Route::patch('flash-sales/{flashSale}/transition', [App\Http\Controllers\Api\Admin\FlashSaleController::class, 'transition']);
     Route::post('flash-sales/{flash_sale}/items', [App\Http\Controllers\Api\Admin\FlashSaleController::class, 'addItem']);
     Route::delete('flash-sales/{flash_sale}/items/{item}', [App\Http\Controllers\Api\Admin\FlashSaleController::class, 'removeItem']);

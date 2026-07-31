@@ -8,6 +8,7 @@ use App\Models\Order;
 use App\Models\Review;
 use App\Models\ReviewModerationEvent;
 use App\Models\ReviewReport;
+use App\Models\Vendor;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -91,12 +92,26 @@ class ReviewController extends Controller
     public function moderationQueue(Request $request): JsonResponse
     {
         $reviews = Review::query()->where('active_key', 1)
-            ->with(['user', 'book'])
+            ->with(['user:id,name,email', 'book:id,vendor_id,title,slug', 'book.vendor:id,shop_name'])
             ->withCount(['reports as open_reports_count' => fn ($query) => $query->where('status', 'open')])
             ->when($request->filled('status'), fn ($query) => $query->where('moderation_status', $request->string('status')))
+            ->when($request->filled('rating'), fn ($query) => $query->where('rating', $request->integer('rating')))
+            ->when($request->filled('vendor_id'), fn ($query) => $query->whereHas('book', fn ($book) => $book->where('vendor_id', $request->integer('vendor_id'))))
+            ->when($request->boolean('reported'), fn ($query) => $query->whereHas('reports', fn ($reports) => $reports->where('status', 'open')))
+            ->when($request->filled('from'), fn ($query) => $query->whereDate('created_at', '>=', $request->date('from')))
+            ->when($request->filled('to'), fn ($query) => $query->whereDate('created_at', '<=', $request->date('to')))
             ->orderByDesc('open_reports_count')->latest()->paginate($request->integer('per_page', 20));
 
-        return response()->json(['status' => 'success', 'data' => $reviews]);
+        $vendors = Vendor::withoutGlobalScopes()
+            ->whereHas('books.reviews', fn ($query) => $query->where('active_key', 1))
+            ->orderBy('shop_name')
+            ->get(['id', 'shop_name']);
+
+        return response()->json([
+            'status' => 'success',
+            'data' => $reviews,
+            'filters' => ['vendors' => $vendors],
+        ]);
     }
 
     public function moderate(Request $request, Review $review): JsonResponse

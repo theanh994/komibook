@@ -1,771 +1,248 @@
 <script setup>
-import { ref, onMounted, computed } from 'vue'
-import { useToast } from 'primevue/usetoast'
+import { computed, onMounted, reactive, ref } from 'vue'
 import apiClient from '@/services/axios'
 
-import DataTable from 'primevue/datatable'
-import Column from 'primevue/column'
-import Button from 'primevue/button'
-import Dialog from 'primevue/dialog'
-import Select from 'primevue/select'
-import InputNumber from 'primevue/inputnumber'
-import Tag from 'primevue/tag'
-
-const toast = useToast()
-
-// ─── State ───
+const activeTab = ref('flash')
+const loading = ref(true)
+const saving = ref(false)
+const error = ref('')
+const message = ref('')
+const books = ref([])
+const categories = ref([])
+const requests = ref([])
 const campaigns = ref([])
-const loadingCampaigns = ref(false)
-const campaignError = ref('')
+const coupons = ref([])
 
-// Books options for registration dropdown
-const publishedBooks = ref([])
-const loadingBooks = ref(false)
-
-// Detail modal state
-const detailDialog = ref(false)
-const selectedCampaign = ref(null)
-const registeredBooks = ref([])
-const loadingDetails = ref(false)
-
-// Form state
-const form = ref({
-  book_id: null,
+const emptyGroup = () => ({ book_ids: [], discount_percent: 15, max_quantity: 10, search: '' })
+const flashForm = reactive({
+  title: '',
+  preferred_start_time: '',
+  preferred_end_time: '',
+  vendor_note: '',
+  groups: [emptyGroup()],
+})
+const couponForm = reactive({
+  code: '',
   discount_percent: 10,
-  max_quantity: 10
-})
-const submitting = ref(false)
-
-// ─── Computed Preview ───
-const selectedBookObj = computed(() => {
-  if (!form.value.book_id) return null
-  return publishedBooks.value.find(b => b.id === form.value.book_id)
-})
-
-const discountedPricePreview = computed(() => {
-  if (!selectedBookObj.value) return 0
-  const original = Number(selectedBookObj.value.price) || 0
-  const pct = form.value.discount_percent || 0
-  return original * (1 - pct / 100)
+  min_order_value: 0,
+  max_discount_amount: 50000,
+  start_time: '',
+  end_time: '',
+  usage_limit: 100,
+  stacking_policy: 'deny',
+  scope_type: 'store',
+  category_id: '',
+  scope_book_ids: [],
+  search: '',
 })
 
-// ─── Formatting helpers ───
-const formatPrice = (val) => {
-  if (!val && val !== 0) return '—'
-  const num = Number(val)
-  if (isNaN(num)) return '—'
-  return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(num)
+const formatDate = (value) => value ? new Date(value).toLocaleString('vi-VN') : '—'
+const statusLabel = (status) => ({
+  pending: 'Chờ duyệt',
+  approved: 'Đã duyệt',
+  rejected: 'Từ chối',
+  enrollment_open: 'Đang mở đăng ký',
+  active: 'Đang chạy',
+  upcoming: 'Sắp diễn ra',
+}[status] || status)
+const normalizeList = (response) => {
+  const payload = response.data?.data
+  return Array.isArray(payload) ? payload : payload?.data || []
+}
+const filteredBooks = (search) => {
+  const keyword = search.trim().toLocaleLowerCase('vi')
+  if (!keyword) return books.value
+  return books.value.filter((book) => book.title.toLocaleLowerCase('vi').includes(keyword))
+}
+const bookTitle = (id) => books.value.find((book) => Number(book.id) === Number(id))?.title || `Sách #${id}`
+const selectedCouponBooks = computed(() => couponForm.scope_book_ids.map((id) => ({ id, title: bookTitle(id) })))
+const scopeLabel = (coupon) => {
+  if (coupon.scope_book_ids?.length) return `${coupon.scope_book_ids.length} sách cụ thể`
+  if (coupon.category_id) return `Thể loại #${coupon.category_id}`
+  return 'Toàn gian hàng'
+}
+const addGroup = () => flashForm.groups.push(emptyGroup())
+const removeGroup = (index) => {
+  if (flashForm.groups.length > 1) flashForm.groups.splice(index, 1)
+}
+const toggleBook = (target, bookId) => {
+  const numericId = Number(bookId)
+  const index = target.indexOf(numericId)
+  if (index >= 0) target.splice(index, 1)
+  else target.push(numericId)
 }
 
-const formatDate = (val) => {
-  if (!val) return '—'
-  return val
-}
-
-// ─── API Fetches ───
-const fetchCampaigns = async () => {
-  loadingCampaigns.value = true
-  campaignError.value = ''
+const load = async () => {
+  loading.value = true
+  error.value = ''
   try {
-    const res = await apiClient.get('/api/vendor/flash-sales')
-    campaigns.value = res.data.data || []
-  } catch (e) {
-    campaignError.value = 'Không thể tải chiến dịch Flash Sale từ hệ thống. Không có chiến dịch giả được hiển thị.'
-    toast.add({
-      severity: 'error',
-      summary: 'Lỗi',
-      detail: 'Không thể tải danh sách chiến dịch Flash Sale.',
-      life: 3000
-    })
+    const [bookResponse, categoryResponse, requestResponse, campaignResponse, couponResponse] = await Promise.all([
+      apiClient.get('/api/vendor/books', { params: { status: 'published', per_page: 100 } }),
+      apiClient.get('/api/categories'),
+      apiClient.get('/api/vendor/flash-sale-requests'),
+      apiClient.get('/api/vendor/flash-sales'),
+      apiClient.get('/api/vendor/coupons'),
+    ])
+    books.value = normalizeList(bookResponse)
+    categories.value = normalizeList(categoryResponse)
+    requests.value = normalizeList(requestResponse)
+    campaigns.value = normalizeList(campaignResponse)
+    coupons.value = normalizeList(couponResponse)
+  } catch (requestError) {
+    error.value = requestError.response?.data?.message || 'Không thể tải trung tâm khuyến mãi.'
   } finally {
-    loadingCampaigns.value = false
+    loading.value = false
   }
 }
 
-const fetchPublishedBooks = async () => {
-  loadingBooks.value = true
-  try {
-    const res = await apiClient.get('/api/vendor/books', {
-      params: { status: 'published', per_page: 100 }
-    })
-    publishedBooks.value = res.data.data || []
-  } catch (e) {
-    console.error('Lỗi khi tải danh sách sách', e)
-  } finally {
-    loadingBooks.value = false
-  }
-}
-
-const fetchRegisteredBooks = async (campaignId) => {
-  loadingDetails.value = true
-  try {
-    const res = await apiClient.get(`/api/vendor/flash-sales/${campaignId}/registered-books`)
-    registeredBooks.value = res.data.data || []
-  } catch (e) {
-    toast.add({
-      severity: 'error',
-      summary: 'Lỗi',
-      detail: 'Không thể tải danh sách sách đã đăng ký.',
-      life: 3000
-    })
-  } finally {
-    loadingDetails.value = false
-  }
-}
-
-// ─── Actions ───
-const openDetail = async (campaign) => {
-  selectedCampaign.value = campaign
-  detailDialog.value = true
-  // Reset form
-  form.value = {
-    book_id: null,
-    discount_percent: 10,
-    max_quantity: 10
-  }
-  
-  await Promise.all([
-    fetchRegisteredBooks(campaign.id),
-    fetchPublishedBooks()
-  ])
-}
-
-const handleRegister = async () => {
-  if (!form.value.book_id) {
-    toast.add({
-      severity: 'warn',
-      summary: 'Cảnh báo',
-      detail: 'Vui lòng chọn một cuốn sách.',
-      life: 3000
-    })
-    return
-  }
-
-  submitting.value = true
+const submitFlashRequest = async () => {
+  saving.value = true
+  error.value = ''
+  message.value = ''
   try {
     const payload = {
-      book_ids: [form.value.book_id],
-      discount_percent: form.value.discount_percent,
-      max_quantity: form.value.max_quantity
+      title: flashForm.title,
+      preferred_start_time: flashForm.preferred_start_time,
+      preferred_end_time: flashForm.preferred_end_time,
+      vendor_note: flashForm.vendor_note,
+      groups: flashForm.groups.map(({ book_ids, discount_percent, max_quantity }) => ({
+        book_ids,
+        discount_percent,
+        max_quantity,
+      })),
     }
-
-    await apiClient.post(`/api/vendor/flash-sales/${selectedCampaign.value.id}/register`, payload)
-    toast.add({
-      severity: 'success',
-      summary: 'Thành công',
-      detail: 'Đã gửi đề xuất sách tham gia Flash Sale thành công!',
-      life: 3000
-    })
-
-    // Refresh list of registered books and campaign list (to update count)
-    await Promise.all([
-      fetchRegisteredBooks(selectedCampaign.value.id),
-      fetchCampaigns()
-    ])
-
-    // Reset form
-    form.value.book_id = null
-  } catch (e) {
-    const msg = e.response?.data?.message || 'Có lỗi xảy ra khi đăng ký.'
-    toast.add({
-      severity: 'error',
-      summary: 'Lỗi',
-      detail: msg,
-      life: 4000
-    })
+    const response = await apiClient.post('/api/vendor/flash-sale-requests', payload)
+    message.value = response.data.message
+    Object.assign(flashForm, { title: '', preferred_start_time: '', preferred_end_time: '', vendor_note: '', groups: [emptyGroup()] })
+    await load()
+  } catch (requestError) {
+    const validation = requestError.response?.data?.errors
+    error.value = validation ? Object.values(validation).flat().join(' ') : (requestError.response?.data?.message || 'Không thể gửi đề xuất Flash Sale.')
   } finally {
-    submitting.value = false
+    saving.value = false
   }
 }
 
-// Quick edit (load proposal details to form for easy adjustment and resubmission)
-const loadProposalToForm = (item) => {
-  form.value = {
-    book_id: item.book_id,
-    discount_percent: item.discount_percent,
-    max_quantity: item.max_quantity
-  }
-  toast.add({
-    severity: 'info',
-    summary: 'Đã nạp dữ liệu',
-    detail: 'Thông tin sách đã được tải lên biểu mẫu đăng ký phía trên để chỉnh sửa.',
-    life: 3000
-  })
-}
-
-// Utility styling
-const getCampaignStatusSeverity = (status) => {
-  return status === 'active' ? 'success' : 'info'
-}
-
-const getCampaignStatusLabel = (status) => {
-  return status === 'active' ? 'Đang diễn ra' : 'Sắp diễn ra'
-}
-
-const getProposalStatusSeverity = (status) => {
-  switch (status) {
-    case 'approved': return 'success'
-    case 'rejected': return 'danger'
-    case 'pending':
-    default: return 'warn'
+const submitCoupon = async () => {
+  saving.value = true
+  error.value = ''
+  message.value = ''
+  try {
+    const { search, ...fields } = couponForm
+    const payload = {
+      ...fields,
+      code: couponForm.code.trim().toUpperCase(),
+      category_id: couponForm.scope_type === 'category' ? couponForm.category_id : null,
+      scope_book_ids: couponForm.scope_type === 'books' ? couponForm.scope_book_ids : null,
+    }
+    const response = await apiClient.post('/api/vendor/coupons', payload)
+    message.value = response.data.message
+    Object.assign(couponForm, {
+      code: '', discount_percent: 10, min_order_value: 0, max_discount_amount: 50000,
+      start_time: '', end_time: '', usage_limit: 100, stacking_policy: 'deny',
+      scope_type: 'store', category_id: '', scope_book_ids: [], search: '',
+    })
+    await load()
+  } catch (requestError) {
+    const validation = requestError.response?.data?.errors
+    error.value = validation ? Object.values(validation).flat().join(' ') : (requestError.response?.data?.message || 'Không thể tạo mã giảm giá.')
+  } finally {
+    saving.value = false
   }
 }
 
-const getProposalStatusLabel = (status) => {
-  switch (status) {
-    case 'approved': return 'Đã duyệt'
-    case 'rejected': return 'Từ chối'
-    case 'pending':
-    default: return 'Chờ duyệt'
-  }
-}
-
-const getCoverImageUrl = (coverImage) => {
-  if (!coverImage) return null
-  if (coverImage.startsWith('http') || coverImage.startsWith('/')) {
-    return coverImage
-  }
-  return `/storage/${coverImage}`
-}
-
-onMounted(() => {
-  fetchCampaigns()
-})
+onMounted(load)
 </script>
 
 <template>
-  <div class="vendor-flash-sales">
-    <!-- Hero Banner with gradient -->
-    <div class="hero-banner">
-      <div class="banner-content">
-        <div class="banner-badge">
-          <i class="pi pi-bolt animated-bolt"></i>
-          <span>Chiến dịch Flash Sale</span>
-        </div>
-        <h1 class="banner-title">Đăng ký & Đề xuất Flash Sale</h1>
-        <p class="banner-subtitle">
-          Tối ưu hóa doanh số bán hàng bằng cách đăng ký các cuốn sách chất lượng của bạn vào các khung giờ Flash Sale sôi động do Admin khởi tạo.
-        </p>
+  <section class="space-y-6">
+    <header class="flex flex-wrap items-end justify-between gap-4">
+      <div>
+        <p class="text-sm font-bold uppercase tracking-wider text-secondary">Khuyến mãi Nhà bán</p>
+        <h1 class="mt-2 text-3xl font-bold text-primary">Flash Sale &amp; mã giảm giá</h1>
+        <p class="mt-2 max-w-3xl text-on-surface-variant">Form đề xuất Flash Sale hoạt động bất cứ lúc nào. Bạn có thể tạo một chiến dịch gồm nhiều nhóm mức giảm, hoặc phát hành voucher theo phạm vi gian hàng, thể loại hay sách cụ thể.</p>
       </div>
-      <div class="banner-visual">
-        <div class="glow-sphere pink"></div>
-        <div class="glow-sphere indigo"></div>
-      </div>
-    </div>
+      <button class="ui-btn ui-btn-secondary" type="button" @click="load">Làm mới dữ liệu</button>
+    </header>
 
-    <div v-if="campaignError" class="mt-6 flex flex-col gap-3 rounded-xl border border-error/30 bg-error-container/30 p-4 text-on-error-container sm:flex-row sm:items-center sm:justify-between" role="alert">
-      <span>{{ campaignError }}</span>
-      <Button label="Thử lại" outlined severity="danger" class="min-h-11" @click="fetchCampaigns" />
-    </div>
+    <nav class="inline-flex max-w-full gap-1 rounded-xl border border-outline-variant/40 bg-surface-container-lowest p-1" aria-label="Loại khuyến mãi">
+      <button type="button" class="min-h-11 rounded-lg px-4 font-bold" :class="activeTab === 'flash' ? 'bg-primary text-on-primary' : 'text-on-surface-variant'" @click="activeTab = 'flash'">Đăng ký Flash Sale</button>
+      <button type="button" class="min-h-11 rounded-lg px-4 font-bold" :class="activeTab === 'coupon' ? 'bg-primary text-on-primary' : 'text-on-surface-variant'" @click="activeTab = 'coupon'">Mã giảm giá</button>
+    </nav>
 
-    <!-- Campaigns List Section -->
-    <div v-if="!campaignError" class="table-card mt-6">
-      <div class="card-header border-b border-slate-100 p-5 flex justify-between items-center bg-slate-50/50">
-        <div>
-          <h2 class="card-title text-lg font-bold text-slate-800">Danh sách Chiến dịch Đang hoạt động</h2>
-          <p class="card-subtitle text-xs text-slate-500 mt-1">Các chương trình Flash Sale hệ thống bạn có thể đăng ký tham gia</p>
-        </div>
-        <Button 
-          icon="pi pi-refresh" 
-          aria-label="Làm mới danh sách chiến dịch"
-          class="min-h-11 min-w-11"
-          outlined 
-          severity="secondary" 
-          size="small" 
-          @click="fetchCampaigns" 
-          :loading="loadingCampaigns"
-          v-tooltip.top="'Làm mới'"
-        />
-      </div>
+    <p v-if="message" class="ui-alert" role="status">{{ message }}</p>
+    <div v-if="error" class="ui-alert ui-alert-error flex flex-wrap items-center justify-between gap-3" role="alert"><span>{{ error }}</span><button type="button" class="ui-btn ui-btn-secondary" @click="load">Thử lại</button></div>
+    <div v-if="loading" class="ui-skeleton h-72" role="status" aria-label="Đang tải khuyến mãi"></div>
 
-      <DataTable
-        :value="campaigns"
-        :loading="loadingCampaigns"
-        dataKey="id"
-        stripedRows
-        class="p-datatable-sm"
-      >
-        <template #empty>
-          <div class="empty-state py-12 text-center text-slate-400">
-            <i class="pi pi-calendar-times text-5xl mb-3 block"></i>
-            <p class="text-sm font-medium">Hiện tại không có chiến dịch Flash Sale nào khả dụng.</p>
-            <p class="text-xs text-slate-400 mt-1">Hãy quay lại sau khi Admin tạo chiến dịch mới.</p>
+    <template v-else-if="activeTab === 'flash'">
+      <div class="grid min-w-0 items-start gap-6 2xl:grid-cols-[minmax(0,1fr)_360px]">
+        <form class="ui-panel min-w-0 space-y-5" @submit.prevent="submitFlashRequest">
+          <div><h2 class="text-xl font-bold text-primary">Đề xuất chiến dịch Flash Sale</h2><p class="mt-1 text-sm text-on-surface-variant">Mỗi nhóm có mức giảm và giới hạn riêng; một sách chỉ nằm trong một nhóm.</p></div>
+          <label class="block font-bold">Tên chiến dịch<input v-model.trim="flashForm.title" class="ui-field mt-2" required maxlength="255" placeholder="Ví dụ: Tuần lễ sách thiếu nhi" /></label>
+          <div class="grid gap-4 sm:grid-cols-2">
+            <label class="block font-bold">Bắt đầu mong muốn<input v-model="flashForm.preferred_start_time" class="ui-field mt-2" type="datetime-local" required /></label>
+            <label class="block font-bold">Kết thúc mong muốn<input v-model="flashForm.preferred_end_time" class="ui-field mt-2" type="datetime-local" required /></label>
           </div>
-        </template>
 
-        <Column header="Tên chiến dịch" style="min-width: 250px">
-          <template #body="slotProps">
-            <div class="flex items-center gap-3">
-              <div class="campaign-icon-wrapper">
-                <i class="pi pi-bolt text-amber-500 font-bold"></i>
+          <fieldset class="space-y-4">
+            <legend class="font-bold">Các nhóm mức giảm</legend>
+            <article v-for="(group, index) in flashForm.groups" :key="index" class="rounded-xl border border-outline-variant/40 bg-surface-container p-4">
+              <div class="flex flex-wrap items-center justify-between gap-3"><h3 class="font-bold text-primary">Nhóm {{ index + 1 }}</h3><button type="button" class="ui-btn ui-btn-secondary" :disabled="flashForm.groups.length === 1" @click="removeGroup(index)">Xóa nhóm</button></div>
+              <div class="mt-4 grid gap-4 sm:grid-cols-2">
+                <label class="block font-bold">Mức giảm (%)<input v-model.number="group.discount_percent" class="ui-field mt-2" type="number" min="1" max="90" required /></label>
+                <label class="block font-bold">Số lượng tối đa / sách<input v-model.number="group.max_quantity" class="ui-field mt-2" type="number" min="1" /></label>
               </div>
-              <span class="font-semibold text-slate-800 text-sm md:text-base">{{ slotProps.data?.title }}</span>
-            </div>
-          </template>
-        </Column>
-
-        <Column header="Thời gian bắt đầu" style="min-width: 160px">
-          <template #body="slotProps">
-            <div class="flex items-center gap-2 text-slate-600 text-sm">
-              <i class="pi pi-clock text-slate-400"></i>
-              <span>{{ formatDate(slotProps.data?.start) }}</span>
-            </div>
-          </template>
-        </Column>
-
-        <Column header="Thời gian kết thúc" style="min-width: 160px">
-          <template #body="slotProps">
-            <div class="flex items-center gap-2 text-slate-600 text-sm">
-              <i class="pi pi-clock text-slate-400"></i>
-              <span>{{ formatDate(slotProps.data?.end) }}</span>
-            </div>
-          </template>
-        </Column>
-
-        <Column header="Sách đã đăng ký" style="min-width: 130px" class="text-center">
-          <template #body="slotProps">
-            <span class="inline-flex items-center justify-center px-2.5 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-700">
-              {{ slotProps.data?.registered_count }} cuốn
-            </span>
-          </template>
-        </Column>
-
-        <Column header="Trạng thái" style="min-width: 130px">
-          <template #body="slotProps">
-            <Tag 
-              :severity="getCampaignStatusSeverity(slotProps.data?.status)" 
-              :value="getCampaignStatusLabel(slotProps.data?.status)" 
-              rounded
-            />
-          </template>
-        </Column>
-
-        <Column header="Tác vụ" style="min-width: 150px" class="text-right">
-          <template #body="slotProps">
-            <Button
-              label="Đăng ký & Chi tiết"
-              icon="pi pi-arrow-right"
-              iconPos="right"
-              severity="primary"
-              size="small"
-              class="btn-action-register"
-              @click="openDetail(slotProps.data)"
-            />
-          </template>
-        </Column>
-      </DataTable>
-    </div>
-
-    <!-- DETAIL & REGISTRATION DIALOG -->
-    <Dialog
-      v-model:visible="detailDialog"
-      modal
-      :draggable="false"
-      dismissableMask
-      class="flash-sale-detail-dialog"
-      :style="{ width: '850px' }"
-      :breakpoints="{ '960px': '90vw', '641px': '95vw' }"
-    >
-      <template #header>
-        <div class="flex items-center gap-2">
-          <i class="pi pi-bolt text-amber-500 text-xl font-bold animate-pulse"></i>
-          <span class="text-lg font-bold text-slate-800">Chi tiết & Đăng ký đề xuất</span>
-        </div>
-      </template>
-
-      <div v-if="selectedCampaign" class="dialog-content flex flex-col gap-6">
-        <!-- Campaign Detail Info Panel -->
-        <div class="campaign-info-panel">
-          <div class="panel-header-badge">
-            <Tag 
-              :severity="getCampaignStatusSeverity(selectedCampaign.status)" 
-              :value="getCampaignStatusLabel(selectedCampaign.status)"
-            />
-          </div>
-          <h3 class="panel-title text-base md:text-lg font-bold text-slate-800 mb-2">{{ selectedCampaign.title }}</h3>
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs md:text-sm text-slate-600">
-            <div class="flex items-center gap-2">
-              <span class="font-medium text-slate-400">Bắt đầu:</span>
-              <span class="font-semibold">{{ formatDate(selectedCampaign.start) }}</span>
-            </div>
-            <div class="flex items-center gap-2">
-              <span class="font-medium text-slate-400">Kết thúc:</span>
-              <span class="font-semibold">{{ formatDate(selectedCampaign.end) }}</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Section 1: Submit Proposal Form -->
-        <div class="proposal-form-section p-4 bg-slate-50/50 rounded-xl border border-slate-200/60">
-          <h4 class="text-sm font-bold text-slate-700 uppercase tracking-wider mb-4 flex items-center gap-2">
-            <i class="pi pi-plus-circle text-indigo-500"></i>
-            Đề xuất cuốn sách mới tham gia
-          </h4>
-
-          <div class="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
-            <!-- Book selection drop down -->
-            <div class="col-span-1 md:col-span-5 flex flex-col gap-1.5">
-              <label class="text-xs font-bold text-slate-600">Chọn Sách đã xuất bản <span class="text-red-500">*</span></label>
-              <Select
-                v-model="form.book_id"
-                :options="publishedBooks"
-                optionLabel="title"
-                optionValue="id"
-                placeholder="Chọn sách tham gia..."
-                filter
-                :loading="loadingBooks"
-                class="w-full text-sm"
-              >
-                <template #option="slotProps">
-                  <div class="flex items-center gap-2 py-1">
-                    <img 
-                      v-if="slotProps.option?.cover_image" 
-                      :src="getCoverImageUrl(slotProps.option?.cover_image)" 
-                      class="w-6 h-9 rounded object-cover border border-slate-200" 
-                    />
-                    <div class="flex flex-col">
-                      <span class="font-medium text-sm text-slate-800 line-clamp-1">{{ slotProps.option?.title }}</span>
-                      <span class="text-xs text-slate-500">{{ formatPrice(slotProps.option?.price) }}</span>
-                    </div>
-                  </div>
-                </template>
-              </Select>
-            </div>
-
-            <!-- Discount Percent -->
-            <div class="col-span-1 md:col-span-3 flex flex-col gap-1.5">
-              <label class="text-xs font-bold text-slate-600">Phần trăm giảm (%) <span class="text-red-500">*</span></label>
-              <InputNumber
-                v-model="form.discount_percent"
-                :min="1"
-                :max="99"
-                suffix=" %"
-                showButtons
-                buttonLayout="horizontal"
-                class="w-full text-sm"
-              />
-            </div>
-
-            <!-- Max quantity -->
-            <div class="col-span-1 md:col-span-2 flex flex-col gap-1.5">
-              <label class="text-xs font-bold text-slate-600">Số lượng GH <span class="text-slate-400 font-normal">(Limit)</span></label>
-              <InputNumber
-                v-model="form.max_quantity"
-                :min="1"
-                placeholder="Nhập..."
-                class="w-full text-sm"
-              />
-            </div>
-
-            <!-- Submit Button -->
-            <div class="col-span-1 md:col-span-2">
-              <Button
-                label="Gửi đề xuất"
-                icon="pi pi-send"
-                class="btn-primary w-full text-sm py-2"
-                :loading="submitting"
-                @click="handleRegister"
-              />
-            </div>
-          </div>
-
-          <!-- Realtime Price Preview interaction -->
-          <div v-if="selectedBookObj" class="preview-price-box mt-3 p-2.5 bg-indigo-50 border border-indigo-100 rounded-lg flex items-center justify-between animate-fade-in">
-            <span class="text-xs text-indigo-700 font-medium">Bản xem trước giá sau chiết khấu:</span>
-            <div class="flex items-center gap-2">
-              <span class="text-xs text-slate-400 line-through">{{ formatPrice(selectedBookObj.price) }}</span>
-              <i class="pi pi-arrow-right text-xs text-indigo-400"></i>
-              <span class="text-sm font-bold text-indigo-600">{{ formatPrice(discountedPricePreview) }}</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Section 2: Registered Books list -->
-        <div class="registered-list-section">
-          <h4 class="text-sm font-bold text-slate-700 uppercase tracking-wider mb-3 flex items-center gap-2">
-            <i class="pi pi-list text-indigo-500"></i>
-            Danh sách sách bạn đã đề xuất trong chiến dịch này
-          </h4>
-
-          <DataTable
-            :value="registeredBooks"
-            :loading="loadingDetails"
-            stripedRows
-            class="p-datatable-sm"
-          >
-            <template #empty>
-              <div class="text-center py-8 text-slate-400">
-                <i class="pi pi-inbox text-3xl mb-2 block"></i>
-                <p class="text-xs">Chưa có đề xuất nào cho chiến dịch này. Sử dụng form phía trên để gửi đề xuất.</p>
+              <label class="mt-4 block font-bold">Tìm và chọn nhiều sách<input v-model.trim="group.search" class="ui-field mt-2" type="search" placeholder="Nhập tên sách…" /></label>
+              <div class="mt-3 max-h-56 space-y-1 overflow-y-auto rounded-lg border border-outline-variant/40 bg-surface-container-lowest p-2">
+                <label v-for="book in filteredBooks(group.search)" :key="book.id" class="flex min-h-11 cursor-pointer items-center gap-3 rounded-lg px-3 hover:bg-surface-container">
+                  <input type="checkbox" :checked="group.book_ids.includes(Number(book.id))" @change="toggleBook(group.book_ids, book.id)" />
+                  <span class="min-w-0 truncate">{{ book.title }}</span>
+                </label>
               </div>
-            </template>
+              <p class="mt-2 text-sm text-on-surface-variant">Đã chọn {{ group.book_ids.length }} sách.</p>
+            </article>
+            <button type="button" class="ui-btn ui-btn-secondary" @click="addGroup">+ Thêm nhóm mức giảm</button>
+          </fieldset>
+          <label class="block font-bold">Ghi chú cho ban vận hành<textarea v-model="flashForm.vendor_note" class="ui-field mt-2 min-h-24" maxlength="2000"></textarea></label>
+          <button class="ui-btn ui-btn-primary" type="submit" :disabled="saving">{{ saving ? 'Đang gửi…' : 'Gửi đề xuất chiến dịch' }}</button>
+        </form>
 
-            <Column header="Sách" style="min-width: 220px">
-              <template #body="slotProps">
-                <div class="flex items-center gap-2.5" v-if="slotProps.data?.book">
-                  <img 
-                    v-if="slotProps.data.book.cover_image" 
-                    :src="getCoverImageUrl(slotProps.data.book.cover_image)" 
-                    :alt="slotProps.data.book.title"
-                    class="w-9 h-12 object-cover rounded border border-slate-200"
-                  />
-                  <div class="flex flex-col gap-0.5">
-                    <span class="font-semibold text-slate-800 text-xs md:text-sm line-clamp-1">{{ slotProps.data.book.title }}</span>
-                    <span class="text-xs text-slate-400">{{ formatPrice(slotProps.data.book.price) }}</span>
-                  </div>
-                </div>
-              </template>
-            </Column>
-
-            <Column header="Giảm (%)" style="min-width: 90px">
-              <template #body="slotProps">
-                <span class="font-bold text-slate-800 text-xs md:text-sm whitespace-nowrap">
-                  {{ slotProps.data?.discount_percent }}%
-                </span>
-              </template>
-            </Column>
-
-            <Column header="Giá Flash Sale" style="min-width: 120px">
-              <template #body="slotProps">
-                <span class="font-bold text-red-500 text-xs md:text-sm whitespace-nowrap" v-if="slotProps.data?.book">
-                  {{ formatPrice(slotProps.data.book.price * (1 - slotProps.data.discount_percent / 100)) }}
-                </span>
-              </template>
-            </Column>
-
-            <Column header="Giới hạn / Đã bán" style="min-width: 130px">
-              <template #body="slotProps">
-                <span class="text-xs text-slate-600 whitespace-nowrap">
-                  {{ slotProps.data?.max_quantity || 'Không giới hạn' }} / {{ slotProps.data?.sold_quantity }}
-                </span>
-              </template>
-            </Column>
-
-            <Column header="Trạng thái" style="min-width: 120px">
-              <template #body="slotProps">
-                <Tag 
-                  :severity="getProposalStatusSeverity(slotProps.data?.status)" 
-                  :value="getProposalStatusLabel(slotProps.data?.status)" 
-                  rounded
-                  class="whitespace-nowrap"
-                />
-              </template>
-            </Column>
-
-            <Column header="Hành động" style="min-width: 110px" class="text-right">
-              <template #body="slotProps">
-                <Button 
-                  v-if="slotProps.data?.status === 'rejected' || slotProps.data?.status === 'pending'"
-                  icon="pi pi-pencil" 
-                  severity="secondary" 
-                  outlined 
-                  rounded 
-                  size="small"
-                  v-tooltip.top="'Chỉnh sửa & Gửi lại'"
-                  @click="loadProposalToForm(slotProps.data)"
-                />
-              </template>
-            </Column>
-          </DataTable>
-        </div>
+        <aside class="space-y-4 2xl:sticky 2xl:top-24">
+          <div class="ui-panel"><h2 class="text-lg font-bold text-primary">Chiến dịch đang mở</h2><p class="mt-2 text-sm text-on-surface-variant">{{ campaigns.length ? `${campaigns.length} chiến dịch đang mở đăng ký.` : 'Chưa có chiến dịch mở; form đề xuất vẫn luôn hoạt động.' }}</p></div>
+          <div class="ui-panel"><h2 class="text-lg font-bold text-primary">Quản lý đề xuất chung</h2><div v-if="!requests.length" class="mt-4 text-sm text-on-surface-variant">Chưa có đề xuất.</div><ul v-else class="mt-4 space-y-3"><li v-for="item in requests" :key="item.id" class="rounded-lg border border-outline-variant/40 p-3"><div class="flex justify-between gap-3"><strong>{{ item.title }}</strong><span class="text-sm font-bold text-secondary">{{ statusLabel(item.status) }}</span></div><p class="mt-1 text-sm text-on-surface-variant">{{ item.groups?.length || 1 }} nhóm · {{ item.groups?.reduce((sum, group) => sum + group.book_ids.length, 0) || 1 }} sách</p><p class="mt-1 text-xs text-on-surface-variant">{{ formatDate(item.preferred_start_time) }} → {{ formatDate(item.preferred_end_time) }}</p></li></ul></div>
+        </aside>
       </div>
-    </Dialog>
-  </div>
+    </template>
+
+    <template v-else>
+      <div class="grid min-w-0 items-start gap-6 2xl:grid-cols-[minmax(0,1fr)_360px]">
+        <form class="ui-panel min-w-0 space-y-5" @submit.prevent="submitCoupon">
+          <div><h2 class="text-xl font-bold text-primary">Tạo mã giảm giá gian hàng</h2><p class="mt-1 text-sm text-on-surface-variant">Chọn phạm vi rõ ràng; mã mới sẽ chờ Admin duyệt trước khi sử dụng.</p></div>
+          <div class="grid gap-4 sm:grid-cols-2"><label class="block font-bold">Mã voucher<input v-model.trim="couponForm.code" class="ui-field mt-2 uppercase" required maxlength="40" placeholder="KOMI10" /></label><label class="block font-bold">Giảm (%)<input v-model.number="couponForm.discount_percent" class="ui-field mt-2" type="number" min="1" max="90" required /></label></div>
+          <div class="grid gap-4 sm:grid-cols-2"><label class="block font-bold">Đơn tối thiểu<input v-model.number="couponForm.min_order_value" class="ui-field mt-2" type="number" min="0" /></label><label class="block font-bold">Giảm tối đa<input v-model.number="couponForm.max_discount_amount" class="ui-field mt-2" type="number" min="0" /></label></div>
+          <div class="grid gap-4 sm:grid-cols-2"><label class="block font-bold">Bắt đầu<input v-model="couponForm.start_time" class="ui-field mt-2" type="datetime-local" required /></label><label class="block font-bold">Kết thúc<input v-model="couponForm.end_time" class="ui-field mt-2" type="datetime-local" required /></label></div>
+
+          <fieldset class="space-y-3">
+            <legend class="font-bold">Phạm vi áp dụng</legend>
+            <div class="grid gap-3 md:grid-cols-3">
+              <label v-for="option in [{ value: 'store', label: 'Toàn gian hàng' }, { value: 'category', label: 'Theo thể loại' }, { value: 'books', label: 'Sách cụ thể' }]" :key="option.value" class="flex min-h-14 cursor-pointer items-center gap-3 rounded-xl border border-outline-variant/40 p-3" :class="{ 'border-primary bg-primary-container': couponForm.scope_type === option.value }"><input v-model="couponForm.scope_type" type="radio" :value="option.value" /><strong>{{ option.label }}</strong></label>
+            </div>
+            <label v-if="couponForm.scope_type === 'category'" class="block font-bold">Thể loại<select v-model="couponForm.category_id" class="ui-field mt-2" required><option value="" disabled>Chọn thể loại có sách của gian hàng</option><option v-for="category in categories" :key="category.id" :value="category.id">{{ category.name }}</option></select></label>
+            <div v-if="couponForm.scope_type === 'books'" class="rounded-xl border border-outline-variant/40 p-4">
+              <label class="block font-bold">Tìm sách<input v-model.trim="couponForm.search" class="ui-field mt-2" type="search" placeholder="Nhập tên sách…" /></label>
+              <div class="mt-3 max-h-56 space-y-1 overflow-y-auto">
+                <label v-for="book in filteredBooks(couponForm.search)" :key="book.id" class="flex min-h-11 cursor-pointer items-center gap-3 rounded-lg px-3 hover:bg-surface-container"><input type="checkbox" :checked="couponForm.scope_book_ids.includes(Number(book.id))" @change="toggleBook(couponForm.scope_book_ids, book.id)" /><span class="truncate">{{ book.title }}</span></label>
+              </div>
+              <div v-if="selectedCouponBooks.length" class="mt-3 flex flex-wrap gap-2"><button v-for="book in selectedCouponBooks" :key="book.id" type="button" class="rounded-full bg-primary-container px-3 py-2 text-sm font-semibold text-on-primary-container" @click="toggleBook(couponForm.scope_book_ids, book.id)">{{ book.title }} ×</button></div>
+            </div>
+          </fieldset>
+
+          <div class="grid gap-4 sm:grid-cols-2"><label class="block font-bold">Giới hạn lượt dùng<input v-model.number="couponForm.usage_limit" class="ui-field mt-2" type="number" min="1" /></label><label class="block font-bold">Dùng cùng Flash Sale<select v-model="couponForm.stacking_policy" class="ui-field mt-2"><option value="deny">Không cho phép</option><option value="allow">Cho phép</option></select></label></div>
+          <button class="ui-btn ui-btn-primary" type="submit" :disabled="saving">{{ saving ? 'Đang tạo…' : 'Tạo và gửi duyệt voucher' }}</button>
+        </form>
+
+        <aside class="ui-panel 2xl:sticky 2xl:top-24"><h2 class="text-lg font-bold text-primary">Voucher của gian hàng</h2><div v-if="!coupons.length" class="mt-4 text-sm text-on-surface-variant">Chưa có voucher.</div><ul v-else class="mt-4 space-y-3"><li v-for="item in coupons" :key="item.id" class="rounded-lg border border-outline-variant/40 p-3"><div class="flex justify-between gap-3"><strong class="font-mono text-primary">{{ item.code }}</strong><span class="text-sm font-bold text-secondary">{{ statusLabel(item.status) }}</span></div><p class="mt-1 text-sm text-on-surface-variant">{{ scopeLabel(item) }} · giảm {{ item.discount_percent }}%</p><p class="mt-1 text-xs text-on-surface-variant">Đến {{ formatDate(item.end_time) }}</p></li></ul></aside>
+      </div>
+    </template>
+  </section>
 </template>
-
-<style scoped>
-.vendor-flash-sales {
-  max-width: 100%;
-}
-
-/* Hero Banner Style */
-.hero-banner {
-  position: relative;
-  background: linear-gradient(135deg, #1e1b4b 0%, #311042 50%, #4c0519 100%);
-  border-radius: 20px;
-  padding: 32px 40px;
-  overflow: hidden;
-  box-shadow: 0 10px 30px -10px rgba(79, 70, 229, 0.4);
-  color: white;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.banner-content {
-  position: relative;
-  z-index: 2;
-  max-width: 600px;
-}
-
-.banner-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  background: rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(8px);
-  padding: 6px 14px;
-  border-radius: 99px;
-  font-size: 12px;
-  font-weight: 700;
-  color: #fbbf24;
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  margin-bottom: 16px;
-}
-
-.animated-bolt {
-  font-size: 14px;
-  animation: pulse-glow 1.5s infinite;
-}
-
-.banner-title {
-  font-size: 28px;
-  font-weight: 800;
-  letter-spacing: -0.025em;
-  line-height: 1.2;
-  margin: 0 0 12px;
-}
-
-.banner-subtitle {
-  font-size: 14px;
-  color: #cbd5e1;
-  line-height: 1.5;
-  margin: 0;
-}
-
-.banner-visual {
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  width: 40%;
-  pointer-events: none;
-  z-index: 1;
-}
-
-.glow-sphere {
-  position: absolute;
-  width: 150px;
-  height: 150px;
-  border-radius: 50%;
-  filter: blur(60px);
-  opacity: 0.5;
-}
-
-.glow-sphere.pink {
-  background: #ec4899;
-  top: -20px;
-  right: 40px;
-}
-
-.glow-sphere.indigo {
-  background: #6366f1;
-  bottom: -40px;
-  right: -20px;
-}
-
-/* Table styling and premium cards */
-.table-card {
-  background: white;
-  border-radius: 16px;
-  border: 1px solid #e2e8f0;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.02), 0 2px 4px -1px rgba(0, 0, 0, 0.01);
-  overflow: hidden;
-}
-
-.campaign-icon-wrapper {
-  width: 32px;
-  height: 32px;
-  background: #fffbeb;
-  border: 1px solid #fef3c7;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.btn-action-register {
-  background: linear-gradient(to bottom, #6366f1, #4f46e5) !important;
-  border: none !important;
-  color: white !important;
-  font-weight: 600 !important;
-  box-shadow: 0 2px 6px rgba(99, 102, 241, 0.2) !important;
-  transition: all 0.2s ease !important;
-}
-
-.btn-action-register:hover {
-  transform: translateX(2px);
-  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3) !important;
-}
-
-.btn-primary {
-  background: linear-gradient(to bottom, #6366f1, #4f46e5) !important;
-  border: none !important;
-  color: white !important;
-  font-weight: 600 !important;
-  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3) !important;
-  transition: all 0.2s ease !important;
-}
-
-.btn-primary:hover {
-  box-shadow: 0 4px 16px rgba(99, 102, 241, 0.4) !important;
-  transform: translateY(-1px);
-}
-
-/* Dialog design customizations */
-.campaign-info-panel {
-  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  padding: 16px 20px;
-  position: relative;
-}
-
-.panel-header-badge {
-  position: absolute;
-  top: 16px;
-  right: 20px;
-}
-
-.preview-price-box {
-  animation: fadeIn 0.3s ease;
-}
-
-@keyframes pulse-glow {
-  0%, 100% {
-    transform: scale(1);
-    opacity: 1;
-    filter: drop-shadow(0 0 2px rgba(251, 191, 36, 0.6));
-  }
-  50% {
-    transform: scale(1.1);
-    opacity: 0.9;
-    filter: drop-shadow(0 0 8px rgba(251, 191, 36, 0.9));
-  }
-}
-
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(5px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-.animate-fade-in {
-  animation: fadeIn 0.3s ease;
-}
-
-@media (max-width: 768px) {
-  .hero-banner {
-    padding: 24px;
-    flex-direction: column;
-  }
-  .banner-visual {
-    display: none;
-  }
-  .panel-header-badge {
-    position: static;
-    margin-bottom: 8px;
-  }
-}
-</style>

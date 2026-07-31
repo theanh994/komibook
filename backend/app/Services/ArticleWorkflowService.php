@@ -44,6 +44,9 @@ class ArticleWorkflowService
             if ($target === ArticleStatus::Published) {
                 $updates += ['published_at' => now(), 'scheduled_at' => null];
             }
+            if ($target === ArticleStatus::Approved) {
+                $updates['approved_by'] = $actor?->id;
+            }
             $locked->update($updates);
             ArticleEvent::create(['article_id' => $locked->id, 'actor_id' => $actor?->id, 'from_status' => $from->value, 'to_status' => $target->value, 'reason' => $reason, 'operation_key' => $operationKey]);
             UserNotification::firstOrCreate(

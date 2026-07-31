@@ -14,11 +14,12 @@ describe('Phase 7E.2 Vendor operations parity', () => {
     expect(finance).toContain('không tự suy đoán tỷ lệ')
   })
 
-  it('shows truthful Flash Sale load failures and keeps the real registration form', () => {
+  it('keeps always-open Flash Sale proposals and vendor voucher creation truthful', () => {
     const flashSale = source('src/views/vendor/FlashSalesView.vue')
 
-    expect(flashSale).toContain('Không có chiến dịch giả được hiển thị')
-    expect(flashSale).toContain('/register`')
-    expect(flashSale).toContain('Gửi đề xuất')
+    expect(flashSale).toContain('/api/vendor/flash-sale-requests')
+    expect(flashSale).toContain('/api/vendor/coupons')
+    expect(flashSale).toContain('bất cứ lúc nào')
+    expect(flashSale).toContain('Form đề xuất Flash Sale')
   })
 })

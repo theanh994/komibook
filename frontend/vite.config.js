@@ -9,6 +9,7 @@ import tailwindcss from '@tailwindcss/vite'
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), 'VITE_')
   const backendTarget = env.VITE_BACKEND_URL || 'http://127.0.0.1:8000'
+  const mediaTarget = env.VITE_MEDIA_URL || backendTarget
   const cookieDomainRewrite = env.VITE_COOKIE_DOMAIN
     ? { cookieDomainRewrite: env.VITE_COOKIE_DOMAIN }
     : {}
@@ -62,7 +63,7 @@ export default defineConfig(({ mode }) => {
           ...localCookieProxy,
         },
         '/storage': {
-          target: backendTarget,
+          target: mediaTarget,
           changeOrigin: true,
           ...cookieDomainRewrite,
         }

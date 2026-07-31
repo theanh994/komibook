@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="336" viewBox="0 0 240 336" role="img" aria-labelledby="title description">
+  <title id="title">Bìa sách chưa cập nhật</title>
+  <desc id="description">Ảnh giữ chỗ màu xanh navy có biểu tượng quyển sách.</desc>
+  <rect width="240" height="336" fill="#eef3f8"/>
+  <rect x="48" y="58" width="144" height="220" rx="8" fill="#ffffff" stroke="#9aa7b5" stroke-width="4"/>
+  <path d="M76 95h88M76 121h88M76 147h62" stroke="#002442" stroke-width="7" stroke-linecap="round"/>
+  <path d="M120 188v54m-31-27h62" stroke="#ba0035" stroke-width="8" stroke-linecap="round"/>
+</svg>

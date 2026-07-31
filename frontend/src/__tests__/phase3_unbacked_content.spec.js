@@ -23,7 +23,8 @@ describe('Phase 3C.3 unbacked public content closure', () => {
     expect(html).toContain('KomiBook Editorial')
     expect(html).toContain('Đang tải bài viết')
     expect(html).not.toContain('Nội dung biên tập chưa được mở')
-    expect(html).not.toContain('<form')
+    expect(html).toContain('Tìm trong bản tin')
+    expect(html).not.toContain('Nhập nội dung HTML')
   })
 
   it('renders a non-submitting newsletter state and no placeholder footer links', async () => {

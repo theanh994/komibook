@@ -21,10 +21,22 @@ class UserController extends Controller
     {
         abort_if($request->user()->role !== 'admin', 403, 'Bạn không có quyền truy cập.');
 
-        $perPage = $request->input('per_page', 15);
+        $perPage = min(max($request->integer('per_page', 15), 10), 100);
+        $sortBy = in_array($request->input('sort_by'), ['name', 'email', 'role', 'created_at'], true)
+            ? $request->input('sort_by')
+            : 'created_at';
+        $sortDirection = $request->input('sort_direction') === 'asc' ? 'asc' : 'desc';
 
         $users = User::with('vendor:id,user_id,shop_name,status')
-            ->orderBy('created_at', 'desc')
+            ->when($request->filled('search'), function ($query) use ($request) {
+                $term = '%'.trim((string) $request->input('search')).'%';
+                $query->where(fn ($users) => $users
+                    ->where('name', 'like', $term)
+                    ->orWhere('email', 'like', $term));
+            })
+            ->when($request->filled('role'), fn ($query) => $query->where('role', $request->input('role')))
+            ->orderBy($sortBy, $sortDirection)
+            ->orderBy('id', 'desc')
             ->paginate($perPage);
 
         return response()->json([
@@ -124,6 +136,21 @@ class UserController extends Controller
         return response()->json([
             'status' => 'success',
             'data' => $data,
+        ]);
+    }
+
+    public function terminateSessions(Request $request, int $id): JsonResponse
+    {
+        abort_if($request->user()->role !== 'admin', 403);
+        $user = User::findOrFail($id);
+        abort_if($user->role === 'admin', 422, 'Không thể ngắt phiên của tài khoản Admin.');
+
+        $user->tokens()->delete();
+        DB::table('sessions')->where('user_id', $user->id)->delete();
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Đã đăng xuất tài khoản khỏi các thiết bị và thu hồi token truy cập.',
         ]);
     }
 }

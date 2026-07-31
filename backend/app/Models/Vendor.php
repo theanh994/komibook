@@ -23,6 +23,7 @@ class Vendor extends Model
         'shop_name',
         'slug',
         'description',
+        'views_count',
         'logo',
         'status',
         'rejection_reason',
@@ -59,6 +60,7 @@ class Vendor extends Model
         return [
             'onboarding_status' => VendorOnboardingStatus::class,
             'application_version' => 'integer',
+            'views_count' => 'integer',
             'terms_accepted_at' => 'datetime',
             'submitted_at' => 'datetime',
             'review_started_at' => 'datetime',
@@ -168,6 +170,11 @@ class Vendor extends Model
     public function warehouseDocuments(): HasMany
     {
         return $this->hasMany(WarehouseDocument::class);
+    }
+
+    public function followers(): HasMany
+    {
+        return $this->hasMany(VendorFollow::class);
     }
 
     public function primaryOrganization(): BelongsTo

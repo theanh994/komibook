@@ -85,8 +85,18 @@ onMounted(loadStatus)
 <template>
   <main class="min-h-screen bg-background p-4 md:p-10">
     <section class="mx-auto max-w-4xl rounded-2xl border border-outline-variant/30 bg-surface-container-lowest p-6 shadow-sm md:p-8" aria-labelledby="vendor-register-title">
-      <h1 id="vendor-register-title" class="text-3xl font-bold text-primary">Hồ sơ Nhà bán</h1>
-      <p class="mt-2 text-sm text-on-surface-variant">Hồ sơ pháp lý và thanh toán được kiểm duyệt riêng cho từng Nhà bán.</p>
+      <router-link to="/" class="inline-flex min-h-11 items-center gap-1 text-sm font-bold text-primary no-underline">
+        <span class="material-symbols-outlined" aria-hidden="true">arrow_back</span>
+        Về trang chủ
+      </router-link>
+      <p class="mt-3 text-sm font-bold uppercase tracking-wider text-secondary">Kênh đối tác KomiBook</p>
+      <h1 id="vendor-register-title" class="mt-1 text-3xl font-bold text-primary">Đăng ký trở thành Nhà bán</h1>
+      <p class="mt-2 max-w-2xl text-sm leading-6 text-on-surface-variant">Điền biểu mẫu dưới đây để tạo gian hàng. Hồ sơ pháp lý và thông tin nhận đối soát chỉ được dùng cho quá trình xác minh Nhà bán.</p>
+      <ol class="mt-6 grid gap-3 md:grid-cols-3" aria-label="Quy trình đăng ký Nhà bán">
+        <li class="rounded-xl bg-surface-container p-4"><strong class="text-primary">1. Khai báo gian hàng</strong><p class="mt-2 text-sm leading-6 text-on-surface-variant">Chọn đúng mô hình: NXB bán trực tiếp, nhà sách, nhà phân phối hoặc kết hợp.</p></li>
+        <li class="rounded-xl bg-surface-container p-4"><strong class="text-primary">2. Xác minh pháp lý</strong><p class="mt-2 text-sm leading-6 text-on-surface-variant">Cung cấp đăng ký kinh doanh, người đại diện và tài khoản nhận đối soát.</p></li>
+        <li class="rounded-xl bg-surface-container p-4"><strong class="text-primary">3. Khai báo nguồn sách</strong><p class="mt-2 text-sm leading-6 text-on-surface-variant">Sau khi duyệt, gắn NXB và Nhà cung cấp đã xác minh cho từng sản phẩm.</p></li>
+      </ol>
       <p v-if="loading" class="mt-8 text-on-surface-variant" role="status">Đang tải hồ sơ…</p>
 
       <div v-else-if="['submitted', 'resubmitted', 'under_review'].includes(status)" class="mt-8 rounded-xl border border-amber-200 bg-amber-50 p-6 text-amber-900">
@@ -98,7 +108,7 @@ onMounted(loadStatus)
 
       <form v-else class="mt-8 space-y-6" @submit.prevent="submit">
         <div v-if="status === 'changes_requested'" class="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"><strong>Cần bổ sung:</strong> {{ reason }}</div>
-        <div class="rounded-xl bg-surface-container p-4" aria-label="Tiến độ hồ sơ"><p class="text-sm font-semibold text-primary">Bước 1/3 · Gian hàng và mô hình hoạt động</p><p class="mt-1 text-sm text-on-surface-variant">Sau khi hồ sơ Nhà bán được duyệt, bạn tiếp tục xác minh Nhà xuất bản và Nhà cung cấp cho sản phẩm.</p></div>
+        <div class="rounded-xl bg-surface-container p-4" aria-label="Tiến độ hồ sơ"><p class="text-sm font-semibold text-primary">Biểu mẫu đăng ký · Gian hàng và mô hình hoạt động</p><p class="mt-1 text-sm text-on-surface-variant">Sau khi hồ sơ Nhà bán được duyệt, bạn tiếp tục xác minh Nhà xuất bản và Nhà cung cấp cho sản phẩm.</p></div>
         <div class="grid gap-4 md:grid-cols-2">
           <div><label for="vendor-shop-name" class="mb-2 block text-sm font-semibold">Tên gian hàng</label><InputText id="vendor-shop-name" v-model="form.shop_name" class="w-full" required /></div>
           <div><label for="vendor-slug" class="mb-2 block text-sm font-semibold">Đường dẫn gian hàng</label><InputText id="vendor-slug" v-model="form.slug" class="w-full" required /></div>

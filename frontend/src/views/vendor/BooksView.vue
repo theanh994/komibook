@@ -22,6 +22,7 @@ const confirm = useConfirm()
 
 // ─── State ───
 const books = ref([])
+const brokenCoverIds = ref([])
 const selectedBooks = ref([])
 const categories = ref([])
 const existingSeriesList = ref([])
@@ -189,6 +190,9 @@ const getCoverUrl = (path) => {
   if (path.startsWith('http://') || path.startsWith('https://')) return path
   if (path.startsWith('/storage/')) return path
   return `/storage/${path}`
+}
+const markCoverBroken = (bookId) => {
+  if (!brokenCoverIds.value.includes(bookId)) brokenCoverIds.value.push(bookId)
 }
 
 const getTypeSeverity = (type) => type === 'ebook' ? 'info' : 'success'
@@ -478,10 +482,12 @@ onMounted(() => {
             <div v-else class="book-info-cell">
               <div class="book-cover-wrap">
                 <img
-                  v-if="data.cover_image"
+                  v-if="data.cover_image && !brokenCoverIds.includes(data.id)"
                   :src="getCoverUrl(data.cover_image)"
                   :alt="data.title"
                   class="book-cover-img"
+                  loading="lazy"
+                  @error="markCoverBroken(data.id)"
                 />
                 <div v-else class="book-cover-placeholder">
                   <i class="pi pi-book" />
@@ -785,7 +791,7 @@ onMounted(() => {
 .book-cover-img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   border-radius: 0px !important;
 }
 

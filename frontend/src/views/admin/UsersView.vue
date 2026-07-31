@@ -8,6 +8,7 @@ import Column from 'primevue/column'
 import Tag from 'primevue/tag'
 import Select from 'primevue/select'
 import Button from 'primevue/button'
+import InputText from 'primevue/inputtext'
 import { useRouter } from 'vue-router'
 
 const toast = useToast()
@@ -18,6 +19,18 @@ const users = ref([])
 const loading = ref(false)
 const totalRecords = ref(0)
 const lazyParams = ref({ first: 0, rows: 15, page: 1 })
+const search = ref('')
+const roleFilter = ref('')
+const viewMode = ref('table')
+const sortBy = ref('created_at')
+const sortDirection = ref('desc')
+const sortOptions = [
+  { label: 'Mới tham gia trước', value: 'created_at:desc' },
+  { label: 'Cũ tham gia trước', value: 'created_at:asc' },
+  { label: 'Tên A → Z', value: 'name:asc' },
+  { label: 'Tên Z → A', value: 'name:desc' },
+  { label: 'Vai trò A → Z', value: 'role:asc' },
+]
 
 // Track which user is being updated
 const updatingUserId = ref(null)
@@ -49,7 +62,14 @@ const fetchUsers = async () => {
   loading.value = true
   try {
     const res = await apiClient.get('/api/admin/users', {
-      params: { page: lazyParams.value.page, per_page: lazyParams.value.rows },
+      params: {
+        page: lazyParams.value.page,
+        per_page: lazyParams.value.rows,
+        search: search.value || undefined,
+        role: roleFilter.value || undefined,
+        sort_by: sortBy.value,
+        sort_direction: sortDirection.value,
+      },
     })
     users.value = res.data.data
     totalRecords.value = res.data.meta?.total || res.data.data.length
@@ -91,6 +111,31 @@ const onPage = (event) => {
   fetchUsers()
 }
 
+const applyFilters = () => {
+  lazyParams.value.page = 1
+  fetchUsers()
+}
+
+const applySort = (value) => {
+  const [field, direction] = value.split(':')
+  sortBy.value = field
+  sortDirection.value = direction
+  applyFilters()
+}
+
+const terminateSessions = async (user) => {
+  if (!window.confirm(`Đăng xuất ${user.name} khỏi tất cả thiết bị?`)) return
+  updatingUserId.value = user.id
+  try {
+    const response = await apiClient.delete(`/api/admin/users/${user.id}/sessions`)
+    toast.add({ severity: 'success', summary: 'Đã thu hồi phiên', detail: response.data.message, life: 3500 })
+  } catch (exception) {
+    toast.add({ severity: 'error', summary: 'Không thể thu hồi phiên', detail: exception.response?.data?.message || 'Vui lòng thử lại.', life: 3500 })
+  } finally {
+    updatingUserId.value = null
+  }
+}
+
 onMounted(fetchUsers)
 </script>
 
@@ -108,8 +153,23 @@ onMounted(fetchUsers)
       </div>
     </div>
 
+    <form class="mb-4 grid gap-3 rounded-xl border border-slate-200 bg-white p-4 lg:grid-cols-[minmax(0,1fr)_190px_210px_auto]" role="search" @submit.prevent="applyFilters">
+      <label class="block text-sm font-semibold">Tìm tài khoản<InputText v-model.trim="search" class="mt-2 min-h-11 w-full" placeholder="Tên hoặc email…" /></label>
+      <label class="block text-sm font-semibold">Vai trò<Select v-model="roleFilter" class="mt-2 min-h-11 w-full" :options="[{ label: 'Tất cả', value: '' }, ...roleOptions]" optionLabel="label" optionValue="value" /></label>
+      <label class="block text-sm font-semibold">Sắp xếp<Select :modelValue="`${sortBy}:${sortDirection}`" class="mt-2 min-h-11 w-full" :options="sortOptions" optionLabel="label" optionValue="value" @update:modelValue="applySort" /></label>
+      <Button type="submit" label="Lọc danh sách" icon="pi pi-search" class="min-h-11 self-end" />
+    </form>
+
+    <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+      <p class="m-0 text-sm text-slate-600">Hiển thị nhất quán theo lựa chọn sắp xếp; có thể đổi giữa bảng và thẻ.</p>
+      <div class="inline-flex rounded-lg border border-slate-200 bg-white p-1" aria-label="Kiểu hiển thị">
+        <button type="button" class="view-toggle" :class="{ active: viewMode === 'table' }" :aria-pressed="viewMode === 'table'" @click="viewMode = 'table'"><i class="pi pi-table" aria-hidden="true"></i> Bảng</button>
+        <button type="button" class="view-toggle" :class="{ active: viewMode === 'cards' }" :aria-pressed="viewMode === 'cards'" @click="viewMode = 'cards'"><i class="pi pi-th-large" aria-hidden="true"></i> Thẻ</button>
+      </div>
+    </div>
+
     <!-- Data Table Card -->
-    <div class="table-card">
+    <div v-if="viewMode === 'table'" class="table-card">
       <DataTable
         :value="users"
         :loading="loading"
@@ -212,9 +272,44 @@ onMounted(fetchUsers)
               @click="router.push({ name: 'admin-user-detail', params: { id: data.id } })"
               v-tooltip.top="'Xem chi tiết'"
             />
+            <Button
+              v-if="data.role !== 'admin'"
+              icon="pi pi-sign-out"
+              text
+              rounded
+              severity="danger"
+              :loading="updatingUserId === data.id"
+              @click="terminateSessions(data)"
+              v-tooltip.top="'Đăng xuất khỏi mọi thiết bị'"
+            />
           </template>
         </Column>
       </DataTable>
+    </div>
+
+    <div v-else-if="loading" class="grid gap-4 md:grid-cols-2 xl:grid-cols-3" role="status" aria-label="Đang tải người dùng">
+      <div v-for="index in 6" :key="index" class="h-44 animate-pulse rounded-xl bg-slate-200"></div>
+    </div>
+    <div v-else-if="!users.length" class="empty-state rounded-xl border border-slate-200 bg-white">Chưa có người dùng phù hợp.</div>
+    <div v-else class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+      <article v-for="user in users" :key="user.id" class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div class="flex items-start justify-between gap-3">
+          <div class="user-cell min-w-0">
+            <div class="user-avatar-badge" :class="'role-' + user.role"><i class="pi pi-user"></i></div>
+            <div class="user-meta"><strong class="user-name-text">{{ user.name }}</strong><span class="user-email-text">{{ user.email }}</span></div>
+          </div>
+          <Tag :severity="getRole(user.role).severity" :value="getRole(user.role).label" rounded />
+        </div>
+        <dl class="mt-4 grid grid-cols-[92px_1fr] gap-x-3 gap-y-2 text-sm">
+          <dt class="text-slate-500">ID</dt><dd class="m-0 font-semibold">#{{ user.id }}</dd>
+          <dt class="text-slate-500">Gian hàng</dt><dd class="m-0 truncate">{{ user.vendor?.shop_name || '—' }}</dd>
+          <dt class="text-slate-500">Tham gia</dt><dd class="m-0">{{ formatDate(user.created_at) }}</dd>
+        </dl>
+        <div class="mt-5 flex flex-wrap gap-2">
+          <Button label="Chi tiết" icon="pi pi-eye" size="small" outlined @click="router.push({ name: 'admin-user-detail', params: { id: user.id } })" />
+          <Button v-if="user.role !== 'admin'" label="Thu hồi phiên" icon="pi pi-sign-out" size="small" severity="danger" outlined :loading="updatingUserId === user.id" @click="terminateSessions(user)" />
+        </div>
+      </article>
     </div>
   </div>
 </template>
@@ -266,6 +361,25 @@ onMounted(fetchUsers)
   border: 1px solid #e2e8f0;
   overflow: hidden;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.view-toggle {
+  min-height: 44px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #475569;
+  font-weight: 700;
+  cursor: pointer;
+}
+.view-toggle.active {
+  background: #002442;
+  color: #fff;
+}
+.view-toggle:focus-visible {
+  outline: 3px solid #2563eb;
+  outline-offset: 2px;
 }
 
 /* User ID */

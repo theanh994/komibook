@@ -10,6 +10,7 @@ use App\Services\CommercialPartyService;
 use App\Services\OrganizationRelationshipService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
@@ -32,37 +33,51 @@ class OrganizationController extends Controller
         $validated = $request->validate([
             'legal_name' => ['required', 'string', 'max:255'],
             'display_name' => ['required', 'string', 'max:255'],
-            'slug' => ['required', 'string', 'max:255', 'unique:organizations,slug'],
+            'slug' => ['required', 'string', 'max:255', 'regex:/^[a-z0-9]+(?:-[a-z0-9]+)*$/', 'unique:organizations,slug'],
             'organization_types' => ['required', 'array', 'min:1'],
             'organization_types.*' => [Rule::in(['publisher', 'supplier', 'distributor', 'bookstore'])],
             'tax_code' => ['nullable', 'string', 'max:64'],
             'license_number' => ['nullable', 'string', 'max:128'],
             'description' => ['nullable', 'string', 'max:5000'],
             'website' => ['nullable', 'url', 'max:255'],
+            'logo' => ['nullable', 'file', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
             'verification_document' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:5120'],
         ]);
         $vendor = $request->user()->vendor()->withoutGlobalScopes()->firstOrFail();
 
-        $result = DB::transaction(function () use ($request, $validated, $vendor) {
-            if ($request->hasFile('verification_document')) {
-                $validated['verification_document'] = $request->file('verification_document')
-                    ->store('organizations/verification', 'private');
+        $logoPath = $request->file('logo')?->store('organizations/logos', 'public');
+        $verificationPath = $request->file('verification_document')
+            ?->store('organizations/verification', 'private');
+        $validated['logo'] = $logoPath;
+        $validated['verification_document'] = $verificationPath;
+
+        try {
+            $result = DB::transaction(function () use ($validated, $vendor) {
+                $organization = Organization::create([...$validated, 'status' => 'pending_review', 'submitted_at' => now()]);
+                $relationship = VendorOrganizationRelationship::create([
+                    'vendor_id' => $vendor->id,
+                    'organization_id' => $organization->id,
+                    'role' => 'self_legal_entity',
+                    'status' => 'submitted',
+                    'submitted_at' => now(),
+                    'operation_key' => 'organization-self:'.Str::uuid(),
+                ]);
+                if (! $vendor->primary_organization_id) {
+                    $vendor->update(['primary_organization_id' => $organization->id]);
+                }
+
+                return compact('organization', 'relationship');
+            });
+        } catch (\Throwable $exception) {
+            if ($logoPath) {
+                Storage::disk('public')->delete($logoPath);
             }
-            $organization = Organization::create([...$validated, 'status' => 'pending_review', 'submitted_at' => now()]);
-            $relationship = VendorOrganizationRelationship::create([
-                'vendor_id' => $vendor->id,
-                'organization_id' => $organization->id,
-                'role' => 'self_legal_entity',
-                'status' => 'submitted',
-                'submitted_at' => now(),
-                'operation_key' => 'organization-self:'.Str::uuid(),
-            ]);
-            if (! $vendor->primary_organization_id) {
-                $vendor->update(['primary_organization_id' => $organization->id]);
+            if ($verificationPath) {
+                Storage::disk('private')->delete($verificationPath);
             }
 
-            return compact('organization', 'relationship');
-        });
+            throw $exception;
+        }
 
         return response()->json(['status' => 'success', 'data' => $result], 201);
     }

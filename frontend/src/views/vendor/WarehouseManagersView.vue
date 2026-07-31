@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, ref } from 'vue'
+import { onBeforeUnmount, onMounted, ref } from 'vue'
 import apiClient from '@/services/axios'
 import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
@@ -10,9 +10,11 @@ import { useToast } from 'primevue/usetoast'
 const toast = useToast()
 const loading = ref(true)
 const saving = ref(false)
+const error = ref('')
 const managers = ref([])
 const warehouses = ref([])
 const form = ref({ email: '', warehouse_id: null, capabilities: ['view_inventory'] })
+let loadController = null
 const capabilityOptions = [
   { label: 'Xem tồn kho', value: 'view_inventory' },
   { label: 'Nhập kho', value: 'receive_stock' },
@@ -23,16 +25,23 @@ const capabilityOptions = [
 ]
 
 const load = async () => {
+  loadController?.abort()
+  const controller = new AbortController()
+  loadController = controller
   loading.value = true
+  error.value = ''
   try {
     const [managerResponse, warehouseResponse] = await Promise.all([
-      apiClient.get('/api/vendor/warehouse-managers'),
-      apiClient.get('/api/vendor/warehouses'),
+      apiClient.get('/api/vendor/warehouse-managers', { signal: controller.signal }),
+      apiClient.get('/api/vendor/warehouses', { signal: controller.signal }),
     ])
     managers.value = managerResponse.data.data || []
-    warehouses.value = warehouseResponse.data.data || warehouseResponse.data || []
+    warehouses.value = warehouseResponse.data.warehouses || warehouseResponse.data.data || warehouseResponse.data || []
+  } catch (exception) {
+    if (exception.code === 'ERR_CANCELED') return
+    error.value = exception.response?.data?.message || 'Không thể tải nhân sự kho. Bạn có thể chuyển trang hoặc thử lại.'
   } finally {
-    loading.value = false
+    if (!controller.signal.aborted) loading.value = false
   }
 }
 
@@ -58,17 +67,21 @@ const transition = async (assignment, toStatus) => {
 }
 
 onMounted(load)
+onBeforeUnmount(() => loadController?.abort())
 </script>
 
 <template>
-  <main id="main-content" class="space-y-6" tabindex="-1">
-    <header><p class="text-sm font-semibold uppercase tracking-wider text-primary">Nhà bán</p><h1 class="mt-1 text-3xl font-bold text-on-surface">Nhân sự kho</h1><p class="mt-2 text-on-surface-variant">Cấp quyền riêng cho từng kho; nhân sự kho không thể xem tài chính, giá hay cấu hình gian hàng.</p></header>
+  <section class="space-y-6" aria-labelledby="warehouse-manager-title">
+    <header><p class="text-sm font-semibold uppercase tracking-wider text-primary">Nhà bán</p><h1 id="warehouse-manager-title" class="mt-1 text-3xl font-bold text-on-surface">Nhân sự kho</h1><p class="mt-2 text-on-surface-variant">Cấp quyền riêng cho từng kho; nhân sự kho không thể xem tài chính, giá hay cấu hình gian hàng.</p></header>
     <form class="grid gap-4 rounded-xl border border-outline-variant bg-surface-container-lowest p-5 lg:grid-cols-[1fr_1fr_1.4fr_auto] lg:items-end" @submit.prevent="invite">
       <div><label for="manager-email" class="mb-2 block text-sm font-semibold">Email tài khoản</label><InputText id="manager-email" v-model="form.email" type="email" autocomplete="email" required class="min-h-11 w-full" /></div>
       <div><label for="manager-warehouse" class="mb-2 block text-sm font-semibold">Kho phân công</label><Select id="manager-warehouse" v-model="form.warehouse_id" :options="warehouses" optionLabel="name" optionValue="id" required class="min-h-11 w-full" /></div>
       <div><label for="manager-capabilities" class="mb-2 block text-sm font-semibold">Quyền vận hành</label><MultiSelect id="manager-capabilities" v-model="form.capabilities" :options="capabilityOptions" optionLabel="label" optionValue="value" class="min-h-11 w-full" /></div>
       <Button type="submit" label="Gửi lời mời" icon="pi pi-send" :loading="saving" class="min-h-11" />
     </form>
+    <section v-if="error" class="rounded-xl border border-error/30 bg-error-container p-5 text-on-error-container" role="alert">
+      <p>{{ error }}</p><Button label="Thử lại" severity="secondary" outlined class="mt-3 min-h-11" @click="load" />
+    </section>
     <div v-if="loading" class="h-52 animate-pulse rounded-xl bg-surface-container"></div>
     <section v-else-if="!managers.length" class="rounded-xl border border-outline-variant bg-surface-container-lowest p-8 text-center"><h2 class="text-xl font-bold">Chưa có nhân sự kho</h2><p class="mt-2 text-on-surface-variant">Dùng biểu mẫu phía trên để tạo lời mời đầu tiên.</p></section>
     <section v-else class="grid gap-4 lg:grid-cols-2">
@@ -80,5 +93,5 @@ onMounted(load)
         <Button v-else-if="assignment.status === 'suspended'" label="Kích hoạt lại" class="mt-5 min-h-11" @click="transition(assignment, 'active')" />
       </article>
     </section>
-  </main>
+  </section>
 </template>

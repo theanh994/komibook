@@ -6,13 +6,84 @@ use App\Http\Controllers\Controller;
 use App\Models\Book;
 use App\Models\FlashSale;
 use App\Models\FlashSaleBook;
+use App\Models\VendorFlashSaleRequest;
 use App\Support\PublicMediaUrl;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 class FlashSaleController extends Controller
 {
+    public function requests(Request $request)
+    {
+        $vendor = $request->user()->vendor()->withoutGlobalScopes()->firstOrFail();
+
+        return response()->json([
+            'data' => VendorFlashSaleRequest::with('book:id,title,cover_image')
+                ->where('vendor_id', $vendor->id)
+                ->latest()
+                ->get(),
+        ]);
+    }
+
+    public function requestCampaign(Request $request)
+    {
+        $vendor = $request->user()->vendor()->withoutGlobalScopes()->firstOrFail();
+        $validated = $request->validate([
+            'title' => 'required|string|max:255',
+            'preferred_start_time' => 'required|date|after:now',
+            'preferred_end_time' => 'required|date|after:preferred_start_time',
+            'groups' => 'required|array|min:1|max:10',
+            'groups.*.book_ids' => 'required|array|min:1|max:100',
+            'groups.*.book_ids.*' => 'required|integer|distinct',
+            'groups.*.discount_percent' => 'required|numeric|min:1|max:90',
+            'groups.*.max_quantity' => 'nullable|integer|min:1',
+            'vendor_note' => 'nullable|string|max:2000',
+        ]);
+
+        $bookIds = collect($validated['groups'])
+            ->flatMap(fn (array $group) => $group['book_ids'])
+            ->map(fn ($id) => (int) $id);
+        abort_if($bookIds->duplicates()->isNotEmpty(), 422, 'Mỗi sách chỉ được nằm trong một nhóm mức giảm.');
+
+        $books = Book::withoutGlobalScopes()
+            ->where('vendor_id', $vendor->id)
+            ->whereIn('id', $bookIds)
+            ->get()
+            ->keyBy('id');
+        abort_unless($books->count() === $bookIds->count(), 422, 'Đề xuất chỉ được chứa sách thuộc gian hàng của bạn.');
+
+        foreach ($validated['groups'] as $group) {
+            foreach ($group['book_ids'] as $bookId) {
+                $book = $books->get((int) $bookId);
+                abort_unless($book->isPublished(), 422, 'Chỉ sách đã xuất bản mới được đề xuất Flash Sale.');
+                if (! $book->isEbook() && ($group['max_quantity'] ?? 0) > $book->stock) {
+                    return response()->json(['message' => "Số lượng đăng ký vượt tồn kho của sách {$book->title}."], 422);
+                }
+            }
+        }
+
+        $promotionRequest = VendorFlashSaleRequest::create([
+            'vendor_id' => $vendor->id,
+            'campaign_key' => (string) Str::uuid(),
+            'book_id' => $bookIds->first(),
+            'groups' => $validated['groups'],
+            'title' => $validated['title'],
+            'preferred_start_time' => $validated['preferred_start_time'],
+            'preferred_end_time' => $validated['preferred_end_time'],
+            'discount_percent' => $validated['groups'][0]['discount_percent'],
+            'max_quantity' => $validated['groups'][0]['max_quantity'] ?? null,
+            'vendor_note' => $validated['vendor_note'] ?? null,
+            'status' => 'pending',
+        ]);
+
+        return response()->json([
+            'message' => 'Đề xuất Flash Sale nhiều nhóm đã được gửi, không phụ thuộc chiến dịch đang chạy.',
+            'data' => $promotionRequest->load('book:id,title,cover_image'),
+        ], 201);
+    }
+
     /**
      * Lấy danh sách các chiến dịch Flash Sale mà Vendor có thể tham gia.
      */

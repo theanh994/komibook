@@ -36,6 +36,12 @@ const router = createRouter({
       meta: { guestOnly: false, requiresAuth: false }
     },
     {
+      path: '/blog/contribute',
+      name: 'article-contribute',
+      component: () => import('@/views/ReviewSubmissionView.vue'),
+      meta: { requiresAuth: true, title: 'Gửi review sách' }
+    },
+    {
       path: '/blog/:slug',
       name: 'article-detail',
       component: () => import('@/views/ArticleView.vue'),
@@ -46,6 +52,12 @@ const router = createRouter({
       name: 'book-detail',
       component: () => import('@/views/BookDetailView.vue'),
       meta: { guestOnly: false, requiresAuth: false }
+    },
+    {
+      path: '/shops/:slug',
+      name: 'vendor-storefront',
+      component: () => import('@/views/VendorStorefrontView.vue'),
+      meta: { guestOnly: false, requiresAuth: false, title: 'Gian hàng' }
     },
     {
       path: '/organizations/:slug',
@@ -260,8 +272,14 @@ const router = createRouter({
         {
           path: 'reviews/moderation',
           name: 'admin-review-moderation',
-          component: () => import('@/views/admin/ReviewModerationView.vue'),
-          meta: { requiresAuth: true, role: 'admin', hideHeader: true, title: 'Kiểm duyệt đánh giá' }
+          redirect: '/admin/moderation',
+          meta: { requiresAuth: true, role: 'admin', hideHeader: true, title: 'Kiểm duyệt nội dung' }
+        },
+        {
+          path: 'moderation',
+          name: 'admin-content-moderation',
+          component: () => import('@/views/admin/ContentModerationView.vue'),
+          meta: { requiresAuth: true, role: 'admin', hideHeader: true, title: 'Kiểm duyệt nội dung' }
         },
         {
           path: 'users',
@@ -349,19 +367,39 @@ const router = createRouter({
           path: 'approvals',
           name: 'admin-approvals',
           component: () => import('@/views/admin/VendorApprovalsView.vue'),
-          meta: { requiresAuth: true, role: 'admin', hideHeader: true, title: 'Kiểm duyệt đối tác' }
-        },
-        {
-          path: 'publishing-reviews',
-          name: 'admin-publishing-reviews',
-          component: () => import('@/views/admin/PublishingReviewView.vue'),
-          meta: { requiresAuth: true, role: 'admin', hideHeader: true, title: 'Kiểm duyệt xuất bản' }
+          meta: { requiresAuth: true, role: 'admin', hideHeader: true, title: 'Quản lý đăng ký Nhà bán' }
         },
         {
           path: 'articles',
           name: 'admin-articles',
           component: () => import('@/views/admin/ArticlesView.vue'),
-          meta: { requiresAuth: true, role: 'admin', hideHeader: true, title: 'CMS bài viết' }
+          meta: { requiresAuth: true, role: 'admin', hideHeader: true, title: 'Newsroom' }
+        },
+        {
+          path: 'articles/create',
+          name: 'admin-article-create',
+          component: () => import('@/views/shared/ArticleEditorView.vue'),
+          props: { role: 'admin' },
+          meta: { requiresAuth: true, role: 'admin', hideHeader: true, title: 'Viết bài mới' }
+        },
+        {
+          path: 'articles/:id/edit',
+          name: 'admin-article-edit',
+          component: () => import('@/views/shared/ArticleEditorView.vue'),
+          props: { role: 'admin' },
+          meta: { requiresAuth: true, role: 'admin', hideHeader: true, title: 'Biên tập bài viết' }
+        },
+        {
+          path: 'article-comments',
+          name: 'admin-article-comments',
+          redirect: '/admin/moderation',
+          meta: { requiresAuth: true, role: 'admin', hideHeader: true, title: 'Kiểm duyệt nội dung' }
+        },
+        {
+          path: 'article-submissions',
+          name: 'admin-article-submissions',
+          component: () => import('@/views/admin/ArticleSubmissionsView.vue'),
+          meta: { requiresAuth: true, role: 'admin', hideHeader: true, title: 'Review tiềm năng' }
         },
         {
           path: 'support/tickets',
@@ -489,6 +527,26 @@ const router = createRouter({
           name: 'vendor-flash-sales',
           component: () => import('@/views/vendor/FlashSalesView.vue'),
           meta: { requiresAuth: true, role: 'vendor', hideHeader: true, title: 'Đăng ký Flash Sale' }
+        },
+        {
+          path: 'articles',
+          name: 'vendor-articles',
+          component: () => import('@/views/vendor/ArticlesView.vue'),
+          meta: { requiresAuth: true, role: 'vendor', hideHeader: true, title: 'Bài viết & Tin tức' }
+        },
+        {
+          path: 'articles/create',
+          name: 'vendor-article-create',
+          component: () => import('@/views/shared/ArticleEditorView.vue'),
+          props: { role: 'vendor' },
+          meta: { requiresAuth: true, role: 'vendor', hideHeader: true, title: 'Viết bài mới' }
+        },
+        {
+          path: 'articles/:id/edit',
+          name: 'vendor-article-edit',
+          component: () => import('@/views/shared/ArticleEditorView.vue'),
+          props: { role: 'vendor' },
+          meta: { requiresAuth: true, role: 'vendor', hideHeader: true, title: 'Biên tập bài viết' }
         },
         {
           path: 'live-editor/:bookId',

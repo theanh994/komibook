@@ -18,6 +18,7 @@ class Phase8IdentityAndCommercialPartiesTest extends TestCase
 
     public function test_vendor_registers_organization_and_admin_verifies_without_public_private_fields(): void
     {
+        Storage::fake('public');
         Storage::fake('private');
         [$vendorUser] = $this->vendor('phase8-direct');
         $admin = User::factory()->create(['role' => 'admin']);
@@ -30,11 +31,17 @@ class Phase8IdentityAndCommercialPartiesTest extends TestCase
             'tax_code' => 'PRIVATE-TAX-CODE',
             'license_number' => 'PRIVATE-LICENSE',
             'description' => 'Hồ sơ công khai.',
+            'website' => 'https://nxb-phase-8.example.test',
+            'logo' => UploadedFile::fake()->image('logo.webp'),
             'verification_document' => UploadedFile::fake()->create('license.pdf', 100, 'application/pdf'),
         ])->assertCreated();
 
         $organizationId = $response->json('data.organization.id');
         $relationshipId = $response->json('data.relationship.id');
+        $organization = Organization::findOrFail($organizationId);
+        Storage::disk('public')->assertExists($organization->logo);
+        Storage::disk('private')->assertExists($organization->verification_document);
+        $this->assertSame('https://nxb-phase-8.example.test', $organization->website);
         $this->actingAs($admin)->patchJson("/api/admin/organizations/{$organizationId}/transition", [
             'to_status' => 'verified',
         ])->assertOk();
@@ -46,6 +53,7 @@ class Phase8IdentityAndCommercialPartiesTest extends TestCase
         $public = $this->getJson('/api/organizations/nxb-phase-8')
             ->assertOk()
             ->assertJsonPath('data.display_name', 'NXB Phase 8')
+            ->assertJsonPath('data.website', 'https://nxb-phase-8.example.test')
             ->assertJsonMissing(['tax_code' => 'PRIVATE-TAX-CODE'])
             ->assertJsonMissing(['license_number' => 'PRIVATE-LICENSE']);
         $this->assertStringNotContainsString('verification_document', $public->getContent());

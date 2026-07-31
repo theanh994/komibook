@@ -20,6 +20,7 @@ const activeTab = ref('vouchers')
 const tabs = [
   { key: 'vouchers', label: 'Mã giảm giá', icon: 'local_offer' },
   { key: 'flashsale', label: 'Flash Sale', icon: 'flash_on' },
+  { key: 'requests', label: 'Đề xuất Nhà bán', icon: 'approval' },
 ]
 
 // ─── Coupons State ───
@@ -37,6 +38,7 @@ const flashSales = ref([])
 const flashSaleDialog = ref(false)
 const deleteFlashSaleDialog = ref(false)
 const flashSale = ref({})
+const vendorRequests = ref([])
 
 // ─── KPI ───
 const kpis = computed(() => ({
@@ -45,7 +47,7 @@ const kpis = computed(() => ({
     const now = new Date()
     const start = c.start_time ? new Date(c.start_time) : null
     const end = c.end_time ? new Date(c.end_time) : null
-    return (!start || now >= start) && (!end || now <= end)
+    return c.status === 'active' && (!start || now >= start) && (!end || now <= end)
   }).length,
   totalFlashSales: flashSales.value.length,
   activeFlashSales: flashSales.value.filter(f => f.status === 'active').length,
@@ -83,6 +85,35 @@ const fetchFlashSales = async () => {
     flashSales.value = res.data.data
   } catch (e) {
     toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Không thể tải danh sách Flash Sale.', life: 3000 })
+  }
+}
+
+const fetchVendorRequests = async () => {
+  try {
+    const res = await apiClient.get('/api/admin/flash-sale-requests')
+    vendorRequests.value = res.data.data
+  } catch {
+    toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Không thể tải đề xuất Flash Sale của Nhà bán.', life: 3000 })
+  }
+}
+
+const decideVendorRequest = async (request, status) => {
+  const decisionReason = status === 'rejected' ? window.prompt('Nhập lý do từ chối:') : null
+  if (status === 'rejected' && !decisionReason) return
+  try {
+    await apiClient.patch(`/api/admin/flash-sale-requests/${request.id}`, {
+      status,
+      decision_reason: decisionReason,
+    })
+    toast.add({
+      severity: 'success',
+      summary: 'Đã cập nhật',
+      detail: status === 'approved' ? 'Đã duyệt đề xuất Flash Sale.' : 'Đã từ chối đề xuất.',
+      life: 3000,
+    })
+    await fetchVendorRequests()
+  } catch (error) {
+    toast.add({ severity: 'error', summary: 'Lỗi', detail: error.response?.data?.message || 'Không thể cập nhật đề xuất.', life: 4000 })
   }
 }
 
@@ -153,7 +184,7 @@ const openNew = () => {
     }
     submitted.value = false
     couponDialog.value = true
-  } else {
+  } else if (activeTab.value === 'flashsale') {
     flashSale.value = {
       title: '',
       start_time: new Date(),
@@ -240,6 +271,9 @@ const formatDate = (date) => {
 }
 
 const getStatusLabel = (data) => {
+  if (data.status === 'pending') return { label: 'Chờ duyệt', severity: 'warn' }
+  if (data.status === 'rejected') return { label: 'Từ chối', severity: 'danger' }
+  if (data.status === 'inactive') return { label: 'Tạm ngưng', severity: 'secondary' }
   const now = new Date()
   const start = data.start_time ? new Date(data.start_time) : null
   const end = data.end_time ? new Date(data.end_time) : null
@@ -261,6 +295,7 @@ onMounted(() => {
   fetchCoupons()
   fetchCategories()
   fetchFlashSales()
+  fetchVendorRequests()
 })
 </script>
 
@@ -273,6 +308,7 @@ onMounted(() => {
         <p class="font-body-md text-body-md text-on-surface-variant mt-xs">Tạo và quản lý chương trình Flash Sale, mã giảm giá theo thời gian và danh mục.</p>
       </div>
       <button
+        v-if="activeTab !== 'requests'"
         @click="openNew()"
         class="bg-primary text-on-primary font-label-md text-label-md px-lg py-sm rounded-lg hover:opacity-90 transition-opacity flex items-center gap-sm shadow-sm whitespace-nowrap"
       >
@@ -366,6 +402,12 @@ onMounted(() => {
             </template>
           </Column>
 
+          <Column header="Chủ mã" style="min-width: 160px">
+            <template #body="{ data }">
+              <span class="text-sm">{{ data.vendor?.shop_name || 'Toàn sàn / Admin' }}</span>
+            </template>
+          </Column>
+
           <Column header="Thời gian" style="min-width: 250px">
             <template #body="{ data }">
               <div class="flex flex-col gap-1">
@@ -395,7 +437,7 @@ onMounted(() => {
       </div>
 
       <!-- Flash Sale Cards -->
-      <div v-else class="p-lg">
+      <div v-else-if="activeTab === 'flashsale'" class="p-lg">
         <div v-if="flashSales.length === 0" class="text-center py-xl text-on-surface-variant w-full col-span-full">
           <span class="material-symbols-outlined text-[48px] block mb-2 text-outline">flash_off</span>
           <p>Chưa có Flash Sale nào.</p>
@@ -437,6 +479,45 @@ onMounted(() => {
           </div>
         </div>
       </div>
+
+      <div v-else class="p-lg">
+        <div v-if="vendorRequests.length === 0" class="py-xl text-center text-on-surface-variant">
+          <span class="material-symbols-outlined mb-2 block text-[48px] text-outline">inbox</span>
+          <p>Chưa có đề xuất Flash Sale từ Nhà bán.</p>
+        </div>
+        <div v-else class="grid gap-md">
+          <article
+            v-for="request in vendorRequests"
+            :key="request.id"
+            class="rounded-xl border border-outline-variant/30 bg-surface p-lg"
+          >
+            <div class="flex flex-col justify-between gap-md lg:flex-row lg:items-center">
+              <div class="min-w-0">
+                <div class="flex flex-wrap items-center gap-2">
+                  <h2 class="font-bold text-on-surface">{{ request.title }}</h2>
+                  <Tag
+                    :severity="request.status === 'approved' ? 'success' : request.status === 'rejected' ? 'danger' : 'warn'"
+                    :value="request.status === 'approved' ? 'Đã duyệt' : request.status === 'rejected' ? 'Từ chối' : 'Chờ duyệt'"
+                  />
+                </div>
+                <p class="mt-2 text-sm text-on-surface-variant">
+                  {{ request.vendor?.shop_name }} · {{ request.book?.title }} · Giảm {{ Number(request.discount_percent) }}%
+                </p>
+                <p class="mt-1 text-sm text-on-surface-variant">
+                  {{ formatDate(request.preferred_start_time) }} → {{ formatDate(request.preferred_end_time) }}
+                  <span v-if="request.max_quantity"> · Tối đa {{ request.max_quantity }} cuốn</span>
+                </p>
+                <p v-if="request.vendor_note" class="mt-2 text-sm text-on-surface">{{ request.vendor_note }}</p>
+                <p v-if="request.decision_reason" class="mt-2 text-sm text-red-700">Lý do: {{ request.decision_reason }}</p>
+              </div>
+              <div v-if="request.status === 'pending'" class="flex shrink-0 flex-wrap gap-2">
+                <Button label="Duyệt" icon="pi pi-check" severity="success" @click="decideVendorRequest(request, 'approved')" />
+                <Button label="Từ chối" icon="pi pi-times" severity="danger" outlined @click="decideVendorRequest(request, 'rejected')" />
+              </div>
+            </div>
+          </article>
+        </div>
+      </div>
     </div>
 
     <!-- Edit/Create Voucher Dialog -->
@@ -462,6 +543,22 @@ onMounted(() => {
         <div>
           <label for="category" class="font-bold text-sm block mb-1">Danh mục áp dụng</label>
           <Select id="category" v-model="coupon.category_id" :options="categoryOptions" optionLabel="label" optionValue="value" placeholder="Chọn danh mục" />
+        </div>
+
+        <div v-if="coupon.id">
+          <label for="coupon-status" class="font-bold text-sm block mb-1">Trạng thái duyệt</label>
+          <Select
+            id="coupon-status"
+            v-model="coupon.status"
+            :options="[
+              { label: 'Chờ duyệt', value: 'pending' },
+              { label: 'Hoạt động', value: 'active' },
+              { label: 'Tạm ngưng', value: 'inactive' },
+              { label: 'Từ chối', value: 'rejected' },
+            ]"
+            optionLabel="label"
+            optionValue="value"
+          />
         </div>
 
         <div>

@@ -10,7 +10,8 @@ class CouponController extends Controller
 {
     public function index()
     {
-        $coupons = Coupon::with('category')->latest()->get();
+        $coupons = Coupon::with(['category', 'vendor:id,shop_name'])->latest()->get();
+
         return response()->json(['success' => true, 'data' => $coupons]);
     }
 
@@ -25,6 +26,7 @@ class CouponController extends Controller
             'end_time' => 'nullable|date|after_or_equal:start_time',
             'category_id' => 'nullable|exists:categories,id',
             'usage_limit' => 'nullable|integer|min:0',
+            'status' => 'nullable|in:pending,active,inactive,rejected',
         ]);
 
         $coupon = Coupon::create($validated);
@@ -32,20 +34,21 @@ class CouponController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Tạo mã giảm giá thành công!',
-            'data' => $coupon
+            'data' => $coupon,
         ], 201);
     }
 
     public function show(Coupon $coupon)
     {
         $coupon->load('category');
+
         return response()->json(['success' => true, 'data' => $coupon]);
     }
 
     public function update(Request $request, Coupon $coupon)
     {
         $validated = $request->validate([
-            'code' => 'required|string|unique:coupons,code,' . $coupon->id,
+            'code' => 'required|string|unique:coupons,code,'.$coupon->id,
             'discount_percent' => 'required|numeric|min:0|max:100',
             'min_order_value' => 'nullable|numeric|min:0',
             'max_discount_amount' => 'nullable|numeric|min:0',
@@ -53,6 +56,7 @@ class CouponController extends Controller
             'end_time' => 'nullable|date|after_or_equal:start_time',
             'category_id' => 'nullable|exists:categories,id',
             'usage_limit' => 'nullable|integer|min:0',
+            'status' => 'nullable|in:pending,active,inactive,rejected',
         ]);
 
         $coupon->update($validated);
@@ -60,13 +64,14 @@ class CouponController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Cập nhật mã giảm giá thành công!',
-            'data' => $coupon
+            'data' => $coupon,
         ]);
     }
 
     public function destroy(Coupon $coupon)
     {
         $coupon->delete();
+
         return response()->json(['success' => true, 'message' => 'Xóa mã giảm giá thành công!']);
     }
 }

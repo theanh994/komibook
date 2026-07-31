@@ -151,9 +151,17 @@ const toggleExpand = (bookId) => {
 
 // Image fallback helper
 const getBookCover = (url) => {
-  if (!url) return 'https://images.unsplash.com/photo-1544947950-fa07a98d237f?q=80&w=200&auto=format&fit=crop'
-  if (url.startsWith('http')) return url
+  if (!url) return '/images/book-placeholder.svg'
+  if (url.startsWith('http') || url.startsWith('/storage/') || url.startsWith('/images/')) return url
+  if (url.includes('/storage/')) return url.substring(url.indexOf('/storage/'))
+  if (url.startsWith('/')) return url
   return `/storage/${url}`
+}
+
+const handleCoverError = (event) => {
+  if (event.currentTarget.dataset.fallbackApplied) return
+  event.currentTarget.dataset.fallbackApplied = 'true'
+  event.currentTarget.src = '/images/book-placeholder.svg'
 }
 
 onMounted(() => {
@@ -295,7 +303,7 @@ onMounted(() => {
                   <td class="p-md text-outline">{{ item.sku }}</td>
                   <td class="p-md font-medium text-on-surface flex items-center gap-3">
                     <div class="w-10 h-14 bg-surface-container rounded overflow-hidden flex-shrink-0">
-                      <img alt="Book Cover" class="w-full h-full object-cover" :src="getBookCover(item.cover_image)"/>
+                      <img :alt="`Bìa ${item.title}`" class="h-full w-full object-contain" loading="lazy" :src="getBookCover(item.cover_image)" @error="handleCoverError"/>
                     </div>
                     <span class="truncate max-w-[250px]">{{ item.title }}</span>
                   </td>

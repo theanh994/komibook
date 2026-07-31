@@ -16,6 +16,8 @@ const confirm = useConfirm()
 
 const seriesList = ref([])
 const loading = ref(true)
+const expandedSeriesIds = ref([])
+const brokenCoverIds = ref([])
 
 // Edit Title Dialog State
 const editDialogVisible = ref(false)
@@ -132,6 +134,17 @@ const getCoverUrl = (path) => {
   return `/storage/${path}`
 }
 
+const isExpanded = (seriesId) => expandedSeriesIds.value.includes(seriesId)
+const toggleSeriesBooks = (seriesId) => {
+  const index = expandedSeriesIds.value.indexOf(seriesId)
+  if (index >= 0) expandedSeriesIds.value.splice(index, 1)
+  else expandedSeriesIds.value.push(seriesId)
+}
+const visibleBooks = (series) => isExpanded(series.id) ? series.books : series.books.slice(0, 5)
+const markCoverBroken = (bookId) => {
+  if (!brokenCoverIds.value.includes(bookId)) brokenCoverIds.value.push(bookId)
+}
+
 onMounted(() => {
   fetchSeries()
 })
@@ -204,19 +217,24 @@ onMounted(() => {
           <!-- Books Preview Bar (Thumbnails using rounded-none) -->
           <div class="space-y-2 mb-4">
             <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Danh sách tập sách trong bộ:</p>
-            <div class="flex flex-wrap gap-2 max-h-36 overflow-y-auto p-1 bg-slate-50 rounded-xl border border-slate-100">
+            <div class="flex flex-wrap gap-2 p-2 bg-slate-50 rounded-xl border border-slate-100" :class="{ 'max-h-72 overflow-y-auto': isExpanded(s.id) }">
               <div 
-                v-for="b in s.books" 
+                v-for="b in visibleBooks(s)"
                 :key="b.id"
                 class="w-14 h-20 bg-white border border-slate-300 rounded-none overflow-hidden relative group shrink-0 shadow-xs"
                 :title="b.title"
               >
-                <img :src="getCoverUrl(b.cover_image)" :alt="b.title" class="w-full h-full object-cover rounded-none" />
+                <img v-if="b.cover_image && !brokenCoverIds.includes(b.id)" :src="getCoverUrl(b.cover_image)" :alt="b.title" class="w-full h-full object-contain rounded-none" loading="lazy" @error="markCoverBroken(b.id)" />
+                <div v-else class="grid h-full w-full place-items-center bg-slate-100 text-slate-400"><span class="material-symbols-outlined">menu_book</span></div>
                 <span v-if="b.sale_price" class="absolute top-0 right-0 bg-red-600 text-white text-[8px] font-bold px-1 py-0.2">
                   -{{ Math.round((1 - b.sale_price / b.price) * 100) }}%
                 </span>
               </div>
             </div>
+            <button v-if="s.books.length > 5" type="button" class="mt-2 inline-flex min-h-11 items-center gap-1 border-none bg-transparent text-xs font-bold text-primary cursor-pointer" @click="toggleSeriesBooks(s.id)">
+              {{ isExpanded(s.id) ? 'Thu gọn danh sách' : `Xem thêm ${s.books.length - 5} tập` }}
+              <span class="material-symbols-outlined text-base">{{ isExpanded(s.id) ? 'expand_less' : 'expand_more' }}</span>
+            </button>
           </div>
         </div>
 

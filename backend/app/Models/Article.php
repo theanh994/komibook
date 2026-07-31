@@ -7,13 +7,13 @@ use Illuminate\Database\Eloquent\Model;
 
 class Article extends Model
 {
-    protected $fillable = ['created_by', 'article_category_id', 'title', 'slug', 'excerpt', 'body', 'cover_image', 'status', 'revision', 'home_featured', 'seo_title', 'seo_description', 'scheduled_at', 'published_at', 'review_reason'];
+    protected $fillable = ['created_by', 'vendor_id', 'approved_by', 'article_category_id', 'article_type', 'title', 'slug', 'excerpt', 'body', 'cover_image', 'social_image', 'status', 'revision', 'home_featured', 'allow_comments', 'reading_minutes', 'seo_title', 'seo_description', 'scheduled_at', 'published_at', 'review_reason'];
 
     protected $hidden = ['review_reason'];
 
     protected function casts(): array
     {
-        return ['status' => ArticleStatus::class, 'home_featured' => 'boolean', 'scheduled_at' => 'datetime', 'published_at' => 'datetime'];
+        return ['status' => ArticleStatus::class, 'home_featured' => 'boolean', 'allow_comments' => 'boolean', 'scheduled_at' => 'datetime', 'published_at' => 'datetime'];
     }
 
     public function category()
@@ -44,5 +44,25 @@ class Article extends Model
     public function creator()
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function vendor()
+    {
+        return $this->belongsTo(Vendor::class);
+    }
+
+    public function comments()
+    {
+        return $this->hasMany(ArticleComment::class);
+    }
+
+    public function media()
+    {
+        return $this->hasMany(ArticleMedia::class);
+    }
+
+    public function metrics()
+    {
+        return $this->hasMany(ArticleMetricDaily::class);
     }
 }

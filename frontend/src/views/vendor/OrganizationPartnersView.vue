@@ -1,7 +1,8 @@
 <script setup>
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 import apiClient from '@/services/axios'
 import Button from 'primevue/button'
+import FileUpload from 'primevue/fileupload'
 import InputText from 'primevue/inputtext'
 import MultiSelect from 'primevue/multiselect'
 import Textarea from 'primevue/textarea'
@@ -11,6 +12,11 @@ const toast = useToast()
 const loading = ref(true)
 const saving = ref(false)
 const data = ref({ relationships: [], business_model: 'bookstore' })
+const logoFile = ref(null)
+const verificationDocument = ref(null)
+const logoUploader = ref(null)
+const verificationUploader = ref(null)
+const slugManuallyEdited = ref(false)
 const form = ref({
   legal_name: '',
   display_name: '',
@@ -28,6 +34,29 @@ const typeOptions = [
   { label: 'Nhà sách / Hiệu sách', value: 'bookstore' },
 ]
 
+const slugify = (value) => value
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .replace(/đ/g, 'd')
+  .replace(/Đ/g, 'D')
+  .toLowerCase()
+  .replace(/[^a-z0-9]+/g, '-')
+  .replace(/^-+|-+$/g, '')
+
+watch(() => form.value.display_name, (displayName) => {
+  if (!slugManuallyEdited.value) {
+    form.value.slug = slugify(displayName)
+  }
+})
+
+const onLogoSelect = (event) => {
+  logoFile.value = event.files?.[0] ?? null
+}
+
+const onVerificationSelect = (event) => {
+  verificationDocument.value = event.files?.[0] ?? null
+}
+
 const load = async () => {
   loading.value = true
   try {
@@ -41,9 +70,25 @@ const load = async () => {
 const submit = async () => {
   saving.value = true
   try {
-    await apiClient.post('/api/vendor/organizations', form.value)
+    const payload = new FormData()
+    Object.entries(form.value).forEach(([key, value]) => {
+      if (key === 'organization_types') {
+        value.forEach((type) => payload.append('organization_types[]', type))
+      } else if (value !== null && value !== '') {
+        payload.append(key, value)
+      }
+    })
+    if (logoFile.value) payload.append('logo', logoFile.value)
+    if (verificationDocument.value) payload.append('verification_document', verificationDocument.value)
+
+    await apiClient.post('/api/vendor/organizations', payload)
     toast.add({ severity: 'success', summary: 'Đã gửi hồ sơ', detail: 'Tổ chức và quan hệ pháp nhân đang chờ Admin xác minh.', life: 4000 })
     form.value = { legal_name: '', display_name: '', slug: '', organization_types: [], tax_code: '', license_number: '', description: '', website: '' }
+    slugManuallyEdited.value = false
+    logoFile.value = null
+    verificationDocument.value = null
+    logoUploader.value?.clear()
+    verificationUploader.value?.clear()
     await load()
   } catch (exception) {
     toast.add({ severity: 'error', summary: 'Không thể gửi', detail: exception.response?.data?.message || 'Vui lòng kiểm tra các trường bắt buộc.', life: 4000 })
@@ -58,16 +103,43 @@ onMounted(load)
 <template>
   <main id="main-content" class="space-y-6" tabindex="-1">
     <header><p class="text-sm font-semibold uppercase tracking-wider text-primary">Nguồn sách & pháp nhân</p><h1 class="mt-1 text-3xl font-bold text-on-surface">Nhà xuất bản & Nhà cung cấp</h1><p class="mt-2 max-w-3xl text-on-surface-variant">Mỗi sản phẩm mới phải dùng tổ chức và quan hệ đã được xác minh. Nhà bán không được tự đánh dấu hồ sơ là đã duyệt.</p></header>
+    <section class="grid gap-4 md:grid-cols-2 xl:grid-cols-4" aria-label="Giải thích dữ liệu xác minh">
+      <article class="rounded-xl border border-outline-variant bg-surface-container-lowest p-4"><h2 class="font-bold text-primary">Pháp nhân</h2><p class="mt-2 text-sm leading-6 text-on-surface-variant">Tên pháp lý, mã số thuế và giấy phép dùng để Admin đối chiếu. Mã số thuế và chứng từ không công khai cho khách hàng.</p></article>
+      <article class="rounded-xl border border-outline-variant bg-surface-container-lowest p-4"><h2 class="font-bold text-primary">Nhà xuất bản</h2><p class="mt-2 text-sm leading-6 text-on-surface-variant">Đơn vị xuất bản hoặc phát hành ấn phẩm. Thông tin này giúp khách hàng nhận biết nguồn xuất bản của cuốn sách.</p></article>
+      <article class="rounded-xl border border-outline-variant bg-surface-container-lowest p-4"><h2 class="font-bold text-primary">Nhà cung cấp</h2><p class="mt-2 text-sm leading-6 text-on-surface-variant">Đơn vị trực tiếp cung ứng hàng cho gian hàng. Nếu Nhà bán chính là NXB, một pháp nhân có thể đảm nhiệm cả hai vai trò.</p></article>
+      <article class="rounded-xl border border-outline-variant bg-surface-container-lowest p-4"><h2 class="font-bold text-primary">Quan hệ đã xác minh</h2><p class="mt-2 text-sm leading-6 text-on-surface-variant">Xác minh pháp nhân không tự động xác minh quyền hợp tác. Mỗi quan hệ NXB, cung cấp hoặc phân phối vẫn phải được duyệt riêng.</p></article>
+    </section>
     <section class="rounded-xl border border-outline-variant bg-surface-container-lowest p-5">
       <h2 class="text-xl font-bold">Đăng ký pháp nhân của gian hàng</h2>
       <p class="mt-2 text-sm text-on-surface-variant">Mô hình hiện tại: <strong>{{ data.business_model }}</strong>. Thông tin thuế, giấy phép và chứng từ không hiển thị công khai.</p>
       <form class="mt-5 grid gap-4 md:grid-cols-2" @submit.prevent="submit">
         <div><label for="org-legal-name" class="mb-2 block text-sm font-semibold">Tên pháp lý *</label><InputText id="org-legal-name" v-model="form.legal_name" required class="min-h-11 w-full" /></div>
         <div><label for="org-display-name" class="mb-2 block text-sm font-semibold">Tên hiển thị *</label><InputText id="org-display-name" v-model="form.display_name" required class="min-h-11 w-full" /></div>
-        <div><label for="org-slug" class="mb-2 block text-sm font-semibold">Đường dẫn *</label><InputText id="org-slug" v-model="form.slug" required class="min-h-11 w-full" /></div>
+        <div>
+          <label for="org-slug" class="mb-2 block text-sm font-semibold">Đường dẫn hồ sơ công khai *</label>
+          <InputText id="org-slug" v-model="form.slug" required pattern="[a-z0-9]+(?:-[a-z0-9]+)*" class="min-h-11 w-full" aria-describedby="org-slug-help" @input="slugManuallyEdited = true" />
+          <p id="org-slug-help" class="mt-1 text-xs leading-5 text-on-surface-variant">Dùng trong địa chỉ /organizations/{{ form.slug || 'ten-gian-hang' }}. Chỉ gồm chữ thường, số và dấu gạch ngang.</p>
+        </div>
         <div><label for="org-types" class="mb-2 block text-sm font-semibold">Loại tổ chức *</label><MultiSelect id="org-types" v-model="form.organization_types" :options="typeOptions" optionLabel="label" optionValue="value" required class="min-h-11 w-full" /></div>
         <div><label for="org-tax-code" class="mb-2 block text-sm font-semibold">Mã số thuế</label><InputText id="org-tax-code" v-model="form.tax_code" class="min-h-11 w-full" /></div>
         <div><label for="org-license" class="mb-2 block text-sm font-semibold">Số giấy phép</label><InputText id="org-license" v-model="form.license_number" class="min-h-11 w-full" /></div>
+        <div>
+          <label for="org-website" class="mb-2 block text-sm font-semibold">Website chính thức</label>
+          <InputText id="org-website" v-model="form.website" type="url" placeholder="https://example.com" class="min-h-11 w-full" aria-describedby="org-website-help" />
+          <p id="org-website-help" class="mt-1 text-xs leading-5 text-on-surface-variant">Đường dẫn website chính thức sẽ được hiển thị công khai sau khi hồ sơ được duyệt.</p>
+        </div>
+        <div>
+          <span class="mb-2 block text-sm font-semibold">Logo tổ chức</span>
+          <FileUpload ref="logoUploader" mode="basic" name="logo" accept="image/png,image/jpeg,image/webp" :maxFileSize="2097152" chooseLabel="Chọn logo" customUpload class="min-h-11" @select="onLogoSelect" />
+          <p class="mt-1 text-xs leading-5 text-on-surface-variant">PNG, JPG hoặc WEBP, tối đa 2 MB. Logo sẽ xuất hiện trên hồ sơ công khai.</p>
+          <p v-if="logoFile" class="mt-1 text-xs font-semibold text-primary">Đã chọn: {{ logoFile.name }}</p>
+        </div>
+        <div class="md:col-span-2">
+          <span class="mb-2 block text-sm font-semibold">Tài liệu xác minh pháp nhân</span>
+          <FileUpload ref="verificationUploader" mode="basic" name="verification_document" accept=".pdf,image/png,image/jpeg" :maxFileSize="5242880" chooseLabel="Chọn tài liệu" customUpload class="min-h-11" @select="onVerificationSelect" />
+          <p class="mt-1 text-xs leading-5 text-on-surface-variant">PDF, PNG hoặc JPG, tối đa 5 MB. Chỉ Admin dùng để đối chiếu; khách hàng không thể xem hoặc tải xuống.</p>
+          <p v-if="verificationDocument" class="mt-1 text-xs font-semibold text-primary">Đã chọn: {{ verificationDocument.name }}</p>
+        </div>
         <div class="md:col-span-2"><label for="org-description" class="mb-2 block text-sm font-semibold">Giới thiệu công khai</label><Textarea id="org-description" v-model="form.description" rows="3" class="w-full" /></div>
         <div class="md:col-span-2 flex justify-end"><Button type="submit" label="Gửi hồ sơ xác minh" icon="pi pi-send" :loading="saving" class="min-h-11" /></div>
       </form>

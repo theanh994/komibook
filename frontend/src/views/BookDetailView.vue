@@ -254,10 +254,16 @@
                     <p class="text-xs font-bold uppercase tracking-wider text-primary">Nguồn sách đã khai báo</p>
                     <h2 id="commercial-parties-title" class="mt-1 text-lg font-bold text-on-surface">Thông tin xuất bản và cung ứng</h2>
                   </div>
-                  <router-link v-if="book.vendor?.slug" :to="{ name: 'catalog', query: { vendor: book.vendor.slug } }" class="inline-flex min-h-11 items-center gap-2 rounded-xl border border-primary px-4 text-sm font-bold text-primary no-underline transition-colors hover:bg-primary hover:text-on-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
-                    <span class="material-symbols-outlined text-lg" aria-hidden="true">storefront</span>
-                    Xem gian hàng {{ book.vendor.name }}
-                  </router-link>
+                  <div v-if="book.vendor" class="flex flex-wrap gap-2">
+                    <router-link v-if="book.vendor.slug" :to="{ name: 'vendor-storefront', params: { slug: book.vendor.slug } }" class="inline-flex min-h-11 items-center gap-2 rounded-xl border border-primary px-4 text-sm font-bold text-primary no-underline transition-colors hover:bg-primary hover:text-on-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
+                      <span class="material-symbols-outlined text-lg" aria-hidden="true">storefront</span>
+                      Xem gian hàng {{ book.vendor.name }}
+                    </router-link>
+                    <button type="button" class="inline-flex min-h-11 items-center gap-2 rounded-xl border border-outline-variant bg-surface-container-lowest px-4 text-sm font-bold text-on-surface" :disabled="followLoading || (authStore.isAuthenticated && !followAvailable)" @click="toggleVendorFollow">
+                      <span class="material-symbols-outlined text-lg" aria-hidden="true">{{ followingVendor ? 'notifications_active' : 'add_alert' }}</span>
+                      {{ followingVendor ? 'Đang theo dõi' : 'Theo dõi gian hàng' }}
+                    </button>
+                  </div>
                 </div>
                 <div v-if="book.commercial_parties && Object.keys(book.commercial_parties).length" class="mt-5 grid gap-3 md:grid-cols-3">
                   <router-link v-for="(party, role) in book.commercial_parties" :key="role" :to="{ name: 'organization-public', params: { slug: party.slug } }" class="min-h-24 rounded-xl border border-outline-variant/40 bg-surface-container-lowest p-4 no-underline transition-shadow duration-200 hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
@@ -604,6 +610,9 @@ const cartStore = useCartStore()
 const wishlistStore = useWishlistStore()
 
 const book = ref(null)
+const followingVendor = ref(false)
+const followAvailable = ref(true)
+const followLoading = ref(false)
 const loading = ref(true)
 const seriesBooks = ref([])
 const relatedCategoryBooks = ref([])
@@ -816,6 +825,17 @@ const fetchBookDetail = async () => {
     const response = await apiClient.get(`/api/books/${route.params.slug}`)
     const responseData = response.data.data || response.data
     book.value = responseData
+    if (responseData.vendor?.id) {
+      apiClient.post(`/api/vendors/${responseData.vendor.id}/visit`).catch(() => {})
+      if (authStore.isAuthenticated) {
+        apiClient.get(`/api/vendors/${responseData.vendor.id}/follow`)
+          .then((result) => {
+            followingVendor.value = Boolean(result.data?.following)
+            followAvailable.value = result.data?.available !== false
+          })
+          .catch(() => { followingVendor.value = false })
+      }
+    }
 
     const promises = [
       fetchSeriesBooks(responseData.id),
@@ -830,6 +850,24 @@ const fetchBookDetail = async () => {
     console.error('Lỗi tải chi tiết sách:', error)
   } finally {
     loading.value = false
+  }
+}
+
+const toggleVendorFollow = async () => {
+  if (!book.value?.vendor?.id || followLoading.value) return
+  if (!authStore.isAuthenticated) {
+    await router.push({ name: 'login', query: { redirect: route.fullPath } })
+    return
+  }
+  followLoading.value = true
+  try {
+    const response = await apiClient.post(`/api/vendors/${book.value.vendor.id}/follow`)
+    followingVendor.value = Boolean(response.data?.following)
+    toast.add({ severity: 'success', summary: followingVendor.value ? 'Đã theo dõi' : 'Đã bỏ theo dõi', detail: response.data?.message, life: 3000 })
+  } catch (requestError) {
+    toast.add({ severity: 'error', summary: 'Không thể cập nhật', detail: requestError.response?.data?.message || 'Vui lòng thử lại.', life: 3000 })
+  } finally {
+    followLoading.value = false
   }
 }
 

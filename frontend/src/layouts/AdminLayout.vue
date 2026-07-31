@@ -80,11 +80,17 @@ const vendorMenuItems = [
     icon: 'pi pi-bolt',
     route: '/vendor/flash-sales',
   },
+  {
+    label: 'Bài viết & Tin tức',
+    icon: 'pi pi-file-edit',
+    route: '/vendor/articles',
+  },
 ]
 
 const expandedSubmenus = ref({
   'Quản lý Sách': true,
   'Sách cũ & Kho': true,
+  'Newsroom': true,
 })
 
 const adminMenuItems = [
@@ -99,14 +105,19 @@ const adminMenuItems = [
     route: '/admin/users',
   },
   {
+    label: 'Hồ sơ Nhà bán',
+    icon: 'pi pi-shop',
+    route: '/admin/approvals',
+  },
+  {
     label: 'Trả hàng & Hoàn tiền',
     icon: 'pi pi-replay',
     route: '/admin/returns',
   },
   {
-    label: 'Kiểm duyệt đánh giá',
+    label: 'Kiểm duyệt nội dung',
     icon: 'pi pi-comments',
-    route: '/admin/reviews/moderation',
+    route: '/admin/moderation',
   },
   {
     label: 'Quản lý Sách',
@@ -121,11 +132,6 @@ const adminMenuItems = [
         label: 'Thể loại sách',
         icon: 'pi pi-tags',
         route: '/admin/books/categories',
-      },
-      {
-        label: 'Kiểm duyệt xuất bản',
-        icon: 'pi pi-check-circle',
-        route: '/admin/publishing-reviews',
       },
     ],
   },
@@ -150,9 +156,12 @@ const adminMenuItems = [
     route: '/admin/notifications',
   },
   {
-    label: 'CMS bài viết',
+    label: 'Newsroom',
     icon: 'pi pi-file-edit',
-    route: '/admin/articles',
+    children: [
+      { label: 'Bài viết & Tin tức', icon: 'pi pi-list', route: '/admin/articles' },
+      { label: 'Review tiềm năng', icon: 'pi pi-star', route: '/admin/article-submissions' },
+    ],
   },
   {
     label: 'Cấu hình hệ thống',
@@ -249,13 +258,18 @@ const userMenuItems = ref([
     icon: 'pi pi-sign-out',
     command: async () => {
       await authStore.logout()
-      router.push({ name: 'home' })
+      window.location.assign('/')
     },
   },
 ])
 
 const toggleUserMenu = (event) => {
   userMenu.value.toggle(event)
+}
+
+const logout = async () => {
+  await authStore.logout()
+  window.location.assign('/')
 }
 
 const shopName = computed(() => {
@@ -292,7 +306,7 @@ onUnmounted(() => {
 
     <!-- Mobile Sidebar Backdrop -->
     <div
-      v-if="!sidebarCollapsed"
+      v-if="isMobile && !sidebarCollapsed"
       class="sidebar-backdrop"
       aria-hidden="true"
       @click="sidebarCollapsed = true"
@@ -320,6 +334,16 @@ onUnmounted(() => {
             </div>
           </Transition>
         </router-link>
+        <button
+          class="sidebar-collapse-button"
+          type="button"
+          :aria-label="sidebarCollapsed ? 'Mở rộng thanh điều hướng' : 'Thu gọn thanh điều hướng'"
+          :aria-expanded="!sidebarCollapsed"
+          aria-controls="management-sidebar"
+          @click="toggleSidebar"
+        >
+          <i :class="sidebarCollapsed ? 'pi pi-angle-right' : 'pi pi-angle-left'"></i>
+        </button>
       </div>
 
       <!-- Navigation -->
@@ -401,6 +425,16 @@ onUnmounted(() => {
       <!-- Sidebar Bottom -->
       <div class="sidebar-bottom">
         <div class="nav-divider"></div>
+        <div class="sidebar-account" :title="authStore.user?.name">
+          <div class="sidebar-account-avatar">
+            <img v-if="userAvatarUrl" :src="userAvatarUrl" :alt="authStore.user?.name" />
+            <i v-else class="pi pi-user" aria-hidden="true"></i>
+          </div>
+          <div v-if="!sidebarCollapsed" class="sidebar-account-copy">
+            <strong>{{ authStore.user?.name }}</strong>
+            <span>{{ shopName }}</span>
+          </div>
+        </div>
         <ul class="nav-list">
           <li
             v-for="item in bottomItems"
@@ -418,6 +452,12 @@ onUnmounted(() => {
               </Transition>
             </router-link>
           </li>
+          <li>
+            <button class="nav-item nav-item-bottom sidebar-logout" type="button" aria-label="Đăng xuất" @click="logout">
+              <i class="pi pi-sign-out nav-icon"></i>
+              <span v-if="!sidebarCollapsed" class="nav-text">Đăng xuất</span>
+            </button>
+          </li>
         </ul>
       </div>
     </aside>
@@ -428,7 +468,7 @@ onUnmounted(() => {
       <header class="admin-topbar">
         <div class="topbar-left">
           <button
-            class="toggle-btn"
+            class="toggle-btn mobile-menu-button"
             type="button"
             :aria-label="sidebarCollapsed ? 'Mở thanh điều hướng' : 'Đóng thanh điều hướng'"
             :aria-expanded="!sidebarCollapsed"
@@ -484,7 +524,9 @@ onUnmounted(() => {
 
       <!-- Page Content -->
       <main id="management-content" class="admin-content" data-route-focus tabindex="-1">
-        <RouterView />
+        <RouterView v-slot="{ Component, route: currentRoute }">
+          <component :is="Component" :key="currentRoute.fullPath" />
+        </RouterView>
       </main>
     </div>
   </div>
@@ -518,18 +560,50 @@ onUnmounted(() => {
   width: 72px;
 }
 
+.sidebar-collapsed .sidebar-header {
+  flex-direction: column;
+  padding: 12px 8px;
+}
+
+.sidebar-collapsed .sidebar-brand {
+  flex: 0 0 auto;
+}
+
 /* Sidebar Header */
 .sidebar-header {
   padding: 20px 16px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .sidebar-brand {
   display: flex;
   align-items: center;
   gap: 12px;
+  min-width: 0;
+  flex: 1;
   text-decoration: none;
   color: inherit;
+}
+
+.sidebar-collapse-button {
+  width: 40px;
+  height: 40px;
+  flex: 0 0 40px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  color: #cbd5e1;
+  background: rgba(255, 255, 255, 0.05);
+  cursor: pointer;
+}
+
+.sidebar-collapse-button:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.12);
 }
 
 .brand-icon {
@@ -576,6 +650,12 @@ onUnmounted(() => {
   flex: 1;
   padding: 16px 0;
   overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.sidebar-nav::-webkit-scrollbar {
+  display: none;
 }
 
 .nav-section {
@@ -676,6 +756,70 @@ onUnmounted(() => {
 /* Sidebar Bottom */
 .sidebar-bottom {
   padding: 12px;
+}
+
+.sidebar-account {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  margin-bottom: 8px;
+  padding: 6px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.sidebar-account-avatar {
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.12);
+  color: #f8fafc;
+}
+
+.sidebar-account-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.sidebar-account-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.sidebar-account-copy strong,
+.sidebar-account-copy span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-account-copy strong {
+  color: #f8fafc;
+  font-size: 13px;
+}
+
+.sidebar-account-copy span {
+  color: #94a3b8;
+  font-size: 11px;
+}
+
+.sidebar-logout {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+
+.mobile-menu-button {
+  display: none;
 }
 
 .nav-divider {
@@ -873,6 +1017,10 @@ onUnmounted(() => {
 }
 
 @media (max-width: 1024px) {
+  .mobile-menu-button {
+    display: flex;
+  }
+
   .admin-sidebar {
     width: 72px;
   }

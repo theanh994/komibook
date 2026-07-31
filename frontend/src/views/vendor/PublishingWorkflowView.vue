@@ -100,15 +100,14 @@ onMounted(load)
 
       <section v-if="!usesCommercialParties" class="rounded-2xl border border-warning/30 bg-warning/5 p-6">
         <h2 class="text-xl font-bold text-on-surface">Chưa đủ chuỗi cung ứng</h2>
-        <p class="mt-2 text-sm leading-6 text-on-surface-variant">Hãy gắn Nhà xuất bản, Nhà cung cấp và đơn vị chịu trách nhiệm đã được xác minh trước khi gửi kiểm duyệt.</p>
+        <p class="mt-2 text-sm leading-6 text-on-surface-variant">Hãy gắn Nhà xuất bản, Nhà cung cấp và đơn vị chịu trách nhiệm đã được xác minh trước khi đăng bán.</p>
       </section>
 
       <section class="rounded-2xl bg-surface-container-lowest p-6 shadow-sm">
-        <h2 class="text-xl font-bold">Chuyển trạng thái</h2>
+        <h2 class="text-xl font-bold">Đăng bán sách</h2>
+        <p class="mt-2 text-sm text-on-surface-variant">Nhà bán tự chịu trách nhiệm về dữ liệu sản phẩm và chuỗi cung ứng đã xác minh; hệ thống không còn bước kiểm duyệt xuất bản riêng.</p>
         <div class="mt-4 flex flex-wrap items-center gap-3">
-          <Button v-if="['draft', 'changes_requested'].includes(book.publishing_status || 'draft')" label="Gửi kiểm duyệt" icon="pi pi-send" :loading="busy" @click="transition(book.publishing_status === 'changes_requested' ? 'draft' : 'submit')" />
-          <Button v-if="book.publishing_status === 'draft' && book.publication_version > 1" label="Nộp lại" icon="pi pi-refresh" :loading="busy" @click="transition('submit')" />
-          <template v-if="book.publishing_status === 'approved'">
+          <template v-if="['draft', 'changes_requested', 'submitted_for_review', 'resubmitted', 'approved'].includes(book.publishing_status || 'draft')">
             <InputText v-model="scheduledFor" type="datetime-local" />
             <Button :label="scheduledFor ? 'Lên lịch' : 'Xuất bản ngay'" icon="pi pi-calendar" :loading="busy" @click="transition('publish')" />
           </template>

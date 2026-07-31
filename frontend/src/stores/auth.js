@@ -99,15 +99,15 @@ export const useAuthStore = defineStore('auth', {
     },
 
     async logout(skipApi = false) {
+      const shouldNotifyServer = Boolean(this.user && !skipApi)
+      this.user = null
+      this.userFetched = true
       try {
-        if (this.user && !skipApi) {
-          await apiClient.post('/api/auth/logout')
+        if (shouldNotifyServer) {
+          await apiClient.post('/api/auth/logout', null, { timeout: 5000 })
         }
       } catch (e) {
         console.warn('Logout API failed', e)
-      } finally {
-        this.user = null
-        this.userFetched = true
       }
     },
 

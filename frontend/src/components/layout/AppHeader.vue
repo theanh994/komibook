@@ -92,6 +92,16 @@
           ]"
         >Tin tức</router-link>
         <router-link
+          v-if="canApplyAsVendor"
+          :to="vendorRegistrationTarget"
+          :class="[
+            'flex min-h-11 min-w-11 items-center justify-center border-b-2 border-transparent font-inter text-sm font-semibold transition-colors duration-200',
+            $route.name === 'vendor-register'
+              ? 'border-secondary text-secondary'
+              : 'text-primary hover:text-secondary'
+          ]"
+        >Đăng ký Nhà bán</router-link>
+        <router-link
           v-if="authStore.isAuthenticated"
           to="/my-library"
           :class="[
@@ -280,6 +290,15 @@
           <router-link to="/blog" class="flex min-h-11 items-center gap-md rounded-lg px-md py-sm text-sm font-medium text-on-surface-variant transition-colors hover:bg-surface-container-low" @click="mobileMenuOpen = false">
             <span class="material-symbols-outlined text-[20px]">newspaper</span> Tin tức
           </router-link>
+          <router-link
+            v-if="canApplyAsVendor"
+            :to="vendorRegistrationTarget"
+            class="flex min-h-11 items-center gap-md rounded-lg px-md py-sm text-sm font-bold text-primary transition-colors hover:bg-surface-container-low"
+            @click="closeNavigationMenus"
+          >
+            <span class="material-symbols-outlined text-[20px]" aria-hidden="true">storefront</span>
+            Đăng ký Nhà bán
+          </router-link>
           <template v-if="authStore.isAuthenticated">
             <router-link to="/my-library" class="flex min-h-11 items-center gap-md px-md py-sm rounded-lg text-on-surface-variant hover:bg-surface-container-low transition-colors text-sm font-medium" @click="mobileMenuOpen = false">
               <span class="material-symbols-outlined text-[20px]">local_library</span> Tủ sách
@@ -339,6 +358,17 @@ const userMenu = ref()
 const searchQuery = ref('')
 const unreadNotificationsCount = ref(0)
 let notificationTimer
+
+const canApplyAsVendor = computed(() => (
+  !authStore.isAdmin
+  && !authStore.user?.capabilities?.active_vendor
+))
+
+const vendorRegistrationTarget = computed(() => (
+  authStore.isAuthenticated
+    ? { name: 'vendor-register' }
+    : { name: 'login', query: { redirect: '/vendor/register' } }
+))
 
 const closeNavigationMenus = () => {
   mobileMenuOpen.value = false
@@ -418,9 +448,9 @@ const userMenuItems = computed(() => {
     }
 
     const vendorProfile = authStore.user?.vendor_profile
-    if (vendorProfile && !authStore.user?.capabilities?.active_vendor) {
+    if (!authStore.user?.capabilities?.active_vendor) {
       items.push({
-        label: vendorProfile.onboarding_status === 'changes_requested' ? 'Bổ sung hồ sơ Nhà bán' : 'Hồ sơ Nhà bán',
+        label: vendorProfile?.onboarding_status === 'changes_requested' ? 'Bổ sung hồ sơ Nhà bán' : (vendorProfile ? 'Hồ sơ Nhà bán' : 'Đăng ký Nhà bán'),
         icon: 'pi pi-store',
         command: () => router.push('/vendor/register')
       })
@@ -444,7 +474,7 @@ const userMenuItems = computed(() => {
     icon: 'pi pi-sign-out',
     command: async () => {
       await authStore.logout()
-      router.push({ name: 'home' })
+      window.location.assign('/')
     }
   })
 

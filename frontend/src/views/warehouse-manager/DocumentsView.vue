@@ -102,7 +102,7 @@ onMounted(load)
       <p>{{ error }}</p><Button label="Thử lại" class="mt-4 min-h-11" @click="load" />
     </section>
     <template v-else>
-      <form class="space-y-5 rounded-xl border border-outline-variant bg-surface-container-lowest p-5" @submit.prevent="createDocument">
+      <form class="min-w-0 space-y-5 overflow-hidden rounded-xl border border-outline-variant bg-surface-container-lowest p-4 sm:p-5" @submit.prevent="createDocument">
         <div><h2 class="text-xl font-bold">Tạo phiếu nháp</h2><p class="mt-1 text-sm text-on-surface-variant">{{ scope.vendor?.shop_name }}</p></div>
         <div class="grid gap-4 md:grid-cols-3">
           <div><label for="document-type" class="mb-2 block text-sm font-semibold">Loại phiếu</label><Select id="document-type" v-model="form.type" :options="documentTypes" optionLabel="label" optionValue="value" class="min-h-11 w-full" /></div>
@@ -110,13 +110,13 @@ onMounted(load)
           <div v-if="['receipt', 'transfer'].includes(form.type)"><label for="destination-warehouse" class="mb-2 block text-sm font-semibold">Kho đích</label><Select id="destination-warehouse" v-model="form.destination_warehouse_id" :options="scope.warehouses" optionLabel="name" optionValue="id" class="min-h-11 w-full" /></div>
         </div>
         <div><label for="document-reason" class="mb-2 block text-sm font-semibold">Lý do / tham chiếu</label><Textarea id="document-reason" v-model="form.reason" rows="2" class="w-full" /></div>
-        <fieldset class="space-y-3">
+        <fieldset class="min-w-0 max-w-full space-y-3">
           <legend class="text-base font-bold">Dòng sản phẩm</legend>
-          <div v-for="(line, index) in form.lines" :key="index" class="grid gap-3 rounded-xl bg-surface-container p-4 md:grid-cols-[minmax(220px,1fr)_140px_160px_auto] md:items-end">
-            <div><label :for="`line-book-${index}`" class="mb-2 block text-sm font-semibold">Sách</label><Select :id="`line-book-${index}`" v-model="line.book_id" :options="scope.books" optionLabel="title" optionValue="id" filter class="min-h-11 w-full" /></div>
-            <div v-if="form.type !== 'count'"><label :for="`line-quantity-${index}`" class="mb-2 block text-sm font-semibold">Số lượng</label><InputNumber :id="`line-quantity-${index}`" v-model="line.quantity" :min="1" class="w-full" /></div>
-            <div v-else><label :for="`line-actual-${index}`" class="mb-2 block text-sm font-semibold">Số đếm thực tế</label><InputNumber :id="`line-actual-${index}`" v-model="line.actual_quantity" :min="0" class="w-full" /></div>
-            <div><label :for="`line-shelf-${index}`" class="mb-2 block text-sm font-semibold">Vị trí kệ</label><input :id="`line-shelf-${index}`" v-model="line.shelf_location" class="min-h-11 w-full rounded-lg border border-outline-variant bg-surface-container-lowest px-3" /></div>
+          <div v-for="(line, index) in form.lines" :key="index" class="warehouse-line grid min-w-0 max-w-full gap-3 overflow-hidden rounded-xl bg-surface-container p-4 lg:grid-cols-12 lg:items-end">
+            <div class="min-w-0 lg:col-span-6"><label :for="`line-book-${index}`" class="mb-2 block text-sm font-semibold">Sách</label><Select :id="`line-book-${index}`" v-model="line.book_id" :options="scope.books" optionLabel="title" optionValue="id" filter class="min-h-11 w-full max-w-full" /></div>
+            <div v-if="form.type !== 'count'" class="min-w-0 lg:col-span-2"><label :for="`line-quantity-${index}`" class="mb-2 block text-sm font-semibold">Số lượng</label><InputNumber :id="`line-quantity-${index}`" v-model="line.quantity" :min="1" class="w-full max-w-full" /></div>
+            <div v-else class="min-w-0 lg:col-span-2"><label :for="`line-actual-${index}`" class="mb-2 block text-sm font-semibold">Số đếm thực tế</label><InputNumber :id="`line-actual-${index}`" v-model="line.actual_quantity" :min="0" class="w-full max-w-full" /></div>
+            <div class="min-w-0 lg:col-span-3"><label :for="`line-shelf-${index}`" class="mb-2 block text-sm font-semibold">Vị trí kệ</label><input :id="`line-shelf-${index}`" v-model="line.shelf_location" class="min-h-11 w-full min-w-0 max-w-full rounded-lg border border-outline-variant bg-surface-container-lowest px-3" /></div>
             <Button type="button" icon="pi pi-trash" aria-label="Xóa dòng sản phẩm" severity="danger" text class="min-h-11 min-w-11" :disabled="form.lines.length === 1" @click="removeLine(index)" />
           </div>
         </fieldset>
@@ -141,3 +141,13 @@ onMounted(load)
     </template>
   </main>
 </template>
+
+<style scoped>
+.warehouse-line :deep(.p-select),
+.warehouse-line :deep(.p-inputnumber),
+.warehouse-line :deep(.p-inputnumber-input) {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+</style>
