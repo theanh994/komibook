@@ -71,14 +71,15 @@ class ProvisionPartnerCommerceDemo extends Command
             array_column(self::EXISTING_PUBLISHERS, 'slug'),
         );
         $existingOrganizations = Organization::whereIn('slug', $allOrganizationSlugs)->count();
+        $credentialsFileExists = Storage::disk('private')->exists(self::CREDENTIALS_PATH);
         if ($existingNewAccounts === count(self::NEW_DISTRIBUTORS)
             && $existingOrganizations === count($allOrganizationSlugs)
-            && Storage::disk('private')->exists(self::CREDENTIALS_PATH)) {
+            && $credentialsFileExists) {
             $this->info('Dữ liệu partner commerce demo đã tồn tại; không có dữ liệu nào bị thay đổi.');
 
             return self::SUCCESS;
         }
-        if ($existingNewAccounts > 0 || $existingOrganizations > 0 || Storage::disk('private')->exists(self::CREDENTIALS_PATH)) {
+        if ($existingNewAccounts > 0 || $existingOrganizations > 0) {
             $this->error('Phát hiện dữ liệu demo trùng hoặc đợt chuyển đổi dở dang; không ghi dữ liệu.');
 
             return self::FAILURE;
@@ -98,14 +99,43 @@ class ProvisionPartnerCommerceDemo extends Command
             return self::SUCCESS;
         }
 
-        $credentials = array_map(fn (array $account) => [
-            ...$account,
-            'password' => Str::random(24),
-        ], self::NEW_DISTRIBUTORS);
-        if (! Storage::disk('private')->put(self::CREDENTIALS_PATH, $this->buildCredentialsCsv($credentials))) {
-            $this->error('Không thể ghi tệp thông tin đăng nhập vào private storage.');
+        $createdCredentialsFile = false;
+        if ($credentialsFileExists) {
+            $stream = fopen('php://temp', 'w+');
+            fwrite($stream, Storage::disk('private')->get(self::CREDENTIALS_PATH));
+            rewind($stream);
+            $header = fgetcsv($stream);
+            $savedCredentials = [];
+            while (($row = fgetcsv($stream)) !== false) {
+                if (count($row) === count($header)) {
+                    $savedCredentials[] = array_combine($header, $row);
+                }
+            }
+            fclose($stream);
+            $credentialsByEmail = collect($savedCredentials)->keyBy('email');
+            $credentials = array_map(function (array $account) use ($credentialsByEmail) {
+                $saved = $credentialsByEmail->get($account['email']);
 
-            return self::FAILURE;
+                return $saved && filled($saved['password'] ?? null)
+                    ? [...$account, 'password' => $saved['password']]
+                    : null;
+            }, self::NEW_DISTRIBUTORS);
+            if (in_array(null, $credentials, true)) {
+                $this->error('Tệp thông tin đăng nhập hiện có không đủ ba tài khoản nhà phân phối demo.');
+
+                return self::FAILURE;
+            }
+        } else {
+            $credentials = array_map(fn (array $account) => [
+                ...$account,
+                'password' => Str::random(24),
+            ], self::NEW_DISTRIBUTORS);
+            if (! Storage::disk('private')->put(self::CREDENTIALS_PATH, $this->buildCredentialsCsv($credentials))) {
+                $this->error('Không thể ghi tệp thông tin đăng nhập vào private storage.');
+
+                return self::FAILURE;
+            }
+            $createdCredentialsFile = true;
         }
 
         try {
@@ -159,7 +189,9 @@ class ProvisionPartnerCommerceDemo extends Command
                 $this->createDemoPartnerships();
             });
         } catch (Throwable $exception) {
-            Storage::disk('private')->delete(self::CREDENTIALS_PATH);
+            if ($createdCredentialsFile) {
+                Storage::disk('private')->delete(self::CREDENTIALS_PATH);
+            }
             report($exception);
             $this->error('Chuyển đổi không hoàn tất; giao dịch cơ sở dữ liệu đã được hoàn tác.');
 

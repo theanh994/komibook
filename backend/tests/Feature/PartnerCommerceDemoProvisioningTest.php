@@ -17,6 +17,13 @@ class PartnerCommerceDemoProvisioningTest extends TestCase
     public function test_command_creates_distributor_drafts_and_preserves_legacy_kim_dong_shop(): void
     {
         Storage::fake('private');
+        Storage::disk('private')->put(
+            ProvisionPartnerCommerceDemo::CREDENTIALS_PATH,
+            "name,email,password,intended_business_model\n"
+            ."IPM (Demo),ipm.demo@komibook.id.vn,Existing-Ipm-Password,distributor\n"
+            ."Hikari (Demo),hikari.thaihabooks.demo@komibook.id.vn,Existing-Hikari-Password,distributor\n"
+            ."Fahasa (Demo),fahasa.demo@komibook.id.vn,Existing-Fahasa-Password,distributor\n",
+        );
         foreach ([
             'nxblaodong.demo@komibook.id.vn',
             'nxbtre.demo@komibook.id.vn',
@@ -42,6 +49,10 @@ class PartnerCommerceDemoProvisioningTest extends TestCase
             'hikari.thaihabooks.demo@komibook.id.vn',
             'fahasa.demo@komibook.id.vn',
         ])->where('role', 'customer')->count());
+        $this->assertTrue(password_verify(
+            'Existing-Ipm-Password',
+            User::where('email', 'ipm.demo@komibook.id.vn')->value('password'),
+        ));
         $this->assertSame(5, Vendor::withoutGlobalScopes()->where('onboarding_status', 'draft')->count());
         $this->assertSame('direct_publisher', $legacyVendor->fresh()->business_model);
         $this->assertSame('active', $legacyVendor->fresh()->status);

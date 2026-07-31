@@ -56,3 +56,18 @@ Trước khi migration production phải tạo backup MySQL mới và ghi SHA-25
 - trang chủ, đăng nhập, đăng ký Nhà bán, hồ sơ tổ chức công khai, trang tổ chức của Vendor và trang kiểm duyệt Admin tải được, không có lỗi console liên quan.
 
 Không thay đổi đường dẫn hoặc cấu hình Cloudflare Tunnel.
+
+## Kết quả triển khai production
+
+Thời điểm: 2026-08-01 (Asia/Saigon)
+
+- Backup phát hiện database rỗng trước phục hồi: `C:\komibook_shared\backups\komibook-pre-demo-evidence-20260801-022204.sql`.
+- Backup dữ liệu được phục hồi: `C:\komibook_shared\backups\komibook-pre-partner-commerce-20260801-000032.sql`.
+- SHA-256 backup phục hồi: `6C0683FEA586B960F7D7F07F85D35BE3C57109DC9E54B14A48E71AE19E35279D`.
+- Việc phục hồi được diễn tập trên database riêng trước production. File SQL được nạp trực tiếp bằng MySQL `SOURCE` để bảo toàn UTF-8.
+- Sau migration/provisioning: 27 users, 55 books, 10 vendors, 5 orders và 8 organizations.
+- Có 8 organization demo, 6 vendor demo bị khóa payout, 11 quan hệ demo và 5 thỏa thuận demo; không organization demo nào có `verified_at`.
+- Lệnh provision có thể tái sử dụng file credential IPM/Hikari/Fahasa hiện có sau khi phục hồi backup, không sinh mật khẩu mới hoặc tạo tài khoản trùng.
+- Trang chủ, `/login`, `/vendor/register`, `/organizations/ipm-demo`, `/api/books` và `/api/organizations` đều trả HTTP 200.
+- Năm ảnh bìa đầu tiên được kiểm tra đều trả HTTP 200; tiêu đề tiếng Việt hiển thị đúng sau tải lại trang.
+- FrankenPHP và cloudflared tiếp tục ở trạng thái Running/Automatic; không thay đổi Cloudflare Tunnel.
