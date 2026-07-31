@@ -1,9 +1,12 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { getDashboardRedirect, runRouteGuard } from '@/router/guard.js'
+import { ROUTER_BASE } from '@/router/base.js'
 
 const router = createRouter({
-  history: createWebHistory(import.meta.env.BASE_URL),
+  // Asset files may be deployed below a versioned CDN path, but public routes
+  // always live at the domain root (for example /login, not /assets/.../login).
+  history: createWebHistory(ROUTER_BASE),
   scrollBehavior(to, from, savedPosition) {
     // Nếu có vị trí lưu trước (ví dụ nút back) → khôi phục
     if (savedPosition) return savedPosition
