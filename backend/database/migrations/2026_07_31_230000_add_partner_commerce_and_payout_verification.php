@@ -22,8 +22,8 @@ return new class extends Migration
 
         Schema::create('organization_distribution_agreements', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('publisher_organization_id')->constrained('organizations')->restrictOnDelete();
-            $table->foreignId('distributor_organization_id')->constrained('organizations')->restrictOnDelete();
+            $table->foreignId('publisher_organization_id');
+            $table->foreignId('distributor_organization_id');
             $table->string('status', 32)->default('draft')->index();
             $table->json('scope')->nullable();
             $table->string('evidence_document')->nullable();
@@ -36,6 +36,10 @@ return new class extends Migration
             $table->text('last_review_reason')->nullable();
             $table->string('operation_key', 128)->unique();
             $table->timestamps();
+            $table->foreign('publisher_organization_id', 'distribution_agreement_publisher_fk')
+                ->references('id')->on('organizations')->restrictOnDelete();
+            $table->foreign('distributor_organization_id', 'distribution_agreement_distributor_fk')
+                ->references('id')->on('organizations')->restrictOnDelete();
             $table->index(
                 ['publisher_organization_id', 'distributor_organization_id', 'status'],
                 'distribution_agreement_lookup'
