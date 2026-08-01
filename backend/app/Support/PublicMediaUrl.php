@@ -22,4 +22,21 @@ final class PublicMediaUrl
 
         return '/storage/'.ltrim($path, '/');
     }
+
+    public static function versionedStorage(?string $path, string|int|null $version): ?string
+    {
+        $url = self::storage($path);
+
+        if ($url === null || $version === null || ! str_starts_with($url, '/storage/')) {
+            return $url;
+        }
+
+        $version = trim((string) $version);
+
+        if ($version === '') {
+            return $url;
+        }
+
+        return $url.(str_contains($url, '?') ? '&' : '?').'v='.rawurlencode($version);
+    }
 }

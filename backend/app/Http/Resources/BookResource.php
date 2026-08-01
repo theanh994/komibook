@@ -16,6 +16,8 @@ class BookResource extends JsonResource
      */
     public function toArray(Request $request): array
     {
+        $mediaVersion = $this->updated_at?->getTimestamp();
+
         return [
             'id' => $this->id,
             'title' => $this->title,
@@ -24,9 +26,9 @@ class BookResource extends JsonResource
             'author' => $this->author,
             'translator' => $this->translator,
             'description' => HtmlSanitizer::sanitize($this->description),
-            'cover_image' => PublicMediaUrl::storage($this->cover_image),
-            'gallery_images' => is_array($this->gallery_images) ? array_map(function ($img) {
-                return PublicMediaUrl::storage($img);
+            'cover_image' => PublicMediaUrl::versionedStorage($this->cover_image, $mediaVersion),
+            'gallery_images' => is_array($this->gallery_images) ? array_map(function ($img) use ($mediaVersion) {
+                return PublicMediaUrl::versionedStorage($img, $mediaVersion);
             }, $this->gallery_images) : [],
             'isbn' => $this->isbn,
             'dimensions' => $this->dimensions,

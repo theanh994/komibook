@@ -127,7 +127,7 @@ class WarehouseController extends Controller
                 'id' => $book->id,
                 'sku' => $book->isbn ?: 'SKU-'.str_pad($book->id, 4, '0', STR_PAD_LEFT),
                 'title' => $book->title,
-                'cover_image' => PublicMediaUrl::storage($book->cover_image),
+                'cover_image' => PublicMediaUrl::versionedStorage($book->cover_image, $book->updated_at?->getTimestamp()),
                 'type' => $book->type === 'ebook' ? 'Ebook' : 'Sách vật lý',
                 'stock' => $displayStock,
                 'total_stock' => $book->stock,
@@ -343,7 +343,7 @@ class WarehouseController extends Controller
             ->map(fn (Book $book) => [
                 'id' => $book->id,
                 'title' => $book->title,
-                'cover_image' => PublicMediaUrl::storage($book->cover_image),
+                'cover_image' => PublicMediaUrl::versionedStorage($book->cover_image, $book->updated_at?->getTimestamp()),
                 'stock' => (int) $book->stock,
                 'warehouse_names' => $book->warehouseStocks
                     ->filter(fn (WarehouseStock $stock) => $stock->quantity > 0)

@@ -26,6 +26,9 @@ class Phase7OrderCoverUrlTest extends TestCase
         $this->assertNull(PublicMediaUrl::storage(null));
         $this->assertNull(PublicMediaUrl::storage('  '));
         $this->assertSame('/storage/evil.example/cover.jpg', PublicMediaUrl::storage('//evil.example/cover.jpg'));
+        $this->assertSame('/storage/books/relative.jpg?v=123', PublicMediaUrl::versionedStorage('books/relative.jpg', 123));
+        $this->assertSame('/storage/books/existing.jpg?size=large&v=123', PublicMediaUrl::versionedStorage('/storage/books/existing.jpg?size=large', 123));
+        $this->assertSame('https://cdn.example.test/cover.jpg', PublicMediaUrl::versionedStorage('https://cdn.example.test/cover.jpg', 123));
     }
 
     public function test_order_detail_vendor_order_book_resource_and_library_share_the_same_cover_contract(): void
@@ -90,10 +93,11 @@ class Phase7OrderCoverUrlTest extends TestCase
             ->assertJsonPath('data.items.0.book.cover_image', '/storage/books/covers/verified.jpg');
 
         $bookPayload = (new BookResource($book))->resolve(request());
-        $this->assertSame('/storage/books/covers/verified.jpg', $bookPayload['cover_image']);
+        $mediaVersion = $book->updated_at->getTimestamp();
+        $this->assertSame("/storage/books/covers/verified.jpg?v={$mediaVersion}", $bookPayload['cover_image']);
         $this->assertSame([
-            '/storage/books/gallery/existing.jpg',
-            '/storage/books/gallery/relative.jpg',
+            "/storage/books/gallery/existing.jpg?v={$mediaVersion}",
+            "/storage/books/gallery/relative.jpg?v={$mediaVersion}",
         ], $bookPayload['gallery_images']);
     }
 }
