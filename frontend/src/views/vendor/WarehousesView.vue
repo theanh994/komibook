@@ -1,17 +1,24 @@
 <script setup>
 import { ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { useToast } from 'primevue/usetoast'
 import apiClient from '@/services/axios'
+import InfoTip from '@/components/InfoTip.vue'
 
 const toast = useToast()
+const router = useRouter()
 
 // --- State ---
 const warehouses = ref([])
+const primaryWarehouseId = ref(null)
+const primaryWarehouseSaving = ref(false)
 const stocks = ref([])
 const stats = ref({
   total_items: 0,
   low_stock_items: 0,
-  outOfStockItems: 0
+  out_of_stock_items: 0,
+  low_stock_books: [],
+  out_of_stock_books: [],
 })
 
 const loading = ref(false)
@@ -22,7 +29,7 @@ const pagination = ref({
 })
 
 // Filters
-const selectedWarehouse = ref('Tất cả kho')
+const selectedWarehouse = ref(null)
 const selectedType = ref('Tất cả loại sách')
 const selectedStatus = ref('Tất cả trạng thái')
 
@@ -58,18 +65,33 @@ const fetchWarehousesAndStocks = async (page = 1) => {
     const res = await apiClient.get('/api/vendor/warehouses', {
       params: {
         page,
-        warehouse_id: selectedWarehouse.value === 'Tất cả kho' ? null : selectedWarehouse.value,
+        warehouse_id: selectedWarehouse.value,
         type: selectedType.value,
         status: selectedStatus.value
       }
     })
     warehouses.value = res.data.warehouses
+    primaryWarehouseId.value = res.data.primary_warehouse_id
     stocks.value = res.data.stocks
     pagination.value = res.data.pagination
   } catch (err) {
-    toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Không thể tải dữ liệu kho hàng.', life: 3000 })
+    toast.add({ severity: 'error', summary: 'Không thể lọc kho', detail: err.response?.data?.message || 'Không thể tải dữ liệu kho hàng.', life: 4000 })
   } finally {
     loading.value = false
+  }
+}
+
+const setPrimaryWarehouse = async () => {
+  if (!primaryWarehouseId.value) return
+  primaryWarehouseSaving.value = true
+  try {
+    await apiClient.patch(`/api/vendor/warehouses/${primaryWarehouseId.value}/primary`)
+    toast.add({ severity: 'success', summary: 'Đã chọn kho tổng', detail: 'Sách mới sẽ tạo phiếu nhập tại kho này.', life: 3500 })
+  } catch (err) {
+    toast.add({ severity: 'error', summary: 'Không thể chọn kho tổng', detail: err.response?.data?.message || 'Vui lòng thử lại.', life: 4000 })
+    await fetchWarehousesAndStocks()
+  } finally {
+    primaryWarehouseSaving.value = false
   }
 }
 
@@ -149,6 +171,21 @@ const toggleExpand = (bookId) => {
   }
 }
 
+const openWarehouseDocument = type => {
+  router.push({
+    name: 'vendor-warehouse-documents',
+    query: {
+      type,
+      ...(selectedWarehouse.value ? { warehouse_id: selectedWarehouse.value } : {}),
+    },
+  })
+}
+
+const applyStockFilter = status => {
+  selectedStatus.value = status
+  fetchWarehousesAndStocks(1)
+}
+
 // Image fallback helper
 const getBookCover = (url) => {
   if (!url) return '/images/book-placeholder.svg'
@@ -181,17 +218,18 @@ onMounted(() => {
           <p class="font-body-md text-body-md text-on-surface-variant mt-sm">Quản lý tồn kho sách vật lý tại các địa điểm lưu trữ.</p>
         </div>
         <div class="flex flex-wrap gap-md">
-          <button 
-            @click="isTransferModalOpen = true"
+          <button
+            v-if="warehouses.length >= 2"
+            @click="openWarehouseDocument('transfer')"
             class="px-4 py-2 border-[1.5px] border-primary text-primary rounded-lg font-label-md text-label-md hover:bg-primary-fixed-dim transition-colors flex items-center gap-2"
           >
-            <span class="material-symbols-outlined">sync_alt</span> Điều chuyển kho
+            <span class="material-symbols-outlined">sync_alt</span> Tạo phiếu điều chuyển
           </button>
           <button 
-            @click="isAdjustModalOpen = true"
+            @click="openWarehouseDocument('count')"
             class="px-4 py-2 border-[1.5px] border-primary text-primary rounded-lg font-label-md text-label-md hover:bg-primary-fixed-dim transition-colors flex items-center gap-2"
           >
-            <span class="material-symbols-outlined">edit_note</span> Điều chỉnh kho
+            <span class="material-symbols-outlined">fact_check</span> Kiểm kê / điều chỉnh
           </button>
           <button 
             @click="isAddModalOpen = true"
@@ -202,31 +240,51 @@ onMounted(() => {
         </div>
       </div>
 
+      <section class="mb-lg flex flex-col gap-4 rounded-xl border border-outline-variant/40 bg-surface-container-lowest p-5 md:flex-row md:items-end md:justify-between" aria-labelledby="primary-warehouse-title">
+        <div class="flex items-center gap-2">
+          <h2 id="primary-warehouse-title" class="text-lg font-bold text-on-surface">Kho tổng của gian hàng</h2>
+          <InfoTip text="Mọi sách vật lý mới sẽ tạo phiếu nhập nháp tại kho này. Có thể đổi kho tổng trước khi thêm sách tiếp theo." label="Cách sử dụng kho tổng" />
+        </div>
+        <div class="flex w-full flex-col gap-2 sm:flex-row md:w-auto">
+          <label for="primary-warehouse" class="sr-only">Chọn kho tổng</label>
+          <select id="primary-warehouse" v-model="primaryWarehouseId" class="min-h-11 min-w-64 rounded-lg border border-outline bg-surface-container-lowest px-3 text-on-surface">
+            <option :value="null" disabled>Chọn kho tổng</option>
+            <option v-for="wh in warehouses" :key="wh.id" :value="wh.id" :disabled="!['active', 'Hoạt động'].includes(wh.status)">{{ wh.name }}</option>
+          </select>
+          <button type="button" class="min-h-11 rounded-lg bg-primary px-4 font-bold text-on-primary disabled:opacity-50" :disabled="!primaryWarehouseId || primaryWarehouseSaving" @click="setPrimaryWarehouse">{{ primaryWarehouseSaving ? 'Đang lưu...' : 'Lưu kho tổng' }}</button>
+        </div>
+      </section>
+
       <!-- Stats Grid -->
       <div class="grid grid-cols-1 md:grid-cols-3 gap-lg mb-xl">
         <div class="bg-surface-container-lowest rounded-xl p-lg soft-shadow border border-surface-container-high">
-          <div class="flex justify-between items-start mb-sm">
+          <div class="flex justify-between items-start gap-2 mb-sm">
             <h3 class="font-body-md text-body-md text-on-surface-variant">Tổng mặt hàng (Tất cả kho)</h3>
-            <span class="material-symbols-outlined text-primary bg-surface-container p-2 rounded-full">category</span>
+            <InfoTip text="Tổng số đầu sách đang được quản lý trong toàn bộ kho của gian hàng." label="Giải thích tổng mặt hàng" />
           </div>
           <p class="text-display-lg font-display-lg text-on-surface">{{ stats.total_items }}</p>
-          <p class="font-body-md text-body-md text-sm text-surface-tint mt-2">Đang được quản lý hệ thống</p>
         </div>
         <div class="bg-surface-container-lowest rounded-xl p-lg soft-shadow border border-surface-container-high">
-          <div class="flex justify-between items-start mb-sm">
+          <div class="flex justify-between items-start gap-2 mb-sm">
             <h3 class="font-body-md text-body-md text-on-surface-variant">Sách sắp hết (Dưới 10)</h3>
-            <span class="material-symbols-outlined text-[#d97706] bg-[#fef3c7] p-2 rounded-full">warning</span>
+            <InfoTip text="Danh sách sách còn từ 1 đến 9 cuốn trên toàn gian hàng." label="Tiêu chí sách sắp hết" />
           </div>
           <p class="text-display-lg font-display-lg text-on-surface">{{ stats.low_stock_items }}</p>
-          <p class="font-body-md text-body-md text-sm text-[#d97706] mt-2">Cần nhập thêm ngay</p>
+          <ul v-if="stats.low_stock_books?.length" class="mt-3 space-y-2 border-t border-outline-variant/40 pt-3">
+            <li v-for="book in stats.low_stock_books.slice(0, 3)" :key="book.id" class="flex items-start justify-between gap-3 text-sm"><span class="min-w-0"><span class="block truncate font-medium">{{ book.title }}</span><span class="block truncate text-xs text-on-surface-variant">{{ book.warehouse_names?.length ? book.warehouse_names.join(', ') : 'Chưa phân bổ vào kho' }}</span></span><strong class="shrink-0 text-amber-800">{{ book.stock }} cuốn</strong></li>
+          </ul>
+          <button type="button" class="mt-3 min-h-11 text-sm font-bold text-primary hover:underline" @click="applyStockFilter('Sắp hết')">Xem toàn bộ sách sắp hết</button>
         </div>
         <div class="bg-surface-container-lowest rounded-xl p-lg soft-shadow border border-surface-container-high">
-          <div class="flex justify-between items-start mb-sm">
+          <div class="flex justify-between items-start gap-2 mb-sm">
             <h3 class="font-body-md text-body-md text-on-surface-variant">Đã hết hàng</h3>
-            <span class="material-symbols-outlined text-secondary bg-secondary-fixed p-2 rounded-full">error</span>
+            <InfoTip text="Các sách không còn số lượng khả dụng để bán trong toàn bộ kho." label="Tiêu chí sách hết hàng" />
           </div>
           <p class="text-display-lg font-display-lg text-on-surface">{{ stats.out_of_stock_items }}</p>
-          <p class="font-body-md text-body-md text-sm text-secondary mt-2">Tạm ngừng hiển thị bán hàng</p>
+          <ul v-if="stats.out_of_stock_books?.length" class="mt-3 space-y-2 border-t border-outline-variant/40 pt-3">
+            <li v-for="book in stats.out_of_stock_books.slice(0, 3)" :key="book.id" class="flex items-center justify-between gap-3 text-sm"><span class="truncate font-medium">{{ book.title }}</span><span class="shrink-0 text-xs text-on-surface-variant">{{ book.is_unallocated ? 'Chưa phân bổ kho' : 'Đã về 0' }}</span></li>
+          </ul>
+          <button type="button" class="mt-3 min-h-11 text-sm font-bold text-primary hover:underline" @click="applyStockFilter('Hết hàng')">Xem toàn bộ sách hết hàng</button>
         </div>
       </div>
 
@@ -242,7 +300,7 @@ onMounted(() => {
                 @change="fetchWarehousesAndStocks(1)"
                 class="appearance-none bg-surface-container-lowest border border-outline rounded-lg pl-10 pr-8 py-2 font-body-md text-body-md text-on-surface focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none"
               >
-                <option value="Tất cả kho">Tất cả kho</option>
+                <option :value="null">Tất cả kho</option>
                 <option v-for="wh in warehouses" :key="wh.id" :value="wh.id">{{ wh.name }}</option>
               </select>
             </div>
@@ -283,7 +341,7 @@ onMounted(() => {
                 <th class="p-md font-medium">Mã SKU/ISBN</th>
                 <th class="p-md font-medium">Tên sách</th>
                 <th class="p-md font-medium">Loại</th>
-                <th class="p-md font-medium">Tổng tồn kho</th>
+                <th class="p-md font-medium">{{ selectedWarehouse ? 'Tồn tại kho đã chọn' : 'Tổng tồn kho' }}</th>
                 <th class="p-md font-medium">Vị trí kho chính</th>
                 <th class="p-md font-medium">Trạng thái</th>
               </tr>

@@ -30,6 +30,7 @@ class Vendor extends Model
         'onboarding_status',
         'business_model',
         'primary_organization_id',
+        'primary_warehouse_id',
         'is_demo',
         'demo_wallet_code',
         'application_version',
@@ -95,6 +96,11 @@ class Vendor extends Model
     public function books(): HasMany
     {
         return $this->hasMany(Book::class);
+    }
+
+    public function primaryWarehouse(): BelongsTo
+    {
+        return $this->belongsTo(Warehouse::class, 'primary_warehouse_id');
     }
 
     /**

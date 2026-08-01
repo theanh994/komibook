@@ -34,6 +34,7 @@ class StoreBookRequest extends FormRequest
             'series_name' => ['nullable', 'string', 'max:255'],
             'description' => ['nullable', 'string', 'max:5000'],
             'isbn' => ['nullable', 'string', 'max:20'],
+            'print_edition' => ['nullable', 'integer', 'min:1', 'max:999'],
             'dimensions' => ['nullable', 'string', 'max:50'],
             'cover_format' => ['nullable', 'string', 'max:50'],
             'weight' => ['nullable', 'string', 'max:50'],
@@ -53,6 +54,13 @@ class StoreBookRequest extends FormRequest
             'gallery_images' => ['nullable', 'array'],
             'gallery_images.*' => ['image', 'mimes:jpg,jpeg,png,webp', 'max:10240'],
             'ebook_file' => ['nullable', 'file', 'mimes:pdf,epub', 'max:51200', 'required_if:type,ebook'],
+            'warehouse_id' => ['required_if:type,physical', 'nullable', 'integer', 'exists:warehouses,id'],
+            'external_counterparty_name' => ['nullable', 'string', 'max:255'],
+            'initial_shelf_location' => ['nullable', 'string', 'max:255'],
+            'operation_key' => ['nullable', 'string', 'max:128'],
+            'publisher_relationship_id' => ['nullable', 'integer', 'exists:vendor_organization_relationships,id'],
+            'supplier_relationship_id' => ['nullable', 'integer', 'exists:vendor_organization_relationships,id'],
+            'responsible_organization_relationship_id' => ['nullable', 'integer', 'exists:vendor_organization_relationships,id'],
         ];
     }
 
@@ -68,9 +76,14 @@ class StoreBookRequest extends FormRequest
             'price' => 'Giá',
             'sale_price' => 'Giá khuyến mãi',
             'stock' => 'Tồn kho',
+            'print_edition' => 'Bản in',
             'type' => 'Loại sách',
             'cover_image' => 'Ảnh bìa',
             'ebook_file' => 'File E-book',
+            'warehouse_id' => 'Kho xuất hàng',
+            'publisher_relationship_id' => 'Nhà xuất bản',
+            'supplier_relationship_id' => 'Nhà cung ứng',
+            'responsible_organization_relationship_id' => 'Đơn vị chịu trách nhiệm',
         ];
     }
 
@@ -82,6 +95,10 @@ class StoreBookRequest extends FormRequest
         return [
             'sale_price.lt' => 'Giá khuyến mãi phải nhỏ hơn giá gốc.',
             'ebook_file.required_if' => 'Vui lòng tải lên file E-book khi loại sách là E-book.',
+            'warehouse_id.required_if' => 'Sách vật lý phải được nhập vào một kho của gian hàng.',
+            'publisher_relationship_id.required_unless' => 'Vui lòng chọn Nhà xuất bản cho sách mới.',
+            'supplier_relationship_id.required_unless' => 'Vui lòng chọn Nhà cung ứng cho sách mới.',
+            'responsible_organization_relationship_id.required_unless' => 'Vui lòng chọn Đơn vị chịu trách nhiệm cho sách mới.',
         ];
     }
 }

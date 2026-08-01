@@ -24,6 +24,7 @@ class VendorFollowController extends Controller
         $books = Book::withoutGlobalScopes()
             ->where('vendor_id', $vendor->id)
             ->sellable()
+            ->browseVisible()
             ->with(['vendor', 'category', 'categories', 'latestEbookVersion'])
             ->orderByDesc('views')
             ->orderByDesc('id')

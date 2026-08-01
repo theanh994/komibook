@@ -337,6 +337,21 @@ class InventoryReservationCheckoutIntegrationTest extends TestCase
 
         $this->assertEquals(8, $stock->fresh()->quantity);
         $this->assertEquals(8, $book->fresh()->stock);
+        $this->assertDatabaseHas('warehouse_documents', [
+            'vendor_id' => $vendor->id,
+            'order_id' => $order->id,
+            'source_warehouse_id' => $stock->warehouse_id,
+            'type' => 'dispatch',
+            'origin' => 'order_fulfillment',
+            'status' => 'posted',
+        ]);
+        $this->assertDatabaseHas('warehouse_stock_ledgers', [
+            'warehouse_id' => $stock->warehouse_id,
+            'book_id' => $book->id,
+            'quantity_delta' => -2,
+            'balance_after' => 8,
+        ]);
+        $this->assertDatabaseCount('warehouse_documents', 1);
     }
 
     /**

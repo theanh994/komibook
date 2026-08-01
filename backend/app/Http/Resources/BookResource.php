@@ -19,6 +19,7 @@ class BookResource extends JsonResource
         return [
             'id' => $this->id,
             'title' => $this->title,
+            'display_title' => $this->display_title,
             'slug' => $this->slug,
             'author' => $this->author,
             'translator' => $this->translator,
@@ -38,6 +39,11 @@ class BookResource extends JsonResource
             'price' => $this->price,
             'sale_price' => $this->sale_price,
             'stock' => $this->stock,
+            'print_edition' => max(1, (int) ($this->print_edition ?? 1)),
+            'discoverability' => $this->status !== 'published'
+                ? 'hidden'
+                : ((int) $this->stock > 0 ? 'browse_and_search' : 'search_only'),
+            'is_purchasable' => $this->isPurchasable(),
             'views' => $this->views ?? 0,
             'wishlists_count' => $this->wishlists_count ?? ($this->relationLoaded('wishlists') ? $this->wishlists->count() : $this->wishlists()->count()),
             'type' => $this->type,
@@ -84,10 +90,21 @@ class BookResource extends JsonResource
                         'display_name' => $organization?->display_name,
                         'slug' => $organization?->slug,
                         'organization_types' => $organization?->organization_types,
+                        'acceptance_status' => $organization?->status,
+                        'data_mode' => $organization?->data_mode,
+                        'is_demo' => $organization?->data_mode === 'demo',
                         'verified_at' => $party->verified_at?->toISOString(),
                         'party_version' => $party->version,
                     ]];
                 });
+            }),
+            'warehouse_stocks' => $this->whenLoaded('warehouseStocks', function () {
+                return $this->warehouseStocks->map(fn ($stock) => [
+                    'warehouse_id' => $stock->warehouse_id,
+                    'warehouse_name' => $stock->warehouse?->name,
+                    'quantity' => $stock->quantity,
+                    'shelf_location' => $stock->shelf_location,
+                ])->values();
             }),
             'categories' => $this->relationLoaded('categories') && $this->categories->isNotEmpty() ? $this->categories->map(function ($cat) {
                 return [

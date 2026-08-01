@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\UserNotification;
 use App\Models\WarehouseManagerAssignment;
 use App\Services\WarehouseAssignmentService;
 use Illuminate\Http\Request;
@@ -42,6 +43,44 @@ class WarehouseManagerPortalController extends Controller
             $request->user(),
             operationKey: $validated['operation_key'] ?? 'warehouse-assignment-accept:'.Str::uuid(),
         )]);
+    }
+
+    public function respond(
+        Request $request,
+        WarehouseManagerAssignment $assignment,
+        WarehouseAssignmentService $service,
+    ) {
+        $validated = $request->validate([
+            'decision' => ['required', 'in:accept,decline'],
+            'operation_key' => ['nullable', 'string', 'max:128'],
+        ]);
+        abort_unless($assignment->user_id === $request->user()->id, 403);
+        abort_unless($assignment->status === 'invited', 422, 'Lời mời này đã được phản hồi hoặc không còn hiệu lực.');
+        abort_if($assignment->expires_at?->isPast(), 422, 'Lời mời này đã hết hạn.');
+
+        $target = $validated['decision'] === 'accept' ? 'active' : 'declined';
+        $updated = $service->transition(
+            $assignment,
+            $target,
+            $request->user(),
+            operationKey: $validated['operation_key'] ?? 'warehouse-assignment-response:'.Str::uuid(),
+        );
+
+        UserNotification::where('user_id', $request->user()->id)
+            ->where('data->assignment_id', $assignment->id)
+            ->get()
+            ->each(function (UserNotification $notification) use ($target) {
+                $notification->update([
+                    'read_at' => now(),
+                    'data' => [...($notification->data ?? []), 'invitation_status' => $target],
+                ]);
+            });
+
+        return response()->json([
+            'status' => 'success',
+            'message' => $target === 'active' ? 'Bạn đã chấp nhận quản lý kho.' : 'Bạn đã từ chối lời mời quản lý kho.',
+            'data' => $updated,
+        ]);
     }
 
     public function dashboard(Request $request, WarehouseManagerAssignment $assignment)

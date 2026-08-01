@@ -34,12 +34,14 @@ class WarehouseController extends Controller
         // 2. Danh sách sách và phân bổ tồn kho
         $booksQuery = Book::withoutGlobalScopes()
             ->where('vendor_id', $vendor->id);
+        $selectedWarehouseId = null;
 
         // Áp dụng filters
         if ($request->filled('warehouse_id') && $request->warehouse_id !== 'Tất cả kho') {
             $warehouseId = (int) $request->warehouse_id;
             abort_unless($warehouseIds->contains($warehouseId), 403, 'Kho không thuộc gian hàng hiện tại.');
-            $booksQuery->whereHas('stocks', function ($q) use ($warehouseId) {
+            $selectedWarehouseId = $warehouseId;
+            $booksQuery->whereHas('warehouseStocks', function ($q) use ($warehouseId) {
                 $q->where('warehouse_id', $warehouseId);
             });
         }
@@ -51,7 +53,18 @@ class WarehouseController extends Controller
 
         if ($request->filled('status') && $request->status !== 'Tất cả trạng thái') {
             $statusFilter = $request->status;
-            if ($statusFilter === 'Còn hàng') {
+            if ($selectedWarehouseId) {
+                $booksQuery->whereHas('warehouseStocks', function ($query) use ($selectedWarehouseId, $statusFilter) {
+                    $query->where('warehouse_id', $selectedWarehouseId);
+                    if ($statusFilter === 'Còn hàng') {
+                        $query->where('quantity', '>=', 10);
+                    } elseif ($statusFilter === 'Sắp hết') {
+                        $query->where('quantity', '>', 0)->where('quantity', '<', 10);
+                    } elseif ($statusFilter === 'Hết hàng') {
+                        $query->where('quantity', 0);
+                    }
+                });
+            } elseif ($statusFilter === 'Còn hàng') {
                 $booksQuery->where('stock', '>=', 10);
             } elseif ($statusFilter === 'Sắp hết') {
                 $booksQuery->where('stock', '>', 0)->where('stock', '<', 10);
@@ -98,10 +111,15 @@ class WarehouseController extends Controller
             }
 
             // Trạng thái tồn kho
+            $displayStock = $book->stock;
+            if ($selectedWarehouseId && $book->type === 'physical') {
+                $displayStock = (int) $stocksByBook->get($book->id, collect())
+                    ->firstWhere('warehouse_id', $selectedWarehouseId)?->quantity;
+            }
             $stockStatus = 'Còn hàng';
-            if ($book->stock === 0) {
+            if ($displayStock === 0) {
                 $stockStatus = 'Hết hàng';
-            } elseif ($book->stock < 10) {
+            } elseif ($displayStock < 10) {
                 $stockStatus = 'Sắp hết';
             }
 
@@ -111,7 +129,8 @@ class WarehouseController extends Controller
                 'title' => $book->title,
                 'cover_image' => PublicMediaUrl::storage($book->cover_image),
                 'type' => $book->type === 'ebook' ? 'Ebook' : 'Sách vật lý',
-                'stock' => $book->stock,
+                'stock' => $displayStock,
+                'total_stock' => $book->stock,
                 'main_location' => $mainLocation,
                 'status' => $stockStatus,
                 'breakdown' => $breakdown,
@@ -120,6 +139,7 @@ class WarehouseController extends Controller
 
         return response()->json([
             'warehouses' => $warehouses,
+            'primary_warehouse_id' => $vendor->primary_warehouse_id,
             'stocks' => $stocksData,
             'pagination' => [
                 'total' => $books->total(),
@@ -140,6 +160,8 @@ class WarehouseController extends Controller
         $request->validate([
             'name' => 'required|string|max:255',
             'address' => 'required|string|max:500',
+            'province' => 'nullable|string|max:255',
+            'district' => 'nullable|string|max:255',
             'capacity' => 'nullable|string',
             'status' => 'nullable|string',
         ]);
@@ -154,14 +176,35 @@ class WarehouseController extends Controller
             'author_fulfillment_address_id' => null,
             'name' => $request->name,
             'address' => $request->address,
+            'province' => $request->province,
+            'district' => $request->district,
             'capacity' => $request->capacity ?: '0%',
             'status' => $request->status ?: 'Hoạt động',
         ]);
+
+        if (! $vendor->primary_warehouse_id) {
+            $vendor->update(['primary_warehouse_id' => $warehouse->id]);
+        }
 
         return response()->json([
             'message' => 'Tạo kho hàng thành công',
             'warehouse' => $warehouse,
         ], 201);
+    }
+
+    public function setPrimary(Request $request, Warehouse $warehouse)
+    {
+        $vendor = $request->user()->vendor()->withoutGlobalScopes()->firstOrFail();
+        abort_unless((int) $warehouse->vendor_id === (int) $vendor->id, 403);
+        abort_unless(in_array($warehouse->status, ['active', 'Hoạt động'], true), 422, 'Kho tổng phải đang hoạt động.');
+
+        $vendor->update(['primary_warehouse_id' => $warehouse->id]);
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Đã chọn kho tổng.',
+            'warehouse' => $warehouse,
+        ]);
     }
 
     /**
@@ -289,10 +332,33 @@ class WarehouseController extends Controller
             ->where('stock', 0)
             ->count();
 
+        $alertBooks = Book::withoutGlobalScopes()
+            ->where('vendor_id', $vendor->id)
+            ->where('type', 'physical')
+            ->where('stock', '<', 10)
+            ->with(['warehouseStocks.warehouse:id,name'])
+            ->orderBy('stock')
+            ->orderBy('title')
+            ->get()
+            ->map(fn (Book $book) => [
+                'id' => $book->id,
+                'title' => $book->title,
+                'cover_image' => PublicMediaUrl::storage($book->cover_image),
+                'stock' => (int) $book->stock,
+                'warehouse_names' => $book->warehouseStocks
+                    ->filter(fn (WarehouseStock $stock) => $stock->quantity > 0)
+                    ->pluck('warehouse.name')
+                    ->filter()
+                    ->values(),
+                'is_unallocated' => $book->warehouseStocks->isEmpty(),
+            ]);
+
         return response()->json([
             'total_items' => $totalItems,
             'low_stock_items' => $lowStockItems,
             'out_of_stock_items' => $outOfStockItems,
+            'low_stock_books' => $alertBooks->where('stock', '>', 0)->take(5)->values(),
+            'out_of_stock_books' => $alertBooks->where('stock', 0)->take(5)->values(),
         ]);
     }
 }

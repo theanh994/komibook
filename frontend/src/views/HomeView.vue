@@ -242,7 +242,7 @@
         >
           <!-- Cover -->
           <div class="relative pt-[140%] bg-surface-variant/30">
-            <img v-if="book.cover_image" :src="getCoverUrl(book.cover_image)" :alt="book.title" class="absolute inset-0 w-full h-full object-cover p-2 rounded-t-lg transition-transform duration-500 group-hover:scale-105" loading="lazy" />
+            <img v-if="book.cover_image && !brokenCoverIds.includes(book.id)" :src="getCoverUrl(book.cover_image)" :alt="book.display_title || book.title" class="absolute inset-0 w-full h-full object-cover p-2 rounded-t-lg transition-transform duration-500 group-hover:scale-105" loading="lazy" @error="markCoverBroken(book.id)" />
             <div v-else class="absolute inset-0 flex items-center justify-center"><span class="material-symbols-outlined text-outline text-4xl">image</span></div>
             <span v-if="book.type === 'ebook'" class="absolute bottom-2 left-2 bg-primary/90 text-on-primary text-[10px] font-bold px-2 py-1 rounded-md shadow-sm z-10">
               Ebook · Phiên bản {{ book.latest_ebook_version?.version || 1 }}
@@ -294,7 +294,7 @@
           </div>
           <!-- Info -->
           <div class="p-md flex flex-col justify-between flex-grow">
-            <h3 class="text-center text-sm font-medium text-on-surface line-clamp-2 leading-snug mb-1 group-hover:text-primary transition-colors">{{ book.title }}</h3>
+            <h3 class="text-center text-sm font-medium text-on-surface line-clamp-2 leading-snug mb-1 group-hover:text-primary transition-colors">{{ book.display_title || book.title }}</h3>
             <p v-if="book.type === 'ebook'" class="text-center text-[11px] font-bold text-primary mb-1">Phiên bản {{ book.latest_ebook_version?.version || 1 }}</p>
             <div class="text-center text-sm font-bold text-[#00b14f] flex items-center justify-center gap-1.5 mt-auto">
               <span>{{ formatCurrency(book.sale_price || book.price) }}</span>
@@ -344,7 +344,7 @@
           >
             <!-- Cover -->
             <div class="relative pt-[140%] bg-surface-variant/30">
-              <img v-if="book.cover_image" :src="getCoverUrl(book.cover_image)" :alt="book.title" class="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" loading="lazy" />
+              <img v-if="book.cover_image && !brokenCoverIds.includes(book.id)" :src="getCoverUrl(book.cover_image)" :alt="book.display_title || book.title" class="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" loading="lazy" @error="markCoverBroken(book.id)" />
               <div v-else class="absolute inset-0 flex items-center justify-center"><span class="material-symbols-outlined text-outline text-4xl">image</span></div>
               <span v-if="book.type === 'ebook'" class="absolute bottom-2 left-2 bg-primary/90 text-on-primary text-[10px] font-bold px-2 py-1 rounded-md shadow-sm z-10">
                 Ebook · Phiên bản {{ book.latest_ebook_version?.version || 1 }}
@@ -397,7 +397,7 @@
             </div>
             <!-- Info -->
             <div class="p-md flex flex-col justify-between flex-grow">
-              <h3 class="text-center text-sm font-medium text-on-surface line-clamp-2 leading-snug mb-1 group-hover:text-primary transition-colors">{{ book.title }}</h3>
+              <h3 class="text-center text-sm font-medium text-on-surface line-clamp-2 leading-snug mb-1 group-hover:text-primary transition-colors">{{ book.display_title || book.title }}</h3>
               <p v-if="book.type === 'ebook'" class="text-center text-[11px] font-bold text-primary mb-1">Phiên bản {{ book.latest_ebook_version?.version || 1 }}</p>
               <div class="text-center text-sm font-bold text-[#00b14f] flex items-center justify-center gap-1.5 mt-auto">
                 <span>{{ formatCurrency(book.sale_price || book.price) }}</span>
@@ -432,13 +432,15 @@
           <!-- Sale Badge on image top-right -->
           <div class="relative w-full max-w-[280px] pt-[140%] shadow-lg rounded-lg overflow-hidden bg-white">
             <img 
-              v-if="quickViewBook.cover_image" 
+              v-if="quickViewBook.cover_image && !brokenCoverIds.includes(quickViewBook.id)"
               :src="getCoverUrl(quickViewBook.cover_image)" 
-              :alt="quickViewBook.title" 
+              :alt="quickViewBook.display_title || quickViewBook.title"
               class="absolute inset-0 w-full h-full object-cover p-2" 
+              @error="markCoverBroken(quickViewBook.id)"
             />
-            <div v-else class="absolute inset-0 flex items-center justify-center">
-              <span class="material-symbols-outlined text-outline text-5xl">image</span>
+            <div v-else class="absolute inset-0 flex flex-col items-center justify-center gap-2 p-4 text-center text-outline">
+              <span class="material-symbols-outlined text-outline text-5xl" aria-hidden="true">image_not_supported</span>
+              <span class="text-xs font-semibold">Ảnh đang cập nhật</span>
             </div>
             
             <!-- Sale Percent Badge -->
@@ -555,6 +557,7 @@ const router = useRouter()
 const cartStore = useCartStore()
 const wishlistStore = useWishlistStore()
 const toast = useToast()
+const brokenCoverIds = ref([])
 
 const heroArticles = ref([])
 const heroError = ref(false)
@@ -894,6 +897,10 @@ const getCoverUrl = (path) => {
   if (path.includes('/storage/')) return path.substring(path.indexOf('/storage/'))
   if (path.startsWith('/')) return path
   return `/storage/${path}`
+}
+
+const markCoverBroken = (bookId) => {
+  if (!brokenCoverIds.value.includes(bookId)) brokenCoverIds.value.push(bookId)
 }
 
 const toggleWishlist = async (bookId) => {

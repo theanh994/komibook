@@ -13,6 +13,7 @@ use App\Models\InventoryReservationAllocation;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\WarehouseStock;
+use App\Services\OrderDispatchDocumentService;
 use DateTimeInterface;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -488,7 +489,7 @@ class InventoryReservationService
 
     public function commitSession(CheckoutSession $session): array
     {
-        return $this->commit($session);
+        return app(OrderDispatchDocumentService::class)->postSession($session);
     }
 
     public function commitReservation(InventoryReservation $reservation): InventoryReservation

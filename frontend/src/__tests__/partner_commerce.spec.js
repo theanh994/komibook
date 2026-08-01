@@ -17,7 +17,7 @@ describe('partner commerce UI contracts', () => {
   it('does not allow payout bank details to be entered at withdrawal time', () => {
     const source = read('../views/vendor/FinanceView.vue')
     expect(source).toContain('Tài khoản nhận doanh thu')
-    expect(source).toContain('payoutAccount.status !== \'verified\'')
+    expect(source).toContain("payoutAccount.status !== 'verified'")
     expect(source).not.toContain('v-model="withdrawForm.bank_name"')
     expect(source).not.toContain('v-model="withdrawForm.account_number"')
     expect(source).not.toContain('v-model="withdrawForm.account_name"')
@@ -26,8 +26,36 @@ describe('partner commerce UI contracts', () => {
   it('exposes agreement moderation and an organization entry point', () => {
     const adminSource = read('../views/admin/OrganizationReviewsView.vue')
     const headerSource = read('../components/layout/AppHeader.vue')
-    expect(adminSource).toContain('Thỏa thuận NXB – Nhà phân phối')
+    expect(adminSource).toContain('Thỏa thuận phân phối')
     expect(adminSource).toContain('/api/admin/distribution-agreements/')
     expect(headerSource).toContain('/organization-portal')
+  })
+
+  it('keeps demo-accepted relationships available for book supply-chain assignment', () => {
+    const workflowSource = read('../views/vendor/PublishingWorkflowView.vue')
+    const detailSource = read('../views/BookDetailView.vue')
+    expect(workflowSource).toContain("['verified', 'demo_accepted'].includes(item.status)")
+    expect(detailSource).toContain('Chưa khai báo chuỗi cung ứng')
+    expect(detailSource).toContain('Dữ liệu mô phỏng – không xác minh pháp lý')
+  })
+
+  it('guides accepted partner profiles to the books that still need links', () => {
+    const organizationSource = read('../views/vendor/OrganizationPartnersView.vue')
+    const workflowSource = read('../views/vendor/PublishingWorkflowView.vue')
+    expect(organizationSource).toContain('supply_chain')
+    expect(organizationSource).toContain('unlinked_books')
+    expect(organizationSource).toContain('vendor-book-publishing')
+    expect(organizationSource).toContain('updateOpen')
+    expect(workflowSource).toContain('hasDemoRelationship')
+    expect(workflowSource).toContain('relationshipStatusLabel')
+  })
+
+  it('provides a filterable and accessible relationship management dashboard', () => {
+    const adminSource = read('../views/admin/OrganizationReviewsView.vue')
+    expect(adminSource).toContain('sectionOptions')
+    expect(adminSource).toContain('role="tablist"')
+    expect(adminSource).toContain('Sách thiếu liên kết')
+    expect(adminSource).toContain('Lý do quyết định')
+    expect(adminSource).not.toContain('window.prompt')
   })
 })

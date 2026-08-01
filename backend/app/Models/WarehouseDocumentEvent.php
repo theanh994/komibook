@@ -26,4 +26,9 @@ class WarehouseDocumentEvent extends Model
     {
         return $this->belongsTo(WarehouseDocument::class, 'warehouse_document_id');
     }
+
+    public function actor(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'actor_id');
+    }
 }

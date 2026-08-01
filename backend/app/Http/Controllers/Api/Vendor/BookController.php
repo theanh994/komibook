@@ -7,17 +7,73 @@ use App\Http\Requests\Vendor\StoreBookRequest;
 use App\Http\Requests\Vendor\UpdateBookRequest;
 use App\Http\Resources\BookResource;
 use App\Models\Book;
-use App\Models\Series;
 use App\Models\EbookVersion;
+use App\Models\Series;
+use App\Models\Warehouse;
+use App\Models\WarehouseDocument;
+use App\Services\BookInventoryOnboardingService;
+use App\Services\BookSupplyChainRequirementResolver;
+use App\Services\CommercialPartyService;
 use App\Services\ProductTaxonomyService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Redis;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 
 class BookController extends Controller
 {
+    public function createScope(Request $request, BookSupplyChainRequirementResolver $resolver): JsonResponse
+    {
+        $vendor = $request->user()->vendor()->withoutGlobalScopes()->firstOrFail();
+        $activeWarehouses = Warehouse::withoutGlobalScopes()
+            ->where('vendor_id', $vendor->id)
+            ->whereIn('status', ['active', 'Hoạt động'])
+            ->orderBy('id')
+            ->get(['id', 'vendor_id', 'name', 'address', 'province', 'district', 'status']);
+        $primaryWarehouse = $activeWarehouses->firstWhere('id', $vendor->primary_warehouse_id)
+            ?? ($activeWarehouses->count() === 1 ? $activeWarehouses->first() : null);
+        $supplyChain = $resolver->scope($vendor);
+        $blockingReasons = [];
+        if (! $primaryWarehouse) {
+            $blockingReasons[] = $activeWarehouses->isEmpty()
+                ? 'Gian hàng chưa có kho đang hoạt động.'
+                : 'Gian hàng có nhiều kho nhưng chưa chọn kho tổng.';
+        }
+        if (! $supplyChain['supply_chain_ready']) {
+            $blockingReasons[] = 'Hồ sơ xuất bản và cung ứng chưa đủ điều kiện.';
+        }
+
+        return response()->json(['status' => 'success', 'data' => [
+            'vendor' => ['id' => $vendor->id, 'shop_name' => $vendor->shop_name],
+            'primary_warehouse' => $primaryWarehouse,
+            'warehouses' => $activeWarehouses,
+            'business_model' => $supplyChain['business_model'],
+            'supply_chain_mode' => $supplyChain['mode'],
+            'required_commercial_roles' => $supplyChain['required_commercial_roles'],
+            'inferred_relationship_id' => $supplyChain['inferred_relationship_id'],
+            'relationships' => $supplyChain['relationships']->map(fn ($relationship) => [
+                'id' => $relationship->id,
+                'role' => $relationship->role,
+                'status' => $relationship->status,
+                'is_demo' => (bool) $relationship->is_demo,
+                'organization' => $relationship->organization ? [
+                    'id' => $relationship->organization->id,
+                    'display_name' => $relationship->organization->display_name,
+                    'legal_name' => $relationship->organization->legal_name,
+                    'slug' => $relationship->organization->slug,
+                    'organization_types' => $relationship->organization->organization_types,
+                    'data_mode' => $relationship->organization->data_mode,
+                    'status' => $relationship->organization->status,
+                ] : null,
+            ])->values(),
+            'can_create_physical_book' => $blockingReasons === [],
+            'blocking_reasons' => $blockingReasons,
+        ]]);
+    }
+
     /**
      * Lấy danh sách sách của Vendor đang đăng nhập.
      *
@@ -114,9 +170,31 @@ class BookController extends Controller
      * vendor_id sẽ được tự động gán bởi MultiVendorScoped trait,
      * KHÔNG CẦN set thủ công.
      */
-    public function store(StoreBookRequest $request, ProductTaxonomyService $taxonomy): JsonResponse
-    {
+    public function store(
+        StoreBookRequest $request,
+        ProductTaxonomyService $taxonomy,
+        CommercialPartyService $commercialParties,
+        BookSupplyChainRequirementResolver $supplyChainResolver,
+        BookInventoryOnboardingService $inventoryOnboarding,
+    ): JsonResponse {
         $data = $request->validated();
+        $vendor = $request->user()->vendor()->withoutGlobalScopes()->firstOrFail();
+        $clientOperationKey = (string) ($data['operation_key'] ?? Str::uuid());
+        $receiptOperationKey = "book-create:{$vendor->id}:".substr($clientOperationKey, 0, 88);
+        $existingReceipt = WarehouseDocument::where('vendor_id', $vendor->id)
+            ->where('operation_key', $receiptOperationKey)
+            ->with('lines.book')
+            ->first();
+        if ($existingReceipt?->lines->first()?->book) {
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Yêu cầu này đã được xử lý trước đó.',
+                'data' => new BookResource($existingReceipt->lines->first()->book),
+                'receipt_document' => $existingReceipt,
+            ]);
+        }
+        $uploadedPublicPaths = [];
+        $uploadedPrivatePaths = [];
 
         // Tạo slug tự động từ title
         $data['slug'] = Str::slug($data['title']).'-'.Str::random(5);
@@ -125,6 +203,7 @@ class BookController extends Controller
         if ($request->hasFile('cover_image')) {
             $data['cover_image'] = $request->file('cover_image')
                 ->store('books/covers', 'public');
+            $uploadedPublicPaths[] = $data['cover_image'];
         } else {
             $data['cover_image'] = 'https://images.unsplash.com/photo-1543002588-bfa74002ed7e?q=80&w=600&auto=format&fit=crop';
         }
@@ -134,6 +213,7 @@ class BookController extends Controller
         if ($request->hasFile('gallery_images')) {
             foreach ($request->file('gallery_images') as $file) {
                 $gallery[] = $file->store('books/gallery', 'public');
+                $uploadedPublicPaths[] = $gallery[array_key_last($gallery)];
             }
         }
         $data['gallery_images'] = $gallery;
@@ -142,6 +222,7 @@ class BookController extends Controller
         if ($request->hasFile('ebook_file')) {
             $data['file_path'] = $request->file('ebook_file')
                 ->store('ebooks', 'local'); // Lưu ở disk private
+            $uploadedPrivatePaths[] = $data['file_path'];
         }
 
         // Xử lý danh mục (category_ids)
@@ -156,38 +237,120 @@ class BookController extends Controller
             $data['category_id'] = $categoryIds[0];
         }
 
-        // Xử lý bộ sách (Series)
-        if ($request->has('series_name')) {
-            $sName = trim((string) $request->input('series_name'));
-            if ($sName !== '') {
-                $series = Series::whereRaw('LOWER(title) = ?', [mb_strtolower($sName)])->first();
-                if (! $series) {
-                    $series = Series::create(['title' => $sName]);
-                }
-                $data['series_id'] = $series->id;
-            } else {
-                $data['series_id'] = null;
-            }
-        } elseif ($request->has('series_id')) {
-            $data['series_id'] = $request->input('series_id') ?: null;
+        $seriesNameProvided = $request->has('series_name');
+        $seriesName = $seriesNameProvided ? trim((string) $request->input('series_name')) : null;
+        $seriesIdProvided = $request->has('series_id') ? ($request->input('series_id') ?: null) : null;
+
+        $initialQuantity = max(0, (int) ($data['stock'] ?? 0));
+        $data['status'] = 'published';
+        $data['publishing_status'] = 'published';
+        $data['published_at'] = now();
+        if (($data['type'] ?? 'physical') === 'physical') {
+            $data['stock'] = 0;
         }
 
-        // Nếu không chỉ định status, mặc định là draft
-        $data['status'] = 'draft';
-        $data['publishing_status'] = 'draft';
+        $warehouseId = $data['warehouse_id'] ?? null;
+        $submittedRelationships = $data;
+        $externalCounterpartyName = $data['external_counterparty_name'] ?? null;
+        $initialShelfLocation = $data['initial_shelf_location'] ?? null;
+        unset(
+            $data['ebook_file'],
+            $data['category_ids'],
+            $data['series_name'],
+            $data['warehouse_id'],
+            $data['publisher_relationship_id'],
+            $data['supplier_relationship_id'],
+            $data['responsible_organization_relationship_id'],
+            $data['external_counterparty_name'],
+            $data['initial_shelf_location'],
+            $data['operation_key'],
+        );
 
-        unset($data['ebook_file'], $data['category_ids'], $data['series_name']);
+        try {
+            [$book, $receipt] = DB::transaction(function () use ($request, $vendor, $taxonomy, $commercialParties, $supplyChainResolver, $inventoryOnboarding, $data, $categoryIds, $warehouseId, $submittedRelationships, $seriesNameProvided, $seriesName, $seriesIdProvided, $initialQuantity, $externalCounterpartyName, $initialShelfLocation, $receiptOperationKey) {
+                if ($seriesNameProvided) {
+                    if ($seriesName !== '') {
+                        $series = Series::whereRaw('LOWER(title) = ?', [mb_strtolower($seriesName)])->firstOrCreate([
+                            'title' => $seriesName,
+                        ]);
+                        $data['series_id'] = $series->id;
+                    } else {
+                        $data['series_id'] = null;
+                    }
+                } elseif ($seriesIdProvided !== null) {
+                    $data['series_id'] = $seriesIdProvided;
+                }
+                $book = Book::create($taxonomy->normalize($data));
 
-        $book = Book::create($taxonomy->normalize($data));
+                if (! empty($categoryIds)) {
+                    $book->categories()->sync($categoryIds);
+                }
 
-        if (! empty($categoryIds)) {
-            $book->categories()->sync($categoryIds);
+                if ($book->type === 'physical') {
+                    $activeWarehouses = Warehouse::withoutGlobalScopes()
+                        ->where('vendor_id', $vendor->id)
+                        ->whereIn('status', ['active', 'Hoạt động'])
+                        ->orderBy('id')
+                        ->get();
+                    $warehouse = $activeWarehouses->firstWhere('id', $vendor->primary_warehouse_id)
+                        ?? ($activeWarehouses->count() === 1 ? $activeWarehouses->first() : null);
+                    if (! $warehouse) {
+                        throw ValidationException::withMessages([
+                            'warehouse_id' => 'Hãy chọn một kho tổng đang hoạt động trước khi thêm sách vật lý.',
+                        ]);
+                    }
+                    if ($warehouseId && (int) $warehouseId !== (int) $warehouse->id) {
+                        throw ValidationException::withMessages([
+                            'warehouse_id' => 'Sách mới chỉ được nhập vào kho tổng của gian hàng.',
+                        ]);
+                    }
+                    if (! $vendor->primary_warehouse_id) {
+                        $vendor->update(['primary_warehouse_id' => $warehouse->id]);
+                    }
+                }
+
+                if ($book->provenance !== 'used_resale') {
+                    $relationshipIds = $supplyChainResolver->resolve($vendor, $submittedRelationships);
+                    $book = $commercialParties->assign($book, $relationshipIds, $request->user());
+                }
+
+                $receipt = $book->type === 'physical'
+                    ? $inventoryOnboarding->createReceiptDraft(
+                        $book,
+                        $vendor,
+                        $warehouse,
+                        $request->user(),
+                        $initialQuantity,
+                        $externalCounterpartyName,
+                        $initialShelfLocation,
+                        $receiptOperationKey,
+                    )
+                    : null;
+
+                return [$book, $receipt];
+            });
+        } catch (\Throwable $exception) {
+            foreach ($uploadedPublicPaths as $path) {
+                Storage::disk('public')->delete($path);
+            }
+            foreach ($uploadedPrivatePaths as $path) {
+                Storage::disk('local')->delete($path);
+            }
+            throw $exception;
         }
 
         return response()->json([
             'status' => 'success',
-            'message' => 'Thêm sách thành công!',
-            'data' => new BookResource($book->load(['category', 'categories'])),
+            'message' => $receipt
+                ? 'Đã tạo sách công khai và phiếu nhập nháp. Tồn kho chỉ tăng sau khi ghi sổ phiếu.'
+                : 'Thêm sách thành công!',
+            'data' => new BookResource($book->load([
+                'category',
+                'categories',
+                'activeCommercialParties.organization',
+                'warehouseStocks.warehouse',
+            ])),
+            'receipt_document' => $receipt,
         ], 201);
     }
 
@@ -211,6 +374,13 @@ class BookController extends Controller
     public function update(UpdateBookRequest $request, Book $book, ProductTaxonomyService $taxonomy): JsonResponse
     {
         $data = $request->validated();
+
+        if (array_key_exists('status', $data)) {
+            $data['publishing_status'] = $data['status'];
+            $data['published_at'] = $data['status'] === 'published'
+                ? ($book->published_at ?? now())
+                : null;
+        }
 
         // Cập nhật slug nếu title thay đổi
         if (isset($data['title']) && $data['title'] !== $book->title) {
@@ -309,7 +479,7 @@ class BookController extends Controller
             $data['series_id'] = $request->input('series_id') ?: null;
         }
 
-        unset($data['ebook_file'], $data['category_ids'], $data['existing_gallery_images'], $data['series_name'], $data['status'], $data['publishing_status']);
+        unset($data['ebook_file'], $data['category_ids'], $data['existing_gallery_images'], $data['series_name']);
 
         $book->update($taxonomy->normalize($data, $book));
 

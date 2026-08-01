@@ -29,6 +29,7 @@
             Hủy
           </button>
           <button 
+            v-if="isEditMode"
             type="button" 
             @click="submitForm('draft')" 
             :disabled="saving"
@@ -39,19 +40,19 @@
           </button>
           <button 
             type="button" 
-            @click="submitForm('workflow')"
+            @click="submitForm('save')"
             :disabled="saving"
             class="px-5 py-2.5 bg-primary text-on-primary font-bold text-xs uppercase tracking-wider rounded-xl shadow-md hover:bg-primary/90 active:scale-95 transition-all cursor-pointer flex items-center gap-1.5 border-none"
           >
             <span v-if="saving" class="material-symbols-outlined animate-spin text-base">progress_activity</span>
             <span v-else class="material-symbols-outlined text-base">check_circle</span>
-            <span>{{ isEditMode ? 'Lưu và cấu hình xuất bản' : 'Tạo bản nháp' }}</span>
+            <span>{{ isEditMode ? 'Lưu thay đổi' : 'Tạo sách & phiếu nhập' }}</span>
           </button>
         </div>
       </div>
 
       <!-- Main Form Grid -->
-      <form @submit.prevent="submitForm(bookForm.status)" class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+      <form @submit.prevent="submitForm('save')" class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         
         <!-- ─── LEFT COLUMN (2/3 width: Core Info, Pricing, Specs) ─── -->
         <div class="lg:col-span-8 space-y-6">
@@ -87,9 +88,35 @@
               </div>
 
               <!-- Mã ISBN / SKU (Ẩn khi chọn E-book Digital) -->
-              <div v-if="bookForm.type !== 'ebook'">
-                <label class="block text-[11px] font-bold uppercase tracking-wider text-outline mb-1.5">Mã ISBN / SKU</label>
-                <InputText v-model="bookForm.isbn" placeholder="Ví dụ: 978-604-XXX" class="w-full !h-11 !p-3 !rounded-xl !bg-surface-container-low !border-none text-sm" />
+              <div v-if="bookForm.type !== 'ebook'" class="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div>
+                  <label for="book-isbn" class="block text-[11px] font-bold uppercase tracking-wider text-outline mb-1.5">Mã ISBN / SKU</label>
+                  <InputText id="book-isbn" v-model="bookForm.isbn" placeholder="Ví dụ: 978-604-XXX" class="w-full !h-11 !p-3 !rounded-xl !bg-surface-container-low !border-none text-sm" />
+                </div>
+                <div class="space-y-3">
+                  <label for="book-print-edition" class="block text-[11px] font-bold uppercase tracking-wider text-outline mb-1.5">Bản in <span class="text-error">*</span></label>
+                  <Select
+                    id="book-print-edition"
+                    v-model="printEditionSelection"
+                    :options="printEditionOptions"
+                    optionLabel="label"
+                    optionValue="value"
+                    class="w-full !h-11"
+                    @change="onPrintEditionSelectionChange"
+                  />
+                  <div v-if="printEditionSelection === 'custom'" class="flex items-center gap-2">
+                    <InputNumber
+                      v-model="customPrintEdition"
+                      :min="11"
+                      :max="999"
+                      inputId="book-custom-print-edition"
+                      class="w-full !h-11"
+                      @update:modelValue="onCustomPrintEditionChange"
+                    />
+                    <InfoTip text="Dùng khi sách đã vượt quá bản in lần thứ mười. Nhập số lần in thực tế từ 11 trở lên." label="Hướng dẫn nhập Bản in trên 10" />
+                  </div>
+                  <p class="mt-1.5 text-xs text-on-surface-variant">Tên hiển thị: <strong>{{ displayTitlePreview }}</strong></p>
+                </div>
               </div>
 
               <div>
@@ -124,12 +151,13 @@
                 <InputNumber v-model="bookForm.sale_price" :min="0" :step="1000" class="w-full !h-11" placeholder="Tự tính theo % giảm" />
               </div>
               <div class="w-full">
-                <label class="block text-[11px] font-bold uppercase tracking-wider text-outline mb-1.5">Số lượng tồn kho <span class="text-error">*</span></label>
+                <label class="block text-[11px] font-bold uppercase tracking-wider text-outline mb-1.5">{{ isEditMode ? 'Tồn kho hiện tại' : 'Số lượng nhập ban đầu' }} <span class="text-error">*</span></label>
                 <div v-if="bookForm.type === 'ebook'" class="h-11 bg-surface-container-low rounded-xl flex items-center px-4 font-bold text-xs text-emerald-600 border border-emerald-600/20 w-full">
                   <span class="material-symbols-outlined text-base mr-1.5">all_inclusive</span>
                   Vô hạn (Digital)
                 </div>
                 <InputNumber v-else v-model="bookForm.stock" :min="0" class="w-full !h-11" />
+                <InfoTip v-if="!isEditMode && bookForm.type !== 'ebook'" class="mt-1" text="Số lượng này được đưa vào phiếu nhập nháp. Tồn kho chỉ tăng sau khi phiếu được ghi sổ." label="Cách cập nhật tồn kho ban đầu" />
               </div>
             </div>
           </div>
@@ -419,8 +447,76 @@
             </div>
           </div>
 
+          <!-- Card 3: Vận hành ban đầu cho sách mới -->
+          <div v-if="!isEditMode" class="bg-surface-container-lowest rounded-2xl p-6 border border-outline-variant/20 shadow-sm space-y-4">
+            <div class="flex items-center justify-between gap-3 border-b border-outline-variant/10 pb-3">
+              <h3 class="text-lg font-bold text-on-surface">Kho & Chuỗi Cung Ứng</h3>
+              <InfoTip text="Thiết lập một lần khi tạo sách để sản phẩm không còn ở trạng thái thiếu thông tin vận hành." label="Thông tin về Kho và Chuỗi Cung Ứng" />
+            </div>
+
+            <div v-if="operationsLoading" class="flex min-h-24 items-center justify-center gap-2 text-sm text-on-surface-variant" role="status">
+              <i class="pi pi-spin pi-spinner"></i>
+              Đang tải dữ liệu vận hành...
+            </div>
+
+            <div v-else class="space-y-4">
+              <div v-if="bookForm.type === 'physical'">
+                <label class="block text-[11px] font-bold uppercase tracking-wider text-outline mb-1.5">Kho tổng nhận hàng <span class="text-error">*</span></label>
+                <div v-if="primaryWarehouse" class="min-h-11 rounded-xl border border-outline-variant/40 bg-surface-container-low px-4 py-3" role="status">
+                  <p class="text-sm font-bold text-on-surface">{{ primaryWarehouse.name }}</p>
+                  <p class="mt-1 text-xs text-on-surface-variant">{{ primaryWarehouse.address }}</p>
+                </div>
+                <div v-else class="mt-2 rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs leading-relaxed text-amber-900">
+                  Gian hàng cần chọn một kho tổng đang hoạt động trước khi thêm sách vật lý.
+                  <RouterLink to="/vendor/warehouses" class="ml-1 font-bold underline">Đăng ký kho ngay</RouterLink>
+                </div>
+              </div>
+
+              <div v-if="supplyChainMode === 'self_supplied'" class="rounded-xl border border-primary/20 bg-primary/5 p-4 text-sm leading-6 text-on-surface" role="note">
+                <p class="font-bold">Chuỗi cung ứng tự quản</p>
+                <p class="mt-1 text-on-surface-variant">Hệ thống dùng hồ sơ tổ chức chính của gian hàng cho Nhà xuất bản, Nhà cung ứng và Đơn vị chịu trách nhiệm. Bạn không cần chọn lại.</p>
+              </div>
+
+              <div v-else class="grid grid-cols-1 gap-4">
+                <div>
+                  <label class="block text-[11px] font-bold uppercase tracking-wider text-outline mb-1.5">Nhà xuất bản <span class="text-error">*</span></label>
+                  <Select v-model="operationsForm.publisher_relationship_id" :options="publisherOptions" optionLabel="label" optionValue="value" placeholder="Chọn Nhà xuất bản" class="w-full !h-11" />
+                </div>
+                <div>
+                  <label class="block text-[11px] font-bold uppercase tracking-wider text-outline mb-1.5">Nhà cung ứng <span class="text-error">*</span></label>
+                  <Select v-model="operationsForm.supplier_relationship_id" :options="supplierOptions" optionLabel="label" optionValue="value" placeholder="Chọn Nhà cung ứng" class="w-full !h-11" />
+                </div>
+                <div>
+                  <label class="block text-[11px] font-bold uppercase tracking-wider text-outline mb-1.5">Đơn vị chịu trách nhiệm <span class="text-error">*</span></label>
+                  <Select v-model="operationsForm.responsible_organization_relationship_id" :options="responsibleOptions" optionLabel="label" optionValue="value" placeholder="Chọn đơn vị chịu trách nhiệm" class="w-full !h-11" />
+                </div>
+              </div>
+
+              <div v-if="supplyChainMode !== 'self_supplied' && !hasUsableRelationships" class="rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs leading-relaxed text-amber-900">
+                Chưa có quan hệ tổ chức đủ điều kiện. Quan hệ đã xác minh và dữ liệu demo đã chấp nhận đều được sử dụng tại đây.
+                <RouterLink to="/vendor/organizations" class="ml-1 font-bold underline">Quản lý tổ chức</RouterLink>
+              </div>
+
+              <div v-if="bookForm.type === 'physical'" class="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div>
+                  <div class="mb-1.5 flex items-center justify-between gap-2"><label for="external-printer" class="block text-[11px] font-bold uppercase tracking-wider text-outline">Đơn vị in ngoài hệ thống</label><InfoTip text="Thông tin này chỉ được lưu làm tham chiếu trên phiếu, không tạo quan hệ pháp lý trong hệ thống." label="Ý nghĩa đơn vị in ngoài hệ thống" /></div>
+                  <InputText id="external-printer" v-model="operationsForm.external_counterparty_name" placeholder="Tên đơn vị in hoặc nguồn nhập" class="w-full !h-11 !p-3 !rounded-xl !bg-surface-container-low !border-none text-sm" />
+                </div>
+                <div>
+                  <label for="initial-shelf" class="block text-[11px] font-bold uppercase tracking-wider text-outline mb-1.5">Vị trí kệ dự kiến</label>
+                  <InputText id="initial-shelf" v-model="operationsForm.initial_shelf_location" placeholder="Ví dụ: Kệ A-01" class="w-full !h-11 !p-3 !rounded-xl !bg-surface-container-low !border-none text-sm" />
+                </div>
+              </div>
+
+              <div v-if="blockingReasons.length" class="rounded-xl border border-error/30 bg-error-container p-4 text-sm text-on-error-container" role="alert">
+                <p class="font-bold">Chưa thể tạo sách vật lý</p>
+                <ul class="mt-2 list-disc space-y-1 pl-5"><li v-for="reason in blockingReasons" :key="reason">{{ reason }}</li></ul>
+              </div>
+            </div>
+          </div>
+
           <!-- Card 3: Visibility Status (Clean Header - No Icon) -->
-          <div class="bg-surface-container-lowest rounded-2xl p-6 border border-outline-variant/20 shadow-sm space-y-4">
+          <div v-if="isEditMode" class="bg-surface-container-lowest rounded-2xl p-6 border border-outline-variant/20 shadow-sm space-y-4">
             <h3 class="text-lg font-bold text-on-surface border-b border-outline-variant/10 pb-3">
               Trạng Thái Xuất Bản
             </h3>
@@ -453,11 +549,12 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed, watch } from 'vue'
+import { ref, onMounted, onBeforeUnmount, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useToast } from 'primevue/usetoast'
 import { useAuthStore } from '@/stores/auth'
 import apiClient from '@/services/axios'
+import InfoTip from '@/components/InfoTip.vue'
 
 import InputText from 'primevue/inputtext'
 import InputNumber from 'primevue/inputnumber'
@@ -472,14 +569,55 @@ const authStore = useAuthStore()
 
 const isEditMode = computed(() => !!route.params.id)
 const saving = ref(false)
+const bookCreateOperationKey = globalThis.crypto?.randomUUID?.() || `book-create-${Date.now()}`
 
 const categories = ref([])
 const existingSeriesList = ref([])
 const discountPercent = ref(null)
 const bookVendorName = ref('')
+const operationsLoading = ref(false)
+const organizationRelationships = ref([])
+const createScope = ref({})
+const operationsForm = ref({
+  warehouse_id: null,
+  publisher_relationship_id: null,
+  supplier_relationship_id: null,
+  responsible_organization_relationship_id: null,
+  external_counterparty_name: '',
+  initial_shelf_location: '',
+})
+
+const primaryWarehouse = computed(() => createScope.value.primary_warehouse || null)
+const supplyChainMode = computed(() => createScope.value.supply_chain_mode || 'partner_chain')
+const blockingReasons = computed(() => createScope.value.blocking_reasons || [])
 
 const vendorShopName = computed(() => {
   return bookVendorName.value || authStore.user?.vendor?.shop_name || authStore.user?.name || 'Gian hàng của bạn'
+})
+
+const acceptedRelationships = computed(() => organizationRelationships.value.filter(rel => {
+  const organizationAccepted = rel.organization?.status === 'verified'
+    || (rel.organization?.data_mode === 'demo' && rel.organization?.status === 'demo_accepted')
+  return ['verified', 'demo_accepted'].includes(rel.status) && organizationAccepted
+}))
+const relationshipOption = (rel) => ({
+  value: rel.id,
+  label: `${rel.organization?.display_name || rel.organization?.legal_name || 'Tổ chức'}${rel.status === 'demo_accepted' ? ' · Demo đã chấp nhận' : ' · Đã xác minh'}`,
+})
+const publisherOptions = computed(() => acceptedRelationships.value
+  .filter(rel => rel.organization?.organization_types?.includes('publisher') && ['self_legal_entity', 'publisher_partner'].includes(rel.role))
+  .map(relationshipOption))
+const supplierOptions = computed(() => acceptedRelationships.value
+  .filter(rel => rel.organization?.organization_types?.some(type => ['supplier', 'publisher', 'distributor'].includes(type)) && ['self_legal_entity', 'supplier_partner', 'authorized_distributor'].includes(rel.role))
+  .map(relationshipOption))
+const responsibleOptions = computed(() => acceptedRelationships.value
+  .filter(rel => ['self_legal_entity', 'publisher_partner', 'supplier_partner', 'authorized_distributor'].includes(rel.role))
+  .map(relationshipOption))
+const hasUsableRelationships = computed(() => publisherOptions.value.length > 0 && supplierOptions.value.length > 0 && responsibleOptions.value.length > 0)
+const displayTitlePreview = computed(() => {
+  const title = bookForm.value?.title?.trim() || 'Tên sách'
+  const edition = Math.max(1, Number(bookForm.value?.print_edition) || 1)
+  return edition === 1 ? title : `${title} — Tái bản lần ${edition}`
 })
 
 const bookForm = ref({
@@ -490,6 +628,7 @@ const bookForm = ref({
   category_ids: [],
   description: '',
   isbn: '',
+  print_edition: 1,
   dimensions: '13 x 18 cm',
   cover_format: 'Bìa mềm',
   weight: '',
@@ -503,6 +642,28 @@ const bookForm = ref({
   type: 'physical',
   status: 'draft',
 })
+
+const printEditionOptions = [
+  { label: 'Bản in đầu', value: 1 },
+  { label: 'Bản in lần thứ hai', value: 2 },
+  { label: 'Bản in lần thứ ba', value: 3 },
+  { label: 'Bản in lần thứ tư', value: 4 },
+  { label: 'Bản in lần thứ năm', value: 5 },
+  { label: 'Bản in lần thứ sáu', value: 6 },
+  { label: 'Bản in lần thứ bảy', value: 7 },
+  { label: 'Bản in lần thứ tám', value: 8 },
+  { label: 'Bản in lần thứ chín', value: 9 },
+  { label: 'Bản in lần thứ mười', value: 10 },
+  { label: 'Bản in lần thứ… (nhập số)', value: 'custom' },
+]
+const printEditionSelection = ref(1)
+const customPrintEdition = ref(11)
+const onPrintEditionSelectionChange = ({ value }) => {
+  bookForm.value.print_edition = value === 'custom' ? customPrintEdition.value : value
+}
+const onCustomPrintEditionChange = (value) => {
+  bookForm.value.print_edition = Math.max(11, Number(value) || 11)
+}
 
 // Tự động tính "Giá sau giảm" khi nhập "Giá gốc" hoặc "% Giảm giá"
 watch(
@@ -539,6 +700,7 @@ const handleCoverFileChange = (e) => {
       e.target.value = ''
       return
     }
+    if (coverPreviewUrl.value.startsWith('blob:')) URL.revokeObjectURL(coverPreviewUrl.value)
     coverFile.value = file
     coverPreviewUrl.value = URL.createObjectURL(file)
   }
@@ -651,6 +813,7 @@ const fetchBookDetail = async (id) => {
       category_ids: bookData.categories?.map(c => c.id) || [],
       description: bookData.description || '',
       isbn: bookData.isbn || '',
+      print_edition: bookData.print_edition || 1,
       dimensions: bookData.dimensions || '13 x 18 cm',
       cover_format: bookData.cover_format || 'Bìa mềm',
       weight: bookData.weight || '350',
@@ -664,6 +827,8 @@ const fetchBookDetail = async (id) => {
       type: bookData.type || 'physical',
       status: bookData.status || 'draft',
     }
+    printEditionSelection.value = bookForm.value.print_edition <= 10 ? bookForm.value.print_edition : 'custom'
+    customPrintEdition.value = bookForm.value.print_edition > 10 ? bookForm.value.print_edition : 11
 
     if (bookData.price > 0 && bookData.sale_price && bookData.sale_price < bookData.price) {
       discountPercent.value = Math.round((1 - bookData.sale_price / bookData.price) * 100)
@@ -682,11 +847,13 @@ const fetchBookDetail = async (id) => {
 }
 
 const clearCoverImage = () => {
+  if (coverPreviewUrl.value.startsWith('blob:')) URL.revokeObjectURL(coverPreviewUrl.value)
   coverFile.value = null
   coverPreviewUrl.value = ''
 }
 
 const removeNewGalleryImage = (idx) => {
+  if (galleryPreviewUrls.value[idx]?.startsWith('blob:')) URL.revokeObjectURL(galleryPreviewUrls.value[idx])
   galleryFiles.value.splice(idx, 1)
   galleryPreviewUrls.value.splice(idx, 1)
 }
@@ -720,6 +887,7 @@ const getCoverUrl = (path) => {
 }
 
 const submitForm = async (targetStatus) => {
+  if (isEditMode.value && targetStatus === 'draft') bookForm.value.status = 'draft'
   if (!bookForm.value.title || !bookForm.value.author) {
     toast.add({ severity: 'warn', summary: 'Thiếu thông tin', detail: 'Vui lòng nhập tên sách và tác giả.', life: 3000 })
     return
@@ -727,6 +895,16 @@ const submitForm = async (targetStatus) => {
   if (!bookForm.value.category_ids || bookForm.value.category_ids.length === 0) {
     toast.add({ severity: 'warn', summary: 'Thiếu thông tin', detail: 'Vui lòng chọn ít nhất một danh mục.', life: 3000 })
     return
+  }
+  if (!isEditMode.value) {
+    if (bookForm.value.type === 'physical' && (!primaryWarehouse.value || blockingReasons.value.length)) {
+      toast.add({ severity: 'warn', summary: 'Chưa sẵn sàng vận hành', detail: blockingReasons.value[0] || 'Vui lòng chọn kho tổng cho sách vật lý.', life: 4000 })
+      return
+    }
+    if (supplyChainMode.value !== 'self_supplied' && (!operationsForm.value.publisher_relationship_id || !operationsForm.value.supplier_relationship_id || !operationsForm.value.responsible_organization_relationship_id)) {
+      toast.add({ severity: 'warn', summary: 'Thiếu chuỗi cung ứng', detail: 'Vui lòng chọn đủ Nhà xuất bản, Nhà cung ứng và Đơn vị chịu trách nhiệm.', life: 4000 })
+      return
+    }
   }
 
   if (bookForm.value.type === 'ebook') {
@@ -737,7 +915,7 @@ const submitForm = async (targetStatus) => {
   try {
     const formData = new FormData()
     Object.entries(bookForm.value).forEach(([key, val]) => {
-      if (key === 'status') return
+      if (key === 'status' && !isEditMode.value) return
       if (key === 'category_ids' && Array.isArray(val)) {
         val.forEach(id => formData.append('category_ids[]', id))
       } else if (val !== null && val !== undefined && val !== '') {
@@ -756,23 +934,24 @@ const submitForm = async (targetStatus) => {
     }
 
     if (!isEditMode.value) {
-      await apiClient.post('/api/vendor/books', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
+      formData.append('operation_key', bookCreateOperationKey)
+      Object.entries(operationsForm.value).forEach(([key, value]) => {
+        if (value !== null && value !== undefined) formData.append(key, value)
       })
-      toast.add({ severity: 'success', summary: 'Thành công', detail: 'Đã thêm sách mới!', life: 3000 })
+      const response = await apiClient.post('/api/vendor/books', formData)
+      const receiptId = response.data.receipt_document?.id
+      toast.add({ severity: 'success', summary: 'Đã tạo sách và phiếu nhập', detail: 'Sách đã công khai. Hãy kiểm tra và ghi sổ phiếu để mở bán.', life: 4500 })
+      if (receiptId) {
+        router.push({ name: 'vendor-warehouse-documents', query: { document_id: receiptId } })
+        return
+      }
     } else {
       formData.append('_method', 'PUT')
-      await apiClient.post(`/api/vendor/books/${route.params.id}`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      })
+      await apiClient.post(`/api/vendor/books/${route.params.id}`, formData)
       toast.add({ severity: 'success', summary: 'Thành công', detail: 'Đã cập nhật cuốn sách!', life: 3000 })
     }
 
-    if (targetStatus === 'workflow' && isEditMode.value) {
-      router.push(`/vendor/books/${route.params.id}/publishing`)
-    } else {
-      router.push('/vendor/books')
-    }
+    router.push('/vendor/books')
   } catch (e) {
     const msg = e.response?.data?.message || 'Có lỗi xảy ra khi lưu sách.'
     toast.add({ severity: 'error', summary: 'Lỗi', detail: msg, life: 4000 })
@@ -790,12 +969,38 @@ const fetchExistingSeries = async () => {
   }
 }
 
+const fetchOperationalOptions = async () => {
+  operationsLoading.value = true
+  try {
+    const response = await apiClient.get('/api/vendor/books/create-scope')
+    createScope.value = response.data.data || {}
+    organizationRelationships.value = createScope.value.relationships || []
+    operationsForm.value.warehouse_id = createScope.value.primary_warehouse?.id ?? null
+    operationsForm.value.publisher_relationship_id = publisherOptions.value[0]?.value ?? null
+    operationsForm.value.supplier_relationship_id = supplierOptions.value[0]?.value ?? null
+    operationsForm.value.responsible_organization_relationship_id = responsibleOptions.value[0]?.value ?? null
+  } catch (e) {
+    toast.add({ severity: 'error', summary: 'Không tải được dữ liệu vận hành', detail: 'Vui lòng tải lại trang trước khi tạo sách.', life: 4500 })
+  } finally {
+    operationsLoading.value = false
+  }
+}
+
 onMounted(() => {
   fetchCategories()
   fetchExistingSeries()
   if (isEditMode.value) {
     fetchBookDetail(route.params.id)
+  } else {
+    fetchOperationalOptions()
   }
+})
+
+onBeforeUnmount(() => {
+  if (coverPreviewUrl.value.startsWith('blob:')) URL.revokeObjectURL(coverPreviewUrl.value)
+  galleryPreviewUrls.value.forEach(url => {
+    if (url.startsWith('blob:')) URL.revokeObjectURL(url)
+  })
 })
 
 const publicationYearOptions = computed(() => {

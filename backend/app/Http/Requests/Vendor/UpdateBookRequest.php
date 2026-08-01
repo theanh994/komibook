@@ -34,6 +34,7 @@ class UpdateBookRequest extends FormRequest
             'series_name' => ['nullable', 'string', 'max:255'],
             'description' => ['nullable', 'string', 'max:5000'],
             'isbn' => ['nullable', 'string', 'max:20'],
+            'print_edition' => ['sometimes', 'integer', 'min:1', 'max:999'],
             'dimensions' => ['nullable', 'string', 'max:50'],
             'cover_format' => ['nullable', 'string', 'max:50'],
             'weight' => ['nullable', 'string', 'max:50'],
@@ -45,6 +46,7 @@ class UpdateBookRequest extends FormRequest
             'sale_price' => ['nullable', 'integer', 'min:0'],
             'stock' => ['sometimes', 'required', 'integer', 'min:0'],
             'type' => ['sometimes', 'required', Rule::in(['physical', 'ebook'])],
+            'status' => ['sometimes', 'required', Rule::in(['draft', 'published'])],
             'format' => ['sometimes', 'required', Rule::in(['physical', 'ebook'])],
             'provenance' => ['sometimes', 'required', Rule::in(['self_published', 'used_resale', 'publisher_catalog'])],
             'condition' => ['nullable', Rule::in(['new', 'like_new', 'good', 'fair'])],
@@ -70,6 +72,7 @@ class UpdateBookRequest extends FormRequest
             'sale_price' => 'Giá khuyến mãi',
             'stock' => 'Tồn kho',
             'type' => 'Loại sách',
+            'status' => 'Trạng thái xuất bản',
             'cover_image' => 'Ảnh bìa',
             'ebook_file' => 'File E-book',
         ];

@@ -179,11 +179,16 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/vendors/{vendor}/documents/{type}', [VendorOnboardingController::class, 'downloadDocument']);
     Route::get('/warehouse-manager/assignments', [WarehouseManagerPortalController::class, 'assignments']);
     Route::post('/warehouse-manager/assignments/{assignment}/accept', [WarehouseManagerPortalController::class, 'accept']);
+    Route::post('/warehouse-manager/assignments/{assignment}/respond', [WarehouseManagerPortalController::class, 'respond']);
     Route::get('/warehouse-manager/assignments/{assignment}/dashboard', [WarehouseManagerPortalController::class, 'dashboard']);
     Route::get('/warehouse-manager/documents', [WarehouseDocumentController::class, 'index']);
     Route::get('/warehouse-manager/document-scope', [WarehouseDocumentController::class, 'scope']);
     Route::post('/warehouse-manager/documents', [WarehouseDocumentController::class, 'store']);
     Route::get('/warehouse-manager/documents/{document}', [WarehouseDocumentController::class, 'show']);
+    Route::get('/warehouse-manager/documents/{document}/print', [WarehouseDocumentController::class, 'printable']);
+    Route::get('/warehouse-manager/documents/{document}/pdf', [WarehouseDocumentController::class, 'pdf']);
+    Route::get('/warehouse-manager/documents/{document}/excel', [WarehouseDocumentController::class, 'excel']);
+    Route::put('/warehouse-manager/documents/{document}', [WarehouseDocumentController::class, 'update']);
     Route::patch('/warehouse-manager/documents/{document}/transition', [WarehouseDocumentController::class, 'transition']);
 
     // Tickets yêu cầu hỗ trợ (Khách hàng)
@@ -211,6 +216,7 @@ Route::middleware(['auth:sanctum', 'role:vendor', 'active-vendor'])->prefix('ven
 
     Route::post('books/bulk-series', [App\Http\Controllers\Api\Vendor\BookController::class, 'bulkSeries'])->name('books.bulkSeries');
     Route::post('books/bulk-discount', [App\Http\Controllers\Api\Vendor\BookController::class, 'bulkDiscount'])->name('books.bulkDiscount');
+    Route::get('books/create-scope', [App\Http\Controllers\Api\Vendor\BookController::class, 'createScope'])->name('books.create-scope');
 
     // Quản lý Bộ Sách (Vendor Series)
     Route::get('series', [SeriesController::class, 'index'])->name('series.index');
@@ -238,14 +244,20 @@ Route::middleware(['auth:sanctum', 'role:vendor', 'active-vendor'])->prefix('ven
     Route::get('warehouses', [WarehouseController::class, 'index'])->name('warehouses.index');
     Route::get('warehouses/stats', [WarehouseController::class, 'stats'])->name('warehouses.stats');
     Route::post('warehouses', [WarehouseController::class, 'store'])->name('warehouses.store');
+    Route::patch('warehouses/{warehouse}/primary', [WarehouseController::class, 'setPrimary'])->name('warehouses.primary');
     Route::post('warehouses/adjust', [WarehouseController::class, 'adjustStock'])->name('warehouses.adjust');
     Route::get('warehouse-documents', [WarehouseDocumentController::class, 'index'])->name('warehouse-documents.index');
     Route::get('warehouse-document-scope', [WarehouseDocumentController::class, 'scope'])->name('warehouse-documents.scope');
     Route::post('warehouse-documents', [WarehouseDocumentController::class, 'store'])->name('warehouse-documents.store');
     Route::get('warehouse-documents/{document}', [WarehouseDocumentController::class, 'show'])->name('warehouse-documents.show');
+    Route::get('warehouse-documents/{document}/print', [WarehouseDocumentController::class, 'printable'])->name('warehouse-documents.print');
+    Route::get('warehouse-documents/{document}/pdf', [WarehouseDocumentController::class, 'pdf'])->name('warehouse-documents.pdf');
+    Route::get('warehouse-documents/{document}/excel', [WarehouseDocumentController::class, 'excel'])->name('warehouse-documents.excel');
+    Route::put('warehouse-documents/{document}', [WarehouseDocumentController::class, 'update'])->name('warehouse-documents.update');
     Route::patch('warehouse-documents/{document}/transition', [WarehouseDocumentController::class, 'transition'])->name('warehouse-documents.transition');
     Route::get('warehouse-managers', [VendorWarehouseManagerController::class, 'index'])->name('warehouse-managers.index');
     Route::post('warehouse-managers/invite', [VendorWarehouseManagerController::class, 'invite'])->name('warehouse-managers.invite');
+    Route::post('warehouse-managers/{assignment}/resend', [VendorWarehouseManagerController::class, 'resendInvitation'])->name('warehouse-managers.resend');
     Route::patch('warehouse-managers/{assignment}/transition', [VendorWarehouseManagerController::class, 'transition'])->name('warehouse-managers.transition');
     Route::get('organizations', [App\Http\Controllers\Api\Vendor\OrganizationController::class, 'index'])->name('organizations.index');
     Route::post('organizations', [App\Http\Controllers\Api\Vendor\OrganizationController::class, 'storeOrganization'])->name('organizations.store');

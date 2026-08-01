@@ -18,6 +18,7 @@ class CategoryController extends Controller
         $publishedBookCount = Book::withoutGlobalScopes()
             ->selectRaw('COUNT(DISTINCT books.id)')
             ->sellable()
+            ->browseVisible()
             ->where(function ($bookQuery) {
                 $bookQuery
                     ->whereColumn('books.category_id', 'categories.id')
@@ -43,9 +44,9 @@ class CategoryController extends Controller
         }
 
         return response()->json([
-            'status'  => 'success',
+            'status' => 'success',
             'message' => 'Lấy danh mục thành công.',
-            'data'    => $categories->get(),
+            'data' => $categories->get(),
         ]);
     }
 }

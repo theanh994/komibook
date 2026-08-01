@@ -45,14 +45,11 @@
             </div>
 
             <div v-else class="space-y-md">
-              <button
+              <article
                 v-for="noti in notifications"
                 :key="noti.id"
-                type="button"
-                @click="handleMarkAsRead(noti)"
-                class="w-full min-h-11 p-lg rounded-2xl border-2 transition-colors cursor-pointer flex gap-lg hover:shadow-sm text-left"
+                class="w-full min-h-11 p-lg rounded-2xl border-2 transition-colors flex gap-lg hover:shadow-sm text-left"
                 :class="!noti.read_at ? 'border-primary/20 bg-primary/5' : 'border-outline-variant/10 hover:border-outline-variant/40'"
-                :aria-label="`${noti.read_at ? 'Đã đọc' : 'Chưa đọc'}: ${noti.title}`"
               >
                 <!-- Icon and Type Specific Colors -->
                 <div :class="['w-12 h-12 rounded-2xl shrink-0 flex items-center justify-center', noti.data?.colorClass || 'bg-slate-100 text-slate-600']">
@@ -76,12 +73,40 @@
                   <div v-if="noti.data?.image_url" class="mt-3 rounded-xl overflow-hidden max-w-md max-h-40 border border-slate-100 shadow-sm">
                     <img :src="noti.data.image_url" class="w-full h-full object-contain" :alt="`Ảnh minh họa cho ${noti.title}`" />
                   </div>
+
+                  <div v-if="isPendingWarehouseInvitation(noti)" class="mt-4 flex flex-wrap gap-2" aria-label="Phản hồi lời mời quản lý kho">
+                    <button
+                      type="button"
+                      class="min-h-11 rounded-xl bg-primary px-4 py-2 text-sm font-bold text-on-primary disabled:cursor-wait disabled:opacity-60"
+                      :disabled="respondingId === noti.id"
+                      @click.stop="respondToWarehouseInvitation(noti, 'accept')"
+                    >
+                      <i v-if="respondingId === noti.id" class="pi pi-spin pi-spinner mr-2"></i>
+                      Chấp nhận
+                    </button>
+                    <button
+                      type="button"
+                      class="min-h-11 rounded-xl border border-outline-variant bg-transparent px-4 py-2 text-sm font-bold text-on-surface disabled:cursor-wait disabled:opacity-60"
+                      :disabled="respondingId === noti.id"
+                      @click.stop="respondToWarehouseInvitation(noti, 'decline')"
+                    >
+                      Từ chối
+                    </button>
+                  </div>
+                  <p v-else-if="isWarehouseInvitation(noti)" class="mt-3 text-xs font-bold" :class="noti.data?.invitation_status === 'active' ? 'text-emerald-700' : 'text-on-surface-variant'">
+                    {{ warehouseInvitationStatus(noti) }}
+                  </p>
                 </div>
-                <span v-if="!noti.read_at" class="flex shrink-0 items-center gap-2 text-xs font-bold text-primary">
+                <button
+                  v-if="!noti.read_at"
+                  type="button"
+                  class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-xs font-bold text-primary hover:bg-primary/10"
+                  :aria-label="`Đánh dấu đã đọc: ${noti.title}`"
+                  @click="handleMarkAsRead(noti)"
+                >
                   <span class="h-2 w-2 rounded-full bg-primary" aria-hidden="true"></span>
-                  <span class="sr-only">Chưa đọc</span>
-                </span>
-              </button>
+                </button>
+              </article>
             </div>
 
             <!-- Load More button -->
@@ -132,8 +157,40 @@ const page = ref(1)
 const hasMore = ref(false)
 const unreadCount = ref(0)
 const error = ref('')
+const respondingId = ref(null)
 
 const hasUnread = computed(() => unreadCount.value > 0)
+
+const isWarehouseInvitation = (noti) => noti.data?.action_type === 'warehouse_assignment_invitation'
+const isPendingWarehouseInvitation = (noti) => isWarehouseInvitation(noti) && noti.data?.invitation_status === 'invited'
+
+const warehouseInvitationStatus = (noti) => {
+  if (noti.data?.invitation_status === 'active') return 'Bạn đã chấp nhận lời mời này.'
+  if (noti.data?.invitation_status === 'declined') return 'Bạn đã từ chối lời mời này.'
+  return 'Lời mời không còn hiệu lực.'
+}
+
+const respondToWarehouseInvitation = async (noti, decision) => {
+  respondingId.value = noti.id
+  try {
+    const res = await apiClient.post(`/api/warehouse-manager/assignments/${noti.data.assignment_id}/respond`, {
+      decision,
+      operation_key: `notification:${noti.id}:${decision}`,
+    })
+    noti.data = {
+      ...noti.data,
+      invitation_status: decision === 'accept' ? 'active' : 'declined',
+    }
+    if (!noti.read_at) unreadCount.value = Math.max(0, unreadCount.value - 1)
+    noti.read_at = new Date().toISOString()
+    toast.add({ severity: 'success', summary: 'Đã phản hồi', detail: res.data.message, life: 3000 })
+  } catch (err) {
+    const detail = err.response?.data?.message || 'Không thể phản hồi lời mời này.'
+    toast.add({ severity: 'error', summary: 'Lỗi', detail, life: 4000 })
+  } finally {
+    respondingId.value = null
+  }
+}
 
 const fetchNotifications = async (isLoadMore = false) => {
   loading.value = true

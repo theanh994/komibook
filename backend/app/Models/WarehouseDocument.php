@@ -12,6 +12,10 @@ class WarehouseDocument extends Model
         'vendor_id',
         'document_code',
         'type',
+        'origin',
+        'receipt_mode',
+        'external_counterparty_name',
+        'snapshot',
         'source_warehouse_id',
         'destination_warehouse_id',
         'order_id',
@@ -31,6 +35,7 @@ class WarehouseDocument extends Model
     protected function casts(): array
     {
         return [
+            'snapshot' => 'array',
             'submitted_at' => 'datetime',
             'approved_at' => 'datetime',
             'posted_at' => 'datetime',
@@ -66,5 +71,10 @@ class WarehouseDocument extends Model
     public function events(): HasMany
     {
         return $this->hasMany(WarehouseDocumentEvent::class);
+    }
+
+    public function order(): BelongsTo
+    {
+        return $this->belongsTo(Order::class);
     }
 }

@@ -73,13 +73,13 @@
                 <div                  ref="thumbnailScrollContainer"
                   class="flex flex-row md:flex-col gap-2 w-full h-full overflow-x-auto md:overflow-y-auto max-h-[530px] scrollbar-none scroll-smooth py-0.5"
                 >
-                  <div                    v-for="(img, idx) in allImages"                    :key="idx"
+                  <div                    v-for="(img, idx) in allImages"                    :key="img"
                     class="w-20 h-[99.6px] rounded-none overflow-hidden border border-slate-300 border-solid cursor-pointer shrink-0 transition-all duration-300 relative group bg-white flex items-center justify-center"
                     :class="activeImageIndex === idx ? '!border-2 !border-primary ring-2 ring-primary/40 scale-[1.02] shadow-sm' : 'hover:border-primary/60 opacity-75 hover:opacity-100'"
                     @mouseover="activeImageIndex = idx"
                     @click="activeImageIndex = idx"
                   >
-                    <img :src="getCoverUrl(img)" :alt="book.title" class="w-full h-full object-contain mx-auto rounded-none" />
+                    <img :src="getCoverUrl(img)" :alt="`${book.title} - ảnh ${idx + 1}`" class="w-full h-full object-contain mx-auto rounded-none" @error="handleGalleryImageError(img)" />
                   </div>
                 </div>
 
@@ -104,8 +104,11 @@
                     @mouseleave="onMouseLeave"
                     @dblclick="openLightbox"
                   >
-                    <img v-if="activeImageUrl" :src="activeImageUrl" :alt="book.title" class="w-full h-full object-contain mx-auto select-none rounded-none pointer-events-none" />
-                    <span v-else class="material-symbols-outlined text-5xl text-outline" aria-hidden="true">image</span>
+                    <img v-if="activeImageUrl" :src="activeImageUrl" :alt="book.title" class="w-full h-full object-contain mx-auto select-none rounded-none pointer-events-none" @error="handleGalleryImageError(activeImagePath)" />
+                    <div v-else class="flex h-full w-full flex-col items-center justify-center gap-3 bg-surface-container-low px-6 text-center text-on-surface-variant" role="status">
+                      <span class="material-symbols-outlined text-5xl text-outline" aria-hidden="true">image_not_supported</span>
+                      <p class="text-sm font-semibold">Ảnh đang được cập nhật</p>
+                    </div>
                     <!-- Lens Overlay when Hovering -->
                     <div                      v-if="isZooming"                      class="absolute border-2 border-primary bg-primary/20 pointer-events-none z-30 rounded-none shadow-md backdrop-blur-[1px]"
                       :style="{                        width: lensWidth + 'px',                        height: lensHeight + 'px',
@@ -175,7 +178,7 @@
                 </div>
 
                 <h1 class="text-2xl lg:text-3xl font-extrabold text-on-surface tracking-tight leading-tight mb-3">
-                  {{ book.title }}
+                  {{ book.display_title || book.title }}
                 </h1>
 
                 <!-- Điểm đánh giá và thông tin người viết của ấn phẩm -->
@@ -243,7 +246,10 @@
               <!-- Metadata Specifications Grid -->
               <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6 py-4 border-y border-outline-variant/10">
                 <div v-for="meta in bookMeta" :key="meta.label" class="space-y-1 p-2 rounded-xl hover:bg-surface-container-low/40 transition-colors">
-                   <p class="text-xs font-bold uppercase tracking-wider text-outline">{{ meta.label }}</p>
+                   <div class="flex items-center gap-1.5">
+                     <p class="text-xs font-bold uppercase tracking-wider text-outline">{{ meta.label }}</p>
+                     <InfoTip v-if="meta.note" :text="meta.note" :label="`Giải thích ${meta.label}`" />
+                   </div>
                    <p class="text-sm font-bold text-on-surface tracking-tight">{{ meta.value }}</p>
                 </div>
               </div>
@@ -266,13 +272,16 @@
                   </div>
                 </div>
                 <div v-if="book.commercial_parties && Object.keys(book.commercial_parties).length" class="mt-5 grid gap-3 md:grid-cols-3">
-                  <router-link v-for="(party, role) in book.commercial_parties" :key="role" :to="{ name: 'organization-public', params: { slug: party.slug } }" class="min-h-24 rounded-xl border border-outline-variant/40 bg-surface-container-lowest p-4 no-underline transition-shadow duration-200 hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
-                    <p class="text-xs font-semibold uppercase tracking-wider text-on-surface-variant">{{ role === 'publisher' ? 'Nhà xuất bản' : role === 'supplier' ? 'Nhà cung cấp' : 'Đơn vị chịu trách nhiệm được khai báo' }}</p>
-                    <p class="mt-2 font-bold text-on-surface">{{ party.display_name }}</p>
-                    <p class="mt-1 text-xs text-primary"><span class="material-symbols-outlined mr-1 align-middle text-sm" aria-hidden="true">verified</span>Đã xác minh</p>
-                  </router-link>
+                  <div v-for="(party, role) in book.commercial_parties" :key="role" class="min-h-24 rounded-xl border border-outline-variant/40 bg-surface-container-lowest p-4 transition-shadow duration-200 hover:shadow-md">
+                    <div class="flex items-start gap-1.5">
+                      <p class="text-xs font-semibold uppercase tracking-wider text-on-surface-variant">{{ role === 'publisher' ? 'Nhà xuất bản' : role === 'supplier' ? 'Nhà cung cấp' : 'Đơn vị chịu trách nhiệm được khai báo' }}</p>
+                      <InfoTip v-if="party.is_demo" text="Dữ liệu mô phỏng phục vụ trình diễn, không phải xác minh quan hệ pháp lý." :label="`Giải thích dữ liệu mô phỏng của ${party.display_name}`" />
+                    </div>
+                    <router-link :to="{ name: 'organization-public', params: { slug: party.slug } }" class="mt-2 block font-bold text-on-surface no-underline hover:text-primary focus-visible:rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-fixed-dim">{{ party.display_name }}</router-link>
+                    <span v-if="!party.is_demo" class="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-primary"><span class="material-symbols-outlined text-sm" aria-hidden="true">verified</span>Đã xác minh</span>
+                  </div>
                 </div>
-                <p v-else class="mt-4 rounded-xl bg-surface-container p-4 text-sm text-on-surface-variant">Sản phẩm legacy đang được đối chiếu hồ sơ xuất bản và chuỗi cung ứng.</p>
+                <p v-else-if="!book.commercial_parties || !Object.keys(book.commercial_parties).length" class="mt-4 rounded-xl bg-surface-container p-4 text-sm text-on-surface-variant">Sách chưa được gắn Nhà xuất bản, Nhà cung cấp và đơn vị chịu trách nhiệm.</p>
               </section>
 
               <!-- Compact Description -->
@@ -383,70 +392,12 @@
               </div>
             </section>
 
-            <!-- SÁCH CÙNG BỘ (SERIES BOOKS - 4 BOOKS PER ROW WITH CAROUSEL ARROWS) -->
-            <section v-if="seriesBooks && seriesBooks.length > 0" class="bg-surface-container-lowest rounded-[32px] p-6 lg:p-8 border border-outline-variant/10 shadow-sm relative">
-              <header class="flex items-center justify-between gap-4 mb-5">
-                <div>
-                  <h3 class="text-lg font-bold text-on-surface tracking-tight mb-1 flex items-center gap-2">
-                    <span class="material-symbols-outlined text-primary text-2xl">auto_stories</span>
-                    Sách cùng bộ (Series)
-                  </h3>
-                  <p class="text-xs text-on-surface-variant font-medium opacity-60">Khám phá các tập khác thuộc cùng bộ sách này.</p>
-                </div>
-
-                <!-- Navigation Arrow Controls -->
-                <div v-if="seriesBooks.length > 4" class="flex items-center gap-2">
-                  <span class="text-xs font-semibold text-slate-500 mr-1.5">
-                    {{ seriesPageIndex + 1 }} / {{ totalSeriesPages }}
-                  </span>
-                  <button                    type="button"
-                    :disabled="seriesPageIndex === 0"                    @click="prevSeriesPage"
-                    class="flex h-11 w-11 items-center justify-center rounded-xl border border-outline-variant/30 bg-surface-container-low text-on-surface shadow-xs transition-colors hover:border-primary hover:bg-primary hover:text-on-primary disabled:cursor-not-allowed disabled:opacity-30"
-                    aria-label="Trang series trước"
-                  >
-                    <span class="material-symbols-outlined text-lg">chevron_left</span>
-                  </button>
-                  <button                    type="button"
-                    :disabled="seriesPageIndex >= totalSeriesPages - 1"                    @click="nextSeriesPage"
-                    class="flex h-11 w-11 items-center justify-center rounded-xl border border-outline-variant/30 bg-surface-container-low text-on-surface shadow-xs transition-colors hover:border-primary hover:bg-primary hover:text-on-primary disabled:cursor-not-allowed disabled:opacity-30"
-                    aria-label="Trang series tiếp theo"
-                  >
-                    <span class="material-symbols-outlined text-lg">chevron_right</span>
-                  </button>
-                </div>
-              </header>
-
-              <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                <div
-                  v-for="sBook in visibleSeriesBooks"
-                  :key="sBook.id"
-                  @click="goToDetail(sBook.slug)"
-                  class="group bg-surface-container-lowest rounded-b-2xl rounded-t-none overflow-hidden border border-outline-variant/30 shadow-sm hover:shadow-lg hover:-translate-y-1.5 transition-all duration-300 flex flex-col justify-between cursor-pointer"
-                >
-                  <!-- Cover Image: Edge-to-edge top, square corners at top, no grey background -->
-                  <div class="relative w-full aspect-[3/4.2] overflow-hidden bg-surface-variant/10">
-                    <img                      :src="getCoverUrl(sBook.cover_image)"                      :alt="sBook.title"                      class="h-full w-full rounded-none object-contain p-2"                    />
-                    <span v-if="sBook.sale_price && sBook.price > sBook.sale_price" class="absolute top-2 right-2 bg-secondary text-on-secondary text-[10px] font-extrabold px-2 py-0.5 rounded-md shadow-sm z-10">
-                      -{{ Math.round((1 - sBook.sale_price / sBook.price) * 100) }}%
-                    </span>
-                  </div>
-                  <!-- Bottom Text & Price Details -->
-                  <div class="p-3.5 pt-3">
-                    <h4 class="text-xs font-bold text-on-surface line-clamp-2 leading-snug group-hover:text-primary transition-colors mb-1.5 min-h-[32px]">
-                      {{ sBook.title }}
-                    </h4>
-                    <div class="flex items-baseline gap-1.5">
-                      <span class="text-xs font-extrabold text-secondary">
-                        {{ formatCurrency(sBook.sale_price || sBook.price) }}
-                      </span>
-                      <span v-if="sBook.sale_price && sBook.price > sBook.sale_price" class="text-[10px] text-outline line-through font-normal">
-                        {{ formatCurrency(sBook.price) }}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </section>
+            <SeriesOrbitCarousel
+              v-if="seriesBooks.length"
+              :books="seriesBooks"
+              :current-book-id="book.id"
+              :series-title="book.series?.title"
+            />
 
           </div>
 
@@ -475,8 +426,8 @@
             >
               <!-- Cover Image: Edge-to-edge top, square corners at top -->
               <div class="relative w-full aspect-[3/4.2] overflow-hidden bg-surface-variant/10">
-                <img v-if="rBook.cover_image" :src="getCoverUrl(rBook.cover_image)" :alt="rBook.title" class="h-full w-full rounded-none object-contain p-2" loading="lazy" />
-                <div v-else class="absolute inset-0 flex items-center justify-center"><span class="material-symbols-outlined text-outline text-4xl">image</span></div>
+                <img v-if="rBook.cover_image && !brokenRelatedCoverIds.includes(rBook.id)" :src="getCoverUrl(rBook.cover_image)" :alt="rBook.title" class="h-full w-full rounded-none object-contain p-2" loading="lazy" @error="markRelatedCoverBroken(rBook.id)" />
+                <div v-else class="absolute inset-0 flex flex-col items-center justify-center gap-2 p-3 text-center text-outline"><span class="material-symbols-outlined text-4xl" aria-hidden="true">image_not_supported</span><span class="text-xs font-semibold">Ảnh đang cập nhật</span></div>
                 <span v-if="rBook.sale_price && rBook.price > rBook.sale_price" class="absolute top-2 right-2 bg-secondary text-on-secondary text-[10px] font-extrabold px-2 py-0.5 rounded-md shadow-sm z-10">
                   -{{ Math.round((1 - rBook.sale_price / rBook.price) * 100) }}%
                 </span>
@@ -574,7 +525,8 @@
             <span class="material-symbols-outlined text-3xl">chevron_left</span>
           </button>
 
-          <img            :src="activeImageUrl"            :alt="book?.title"            class="max-h-[82vh] max-w-[85vw] object-contain shadow-[0_0_50px_rgba(0,0,0,0.8)] rounded-xl transition-all duration-300"          />
+          <img v-if="activeImageUrl" :src="activeImageUrl" :alt="book?.title" class="max-h-[82vh] max-w-[85vw] object-contain shadow-[0_0_50px_rgba(0,0,0,0.8)] rounded-xl transition-all duration-300" @error="handleGalleryImageError(activeImagePath)" />
+          <div v-else class="flex flex-col items-center gap-3 text-white/80"><span class="material-symbols-outlined text-6xl" aria-hidden="true">image_not_supported</span><p>Ảnh đang được cập nhật</p></div>
 
           <button            v-if="allImages.length > 1"            @click="activeImageIndex = (activeImageIndex + 1) % allImages.length"            class="absolute right-4 z-20 w-12 h-12 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center backdrop-blur-md transition-all border-none cursor-pointer"
           >
@@ -601,6 +553,8 @@ import apiClient from '@/services/axios'
 import { useAuthStore } from '@/stores/auth'
 import { useCartStore } from '@/stores/cart'
 import { useWishlistStore } from '@/stores/wishlist'
+import InfoTip from '@/components/InfoTip.vue'
+import SeriesOrbitCarousel from '@/components/SeriesOrbitCarousel.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -620,26 +574,6 @@ const relatedAuthorBooks = ref([])
 const recentAnnotations = ref([])
 const ownershipData = ref({ owned: false, order_id: null, book_id: null })
 
-const seriesPageIndex = ref(0)
-const totalSeriesPages = computed(() => Math.ceil((seriesBooks.value?.length || 0) / 4))
-const visibleSeriesBooks = computed(() => {
-  if (!seriesBooks.value || seriesBooks.value.length === 0) return []
-  const start = seriesPageIndex.value * 4
-  return seriesBooks.value.slice(start, start + 4)
-})
-
-const prevSeriesPage = () => {
-  if (seriesPageIndex.value > 0) {
-    seriesPageIndex.value--
-  }
-}
-
-const nextSeriesPage = () => {
-  if (seriesPageIndex.value < totalSeriesPages.value - 1) {
-    seriesPageIndex.value++
-  }
-}
-
 const goToDetail = (slug) => {
   if (!slug) return
   router.push(`/book/${slug}`).then(() => {
@@ -656,6 +590,8 @@ const activePreviewChapter = ref(null)
 
 const activeImageIndex = ref(0)
 const thumbnailScrollContainer = ref(null)
+const failedGalleryImagePaths = ref([])
+const brokenRelatedCoverIds = ref([])
 
 const scrollThumbnails = (direction) => {
   if (thumbnailScrollContainer.value) {
@@ -677,16 +613,40 @@ const zoomBgWidth = ref(0)
 const zoomBgHeight = ref(0)
 const lightboxVisible = ref(false)
 
-const allImages = computed(() => {
+const candidateImages = computed(() => {
   if (!book.value) return []
-  const list = [book.value.cover_image, ...(book.value.gallery_images || [])].filter(Boolean)
-  return list
+  return [...new Set([book.value.cover_image, ...(book.value.gallery_images || [])].filter(Boolean))]
+})
+
+const allImages = computed(() => {
+  return candidateImages.value.filter((path) => !failedGalleryImagePaths.value.includes(path))
+})
+
+const activeImagePath = computed(() => {
+  return allImages.value[activeImageIndex.value] || null
 })
 
 const activeImageUrl = computed(() => {
-  const raw = allImages.value[activeImageIndex.value] || book.value?.cover_image
-  return getCoverUrl(raw)
+  return getCoverUrl(activeImagePath.value)
 })
+
+const handleGalleryImageError = (path) => {
+  if (path && !failedGalleryImagePaths.value.includes(path)) {
+    failedGalleryImagePaths.value.push(path)
+  }
+
+  if (activeImageIndex.value >= allImages.value.length) {
+    activeImageIndex.value = Math.max(0, allImages.value.length - 1)
+  }
+  if (allImages.value.length === 0) {
+    isZooming.value = false
+    lightboxVisible.value = false
+  }
+}
+
+const markRelatedCoverBroken = (bookId) => {
+  if (!brokenRelatedCoverIds.value.includes(bookId)) brokenRelatedCoverIds.value.push(bookId)
+}
 
 const displayCategories = computed(() => {
   if (book.value?.categories && book.value.categories.length > 0) {
@@ -791,7 +751,13 @@ const bookTags = computed(() => {
 const bookMeta = computed(() => {
   if (!book.value) return []
   const meta = [
-    { label: 'Nhà cung cấp', value: book.value.commercial_parties?.supplier?.display_name || 'Đang xác minh' },
+    {
+      label: 'Nhà cung cấp',
+      value: book.value.commercial_parties?.supplier?.display_name || 'Chưa khai báo chuỗi cung ứng',
+      note: book.value.commercial_parties?.supplier?.is_demo
+        ? 'Dữ liệu mô phỏng – không xác minh pháp lý'
+        : null,
+    },
   ]
 
   if (book.value.translator) {
@@ -1024,12 +990,13 @@ const getCoverUrl = (path) => {
 watch(() => route.params.slug, (newSlug) => {
   if (newSlug) {
     seriesBooks.value = []
-    seriesPageIndex.value = 0
     relatedAuthorBooks.value = []
     relatedCategoryBooks.value = []
     ownershipData.value = { owned: false, order_id: null, book_id: null }
     recentAnnotations.value = []
     activeImageIndex.value = 0
+    failedGalleryImagePaths.value = []
+    brokenRelatedCoverIds.value = []
     fetchBookDetail()
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }

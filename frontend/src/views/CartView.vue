@@ -78,7 +78,7 @@
                   <div class="flex-1 flex flex-col justify-between">
                     <div class="flex justify-between items-start gap-4">
                       <div class="flex-1">
-                        <h3 class="text-lg font-bold text-on-surface line-clamp-2 hover:text-primary cursor-pointer transition-colors leading-snug mb-1" @click="$router.push(`/book/${item.book.slug}`)">{{ item.book.title }}</h3>
+                        <h3 class="text-lg font-bold text-on-surface line-clamp-2 hover:text-primary cursor-pointer transition-colors leading-snug mb-1" @click="$router.push(`/book/${item.book.slug}`)">{{ item.book.display_title || item.book.title }}</h3>
                         <div class="flex items-center gap-2 mb-2">
                           <span class="text-sm text-on-surface-variant font-medium">{{ item.book.author || 'Đang cập nhật' }}</span>
                           <span class="w-1 h-1 rounded-full bg-outline-variant"></span>

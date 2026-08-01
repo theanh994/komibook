@@ -85,6 +85,11 @@ class WarehouseDocumentService
         }
 
         foreach ($document->lines as $line) {
+            if ($document->type !== 'count' && (int) $line->quantity <= 0) {
+                throw ValidationException::withMessages([
+                    'lines' => 'Số lượng trên phiếu nhập, xuất hoặc điều chuyển phải lớn hơn 0 trước khi ghi sổ.',
+                ]);
+            }
             $book = Book::withoutGlobalScopes()->findOrFail($line->book_id);
             if ($book->vendor_id !== $document->vendor_id) {
                 throw ValidationException::withMessages(['lines' => 'Sách không thuộc Nhà bán của phiếu kho.']);

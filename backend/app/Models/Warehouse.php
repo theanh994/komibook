@@ -16,6 +16,8 @@ class Warehouse extends Model
         'vendor_id',
         'name',
         'address',
+        'province',
+        'district',
         'capacity',
         'status',
     ];

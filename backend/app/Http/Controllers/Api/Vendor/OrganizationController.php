@@ -21,6 +21,28 @@ class OrganizationController extends Controller
         $vendor = $request->user()->vendor()->withoutGlobalScopes()->firstOrFail();
         $relationships = $vendor->organizationRelationships()->with('organization')->latest()->get();
         $relationships->each(fn (VendorOrganizationRelationship $relationship) => $relationship->organization?->makeVisible(['tax_code', 'license_number']));
+        $unlinkedBooks = Book::withoutGlobalScopes()
+            ->where('vendor_id', $vendor->id)
+            ->where(fn ($query) => $query->whereNull('provenance')->orWhere('provenance', '!=', 'used_resale'))
+            ->with('activeCommercialParties:id,book_id,role')
+            ->latest('updated_at')
+            ->get(['id', 'title', 'slug', 'status', 'publishing_status', 'updated_at'])
+            ->map(function (Book $book) {
+                $missingRoles = collect(CommercialPartyService::ROLES)
+                    ->reject(fn (string $role) => $book->activeCommercialParties->contains('role', $role))
+                    ->values();
+
+                return [
+                    'id' => $book->id,
+                    'title' => $book->title,
+                    'slug' => $book->slug,
+                    'status' => $book->status,
+                    'publishing_status' => $book->publishing_status?->value ?? $book->publishing_status,
+                    'missing_roles' => $missingRoles,
+                ];
+            })
+            ->filter(fn (array $book) => $book['missing_roles']->isNotEmpty())
+            ->values();
 
         return response()->json(['status' => 'success', 'data' => [
             'business_model' => $vendor->business_model,
@@ -28,6 +50,10 @@ class OrganizationController extends Controller
             'is_demo' => (bool) $vendor->is_demo,
             'demo_wallet_code' => $vendor->is_demo ? $vendor->demo_wallet_code : null,
             'relationships' => $relationships,
+            'supply_chain' => [
+                'unlinked_books_count' => $unlinkedBooks->count(),
+                'unlinked_books' => $unlinkedBooks->take(8)->values(),
+            ],
         ]]);
     }
 

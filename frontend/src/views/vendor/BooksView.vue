@@ -484,7 +484,7 @@ onMounted(() => {
                 <img
                   v-if="data.cover_image && !brokenCoverIds.includes(data.id)"
                   :src="getCoverUrl(data.cover_image)"
-                  :alt="data.title"
+                  :alt="data.display_title || data.title"
                   class="book-cover-img"
                   loading="lazy"
                   @error="markCoverBroken(data.id)"
@@ -495,7 +495,7 @@ onMounted(() => {
               </div>
               <div class="book-text-info">
                 <router-link :to="`/book/${data.slug}`" class="book-title-link" target="_blank">
-                  {{ data.title }}
+                  {{ data.display_title || data.title }}
                 </router-link>
                 <div class="book-meta">
                   <span class="book-author">{{ data.author }}</span>

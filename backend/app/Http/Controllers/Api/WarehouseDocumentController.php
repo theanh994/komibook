@@ -9,6 +9,7 @@ use App\Models\Warehouse;
 use App\Models\WarehouseDocument;
 use App\Models\WarehouseManagerAssignment;
 use App\Services\WarehouseAssignmentService;
+use App\Services\WarehouseDocumentExportService;
 use App\Services\WarehouseDocumentService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
@@ -43,13 +44,23 @@ class WarehouseDocumentController extends Controller
         }
         $books = Book::withoutGlobalScopes()->where('vendor_id', $vendor->id)
             ->where('type', 'physical')->orderBy('title')
-            ->get(['id', 'title', 'cover_image', 'stock']);
+            ->get(['id', 'title', 'cover_image', 'stock', 'isbn', 'print_edition'])
+            ->map(fn (Book $book) => [
+                'id' => $book->id,
+                'title' => $book->title,
+                'display_title' => $book->display_title,
+                'cover_image' => $book->cover_image,
+                'stock' => $book->stock,
+                'isbn' => $book->isbn,
+                'print_edition' => $book->print_edition,
+            ]);
 
         return response()->json(['status' => 'success', 'data' => [
-            'vendor' => ['id' => $vendor->id, 'shop_name' => $vendor->shop_name],
+            'vendor' => ['id' => $vendor->id, 'shop_name' => $vendor->shop_name, 'primary_warehouse_id' => $vendor->primary_warehouse_id],
             'warehouses' => $warehouses,
             'books' => $books,
             'capabilities' => $capabilities,
+            'can_transfer' => $warehouses->count() >= 2,
         ]]);
     }
 
@@ -58,7 +69,8 @@ class WarehouseDocumentController extends Controller
         $query = WarehouseDocument::query()->with([
             'sourceWarehouse:id,vendor_id,name,status',
             'destinationWarehouse:id,vendor_id,name,status',
-            'lines.book:id,title,cover_image',
+            'lines.book:id,title,cover_image,isbn,print_edition',
+            'order:id,order_code,shipping_address,status,shipping_status',
         ])->latest();
 
         $vendor = $request->user()->vendor()->withoutGlobalScopes()->first();
@@ -75,13 +87,38 @@ class WarehouseDocumentController extends Controller
             });
         }
 
-        return response()->json(['status' => 'success', 'data' => $query->paginate(30)]);
+        foreach (['type', 'status', 'source_warehouse_id', 'destination_warehouse_id', 'order_id'] as $filter) {
+            if ($request->filled($filter)) {
+                $query->where($filter, $request->input($filter));
+            }
+        }
+        if ($request->filled('search')) {
+            $search = $request->string('search')->toString();
+            $query->where(function (Builder $searchQuery) use ($search) {
+                $searchQuery->where('document_code', 'like', "%{$search}%")
+                    ->orWhereHas('order', fn (Builder $orderQuery) => $orderQuery->where('order_code', 'like', "%{$search}%"));
+            });
+        }
+
+        $documents = $query->paginate(30);
+        $documents->getCollection()->each(function (WarehouseDocument $document) {
+            $document->lines->each(function ($line) {
+                if ($line->book) {
+                    $line->book->setAttribute('display_title', $line->book->display_title);
+                }
+            });
+        });
+
+        return response()->json(['status' => 'success', 'data' => $documents]);
     }
 
     public function store(Request $request)
     {
         $validated = $request->validate([
             'type' => ['required', Rule::in(['receipt', 'dispatch', 'transfer', 'count'])],
+            'origin' => ['nullable', Rule::in(['manual', 'book_creation', 'order_fulfillment', 'inventory_adjustment'])],
+            'receipt_mode' => ['nullable', Rule::in(['new_print_edition', 'restock_existing'])],
+            'external_counterparty_name' => ['nullable', 'string', 'max:255'],
             'source_warehouse_id' => ['nullable', 'integer', 'exists:warehouses,id'],
             'destination_warehouse_id' => ['nullable', 'integer', 'exists:warehouses,id'],
             'order_id' => ['nullable', 'integer', 'exists:orders,id'],
@@ -97,10 +134,24 @@ class WarehouseDocumentController extends Controller
         ]);
 
         if ($existing = WarehouseDocument::where('operation_key', $validated['operation_key'])->first()) {
+            $this->authorizeExisting($request, $existing, 'view');
+
             return response()->json(['status' => 'success', 'data' => $existing->load('lines')]);
         }
 
         [$vendor, $source, $destination] = $this->resolveScope($request, $validated);
+        abort_if(
+            $validated['type'] === 'dispatch' && ! empty($validated['order_id']),
+            422,
+            'Phiếu xuất theo đơn hàng được hệ thống tạo từ phân bổ tồn kho để tránh trừ hàng hai lần.',
+        );
+        if ($validated['type'] === 'transfer') {
+            abort_if(
+                Warehouse::withoutGlobalScopes()->where('vendor_id', $vendor->id)->whereIn('status', ['active', 'Hoạt động'])->count() < 2,
+                422,
+                'Nhà bán chỉ có một kho hoạt động nên không thể tạo phiếu điều chuyển.',
+            );
+        }
         $this->authorizeDocumentAction($request, $vendor, $source, $destination, $validated['type'], 'create');
         $bookIds = collect($validated['lines'])->pluck('book_id');
         abort_unless(
@@ -114,6 +165,18 @@ class WarehouseDocumentController extends Controller
                 'vendor_id' => $vendor->id,
                 'document_code' => strtoupper($validated['type']).'-'.now()->format('Ymd').'-'.Str::upper(Str::random(8)),
                 'type' => $validated['type'],
+                'origin' => $validated['origin'] ?? 'manual',
+                'receipt_mode' => $validated['type'] === 'receipt'
+                    ? ($validated['receipt_mode'] ?? 'restock_existing')
+                    : null,
+                'external_counterparty_name' => $validated['external_counterparty_name'] ?? null,
+                'snapshot' => [
+                    'vendor' => ['id' => $vendor->id, 'shop_name' => $vendor->shop_name],
+                    'source_warehouse' => $source ? ['id' => $source->id, 'name' => $source->name, 'address' => $source->address] : null,
+                    'destination_warehouse' => $destination ? ['id' => $destination->id, 'name' => $destination->name, 'address' => $destination->address] : null,
+                    'external_counterparty_name' => $validated['external_counterparty_name'] ?? null,
+                    'captured_at' => now()->toIso8601String(),
+                ],
                 'source_warehouse_id' => $source?->id,
                 'destination_warehouse_id' => $destination?->id,
                 'order_id' => $validated['order_id'] ?? null,
@@ -139,6 +202,49 @@ class WarehouseDocumentController extends Controller
         return response()->json(['status' => 'success', 'data' => $document->load('lines.book')], 201);
     }
 
+    public function update(Request $request, WarehouseDocument $document)
+    {
+        $this->authorizeExisting($request, $document, 'create');
+        abort_unless($document->status === 'draft', 422, 'Chỉ phiếu nháp mới được chỉnh sửa.');
+        $validated = $request->validate([
+            'reason' => ['nullable', 'string', 'max:1000'],
+            'notes' => ['nullable', 'string', 'max:5000'],
+            'external_counterparty_name' => ['nullable', 'string', 'max:255'],
+            'lines' => ['required', 'array', 'min:1'],
+            'lines.*.book_id' => ['required', 'integer', 'distinct', 'exists:books,id'],
+            'lines.*.quantity' => ['nullable', 'integer', 'min:0'],
+            'lines.*.actual_quantity' => ['nullable', 'integer', 'min:0'],
+            'lines.*.shelf_location' => ['nullable', 'string', 'max:255'],
+            'lines.*.notes' => ['nullable', 'string', 'max:1000'],
+        ]);
+        $bookIds = collect($validated['lines'])->pluck('book_id');
+        abort_unless(
+            Book::withoutGlobalScopes()->where('vendor_id', $document->vendor_id)->whereIn('id', $bookIds)->count() === $bookIds->count(),
+            422,
+            'Phiếu chứa sách không thuộc Nhà bán.',
+        );
+
+        DB::transaction(function () use ($document, $validated): void {
+            $document->update([
+                'reason' => $validated['reason'] ?? null,
+                'notes' => $validated['notes'] ?? null,
+                'external_counterparty_name' => $validated['external_counterparty_name'] ?? null,
+            ]);
+            $document->lines()->delete();
+            foreach ($validated['lines'] as $line) {
+                $document->lines()->create([
+                    'book_id' => $line['book_id'],
+                    'quantity' => $line['quantity'] ?? 0,
+                    'actual_quantity' => $line['actual_quantity'] ?? null,
+                    'shelf_location' => $line['shelf_location'] ?? null,
+                    'notes' => $line['notes'] ?? null,
+                ]);
+            }
+        });
+
+        return response()->json(['status' => 'success', 'data' => $document->fresh()->load('lines.book')]);
+    }
+
     public function show(Request $request, WarehouseDocument $document)
     {
         $this->authorizeExisting($request, $document, 'view');
@@ -146,7 +252,8 @@ class WarehouseDocumentController extends Controller
         return response()->json(['status' => 'success', 'data' => $document->load([
             'sourceWarehouse:id,vendor_id,name,status',
             'destinationWarehouse:id,vendor_id,name,status',
-            'lines.book:id,title,cover_image,stock',
+            'lines.book:id,title,cover_image,stock,isbn,print_edition',
+            'order:id,order_code,shipping_address,status,shipping_status',
             'events',
             'ledgers',
         ])]);
@@ -177,6 +284,27 @@ class WarehouseDocumentController extends Controller
         )]);
     }
 
+    public function printable(Request $request, WarehouseDocument $document, WarehouseDocumentExportService $export)
+    {
+        $this->authorizeExisting($request, $document, 'view');
+
+        return response()->view('warehouse-documents.print', $export->data($document));
+    }
+
+    public function pdf(Request $request, WarehouseDocument $document, WarehouseDocumentExportService $export)
+    {
+        $this->authorizeExisting($request, $document, 'view');
+
+        return $export->pdf($document);
+    }
+
+    public function excel(Request $request, WarehouseDocument $document, WarehouseDocumentExportService $export)
+    {
+        $this->authorizeExisting($request, $document, 'view');
+
+        return $export->excel($document);
+    }
+
     private function resolveScope(Request $request, array $validated): array
     {
         $source = isset($validated['source_warehouse_id'])
@@ -192,6 +320,12 @@ class WarehouseDocumentController extends Controller
         $type = $validated['type'];
         abort_if(in_array($type, ['dispatch', 'count', 'transfer'], true) && ! $source, 422, 'Loại phiếu này cần kho nguồn.');
         abort_if(in_array($type, ['receipt', 'transfer'], true) && ! $destination, 422, 'Loại phiếu này cần kho đích.');
+        abort_if(
+            $type === 'transfer'
+            && Warehouse::withoutGlobalScopes()->where('vendor_id', $vendor->id)->whereIn('status', ['active', 'Hoạt động'])->count() < 2,
+            422,
+            'Nhà bán chỉ có một kho hoạt động nên không thể tạo phiếu điều chuyển.',
+        );
         abort_if($type === 'transfer' && $source?->id === $destination?->id, 422, 'Kho nguồn và kho đích phải khác nhau.');
 
         return [$vendor, $source, $destination];

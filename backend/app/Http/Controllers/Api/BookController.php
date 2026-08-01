@@ -20,6 +20,7 @@ class BookController extends Controller
     {
         $books = Book::withoutGlobalScopes()
             ->sellable()
+            ->browseVisible()
             ->join('order_items', 'books.id', '=', 'order_items.book_id')
             ->join('orders', 'order_items.order_id', '=', 'orders.id')
             ->where('orders.status', 'completed')
@@ -49,6 +50,7 @@ class BookController extends Controller
         $query = Book::withoutGlobalScopes()
             ->select('books.*')
             ->sellable()
+            ->browseVisible()
             ->with(['vendor', 'category', 'categories', 'latestEbookVersion']);
 
         $mode = 'popular_fallback';
@@ -91,6 +93,11 @@ class BookController extends Controller
             ->sellable()
             ->with(['vendor', 'category', 'categories', 'series', 'latestEbookVersion']); // Eager loading
 
+        // Sản phẩm hết hàng chỉ xuất hiện khi người mua chủ động tìm kiếm hoặc mở URL trực tiếp.
+        if (! $request->filled('search')) {
+            $query->browseVisible();
+        }
+
         // 2. Lọc theo category_id nếu có params
         if ($request->has('category_id') && $request->category_id !== '') {
             $query->where(function ($q) use ($request) {
@@ -106,7 +113,11 @@ class BookController extends Controller
             $search = $request->search;
             $query->where(function ($q) use ($search) {
                 $q->where('books.title', 'LIKE', "%{$search}%")
-                    ->orWhere('books.author', 'LIKE', "%{$search}%");
+                    ->orWhere('books.author', 'LIKE', "%{$search}%")
+                    ->orWhere('books.isbn', 'LIKE', "%{$search}%");
+                if (str_contains(mb_strtolower($search), 'tái bản')) {
+                    $q->orWhere('books.print_edition', '>', 1);
+                }
             });
         }
 
@@ -287,11 +298,9 @@ class BookController extends Controller
 
         $seriesBooks = Book::withoutGlobalScopes()
             ->where('series_id', $book->series_id)
-            ->where('id', '!=', $book->id)
             ->sellable()
             ->with(['vendor', 'category', 'categories', 'latestEbookVersion'])
             ->orderBy('id', 'asc')
-            ->limit(12)
             ->get();
 
         return response()->json([
@@ -319,7 +328,8 @@ class BookController extends Controller
 
         $query = Book::withoutGlobalScopes()
             ->where('id', '!=', $book->id)
-            ->sellable();
+            ->sellable()
+            ->browseVisible();
 
         if (! empty($catIds)) {
             $query->where(function ($q) use ($catIds) {
@@ -341,6 +351,7 @@ class BookController extends Controller
             $additionalBooks = Book::withoutGlobalScopes()
                 ->whereNotIn('id', $excludeIds)
                 ->sellable()
+                ->browseVisible()
                 ->with(['vendor', 'category', 'categories', 'latestEbookVersion'])
                 ->orderBy('views', 'desc')
                 ->limit(5 - $relatedBooks->count())
@@ -365,6 +376,7 @@ class BookController extends Controller
             ->where('author', $book->author)
             ->where('id', '!=', $book->id)
             ->sellable()
+            ->browseVisible()
             ->with(['vendor', 'category', 'categories', 'latestEbookVersion'])
             ->limit(10)
             ->get();

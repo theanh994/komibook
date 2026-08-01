@@ -21,7 +21,7 @@ class WarehouseAssignmentService
     ];
 
     private const TRANSITIONS = [
-        'invited' => ['active', 'revoked'],
+        'invited' => ['active', 'declined', 'revoked'],
         'active' => ['suspended', 'revoked'],
         'suspended' => ['active', 'revoked'],
         'revoked' => [],
@@ -53,13 +53,15 @@ class WarehouseAssignmentService
                 throw ValidationException::withMessages(['reason' => 'Phải nhập lý do tạm dừng hoặc thu hồi.']);
             }
 
-            $isSelfAcceptance = $target === 'active' && $from === 'invited' && $actor->id === $locked->user_id;
+            $isSelfResponse = in_array($target, ['active', 'declined'], true)
+                && $from === 'invited'
+                && $actor->id === $locked->user_id;
             $isVendorOwner = $actor->role === 'vendor'
                 && $locked->vendor()->withoutGlobalScopes()->where('user_id', $actor->id)->exists();
-            if ($from === 'invited' && $target === 'active' && ! $isSelfAcceptance) {
-                abort(403, 'Chỉ người được mời mới có thể chấp nhận phân công kho.');
+            if ($from === 'invited' && in_array($target, ['active', 'declined'], true) && ! $isSelfResponse) {
+                abort(403, 'Chỉ người được mời mới có thể phản hồi phân công kho.');
             }
-            if (! $isSelfAcceptance && ! $isVendorOwner && $actor->role !== 'admin') {
+            if (! $isSelfResponse && ! $isVendorOwner && $actor->role !== 'admin') {
                 abort(403, 'Bạn không có quyền thay đổi phân công kho này.');
             }
 
@@ -74,6 +76,9 @@ class WarehouseAssignmentService
             }
             if ($target === 'revoked') {
                 $updates['revoked_at'] = now();
+                $updates['invitation_token_hash'] = null;
+            }
+            if ($target === 'declined') {
                 $updates['invitation_token_hash'] = null;
             }
             $locked->update($updates);

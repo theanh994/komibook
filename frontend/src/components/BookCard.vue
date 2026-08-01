@@ -4,12 +4,12 @@
       <router-link
         :to="{ name: 'book-detail', params: { slug: book.slug } }"
         class="absolute inset-0 block focus-visible:z-10 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary-fixed-dim"
-        :aria-label="`Xem chi tiết ${book.title}`"
+        :aria-label="`Xem chi tiết ${displayTitle}`"
       >
         <img
           v-if="coverUrl && !coverFailed"
           :src="coverUrl"
-          :alt="`Bìa sách ${book.title}`"
+          :alt="`Bìa sách ${displayTitle}`"
           class="book-cover h-full w-full rounded-none object-contain"
           loading="lazy"
           @error="markCoverFailed"
@@ -18,7 +18,7 @@
           v-else
           class="flex h-full w-full flex-col items-center justify-center gap-2 bg-surface-container-low px-3 text-center text-outline"
           role="img"
-          :aria-label="`Chưa có ảnh bìa cho ${book.title}`"
+          :aria-label="`Chưa có ảnh bìa cho ${displayTitle}`"
         >
           <span class="material-symbols-outlined text-4xl" aria-hidden="true">menu_book</span>
           <span class="text-xs font-medium">Chưa có ảnh bìa</span>
@@ -55,7 +55,7 @@
         type="button"
         class="absolute right-2 top-2 z-20 flex h-11 w-11 items-center justify-center rounded-full border border-outline-variant/30 bg-surface-container-lowest/95 text-outline shadow-md transition-colors hover:text-error focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary-fixed-dim"
         :class="{ 'text-error': isFavorite }"
-        :aria-label="isFavorite ? `Bỏ ${book.title} khỏi yêu thích` : `Thêm ${book.title} vào yêu thích`"
+        :aria-label="isFavorite ? `Bỏ ${displayTitle} khỏi yêu thích` : `Thêm ${displayTitle} vào yêu thích`"
         :aria-pressed="isFavorite"
         @click="$emit('toggle-wishlist', book.id)"
       >
@@ -66,7 +66,7 @@
         <button
           type="button"
           class="card-action"
-          :aria-label="`Xem nhanh ${book.title}`"
+          :aria-label="`Xem nhanh ${displayTitle}`"
           @click="$emit('quick-view', book)"
         >
           <span class="material-symbols-outlined text-[20px]" aria-hidden="true">visibility</span>
@@ -74,7 +74,7 @@
         <button
           type="button"
           class="card-action"
-          :aria-label="`Thêm ${book.title} vào giỏ`"
+          :aria-label="`Thêm ${displayTitle} vào giỏ`"
           @click="$emit('add-to-cart', book)"
         >
           <span class="material-symbols-outlined text-[20px]" aria-hidden="true">shopping_bag</span>
@@ -82,7 +82,7 @@
         <button
           type="button"
           class="card-action"
-          :aria-label="`Mua ngay ${book.title}`"
+          :aria-label="`Mua ngay ${displayTitle}`"
           @click="$emit('buy-now', book)"
         >
           <span class="material-symbols-outlined text-[20px]" aria-hidden="true">shopping_cart</span>
@@ -96,7 +96,7 @@
           :to="{ name: 'book-detail', params: { slug: book.slug } }"
           class="text-inherit no-underline transition-colors hover:text-primary focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-fixed-dim"
         >
-          {{ book.title }}
+          {{ displayTitle }}
         </router-link>
       </h3>
       <p v-if="book.type === 'ebook'" class="mb-1 text-xs font-bold text-primary">
@@ -142,9 +142,12 @@ const props = defineProps({
 defineEmits(['quick-view', 'add-to-cart', 'buy-now', 'toggle-wishlist'])
 
 const isPurchasable = computed(() => (
-  props.book.type === 'ebook'
-  || (Number(props.book.stock) > 0 && (!props.book.status || props.book.status === 'published'))
+  props.book.is_purchasable ?? (
+    props.book.type === 'ebook'
+    || (Number(props.book.stock) > 0 && (!props.book.status || props.book.status === 'published'))
+  )
 ))
+const displayTitle = computed(() => props.book.display_title || props.book.title)
 
 const coverUrl = computed(() => {
   const path = props.book.cover_image

@@ -39,6 +39,7 @@ class Book extends Model
         'pages',
         'release_date',
         'isbn',
+        'print_edition',
         'price',
         'sale_price',
         'stock',
@@ -71,6 +72,7 @@ class Book extends Model
             'price' => 'integer',
             'sale_price' => 'integer',
             'stock' => 'integer',
+            'print_edition' => 'integer',
             'pages' => 'integer',
             'views' => 'integer',
             'publication_version' => 'integer',
@@ -218,11 +220,44 @@ class Book extends Model
         return $this->status === 'published';
     }
 
+    public function getDisplayTitleAttribute(): string
+    {
+        $edition = max(1, (int) ($this->print_edition ?? 1));
+
+        return $edition === 1
+            ? $this->title
+            : "{$this->title} — Tái bản lần {$edition}";
+    }
+
+    public function isPurchasable(): bool
+    {
+        $publishingStatus = $this->publishing_status instanceof BookPublicationStatus
+            ? $this->publishing_status->value
+            : $this->publishing_status;
+
+        return $this->isPublished()
+            && ($publishingStatus === null || $publishingStatus === BookPublicationStatus::Published->value)
+            && (int) $this->stock > 0;
+    }
+
     public function scopeSellable(Builder $query): Builder
     {
         return $query->where('books.status', 'published')
             ->where(fn (Builder $statusQuery) => $statusQuery->whereNull('books.publishing_status')->orWhere('books.publishing_status', BookPublicationStatus::Published->value))
             ->whereHas('vendor', fn (Builder $vendorQuery) => $vendorQuery->withoutGlobalScopes()->where('status', 'active'));
+    }
+
+    public function scopeBrowseVisible(Builder $query): Builder
+    {
+        return $query->where(function (Builder $visibilityQuery) {
+            $visibilityQuery->where('books.type', 'ebook')
+                ->orWhere('books.stock', '>', 0);
+        });
+    }
+
+    public function scopePurchasable(Builder $query): Builder
+    {
+        return $query->sellable()->browseVisible();
     }
 
     public function isEbook(): bool
