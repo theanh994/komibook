@@ -43,7 +43,9 @@ try {
     }
 
     $pendingOutput = & $frankenPhpPath php-cli artisan migrate:status --pending --no-ansi 2>&1
-    if ($LASTEXITCODE -ne 0 -or ($pendingOutput -join "`n") -match '\bPending\b') {
+    $pendingText = $pendingOutput -join "`n"
+    $hasPendingMigration = $pendingText -match '(?m)^\s*\d{4}_\d{2}_\d{2}_\d{6}_.+\bPending\s*$'
+    if ($LASTEXITCODE -ne 0 -or $hasPendingMigration) {
         $pendingOutput | Write-Output
         throw 'Candidate has pending migrations. Do not cut over.'
     }
