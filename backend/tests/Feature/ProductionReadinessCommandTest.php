@@ -2,8 +2,10 @@
 
 namespace Tests\Feature;
 
+use App\Console\Commands\CheckProductionReadiness;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use ReflectionMethod;
 use Tests\TestCase;
 
 class ProductionReadinessCommandTest extends TestCase
@@ -55,6 +57,25 @@ class ProductionReadinessCommandTest extends TestCase
         } finally {
             app()->detectEnvironment(fn () => $originalEnvironment);
         }
+    }
+
+    public function test_unrelated_database_all_privileges_do_not_block_production_database(): void
+    {
+        $method = new ReflectionMethod(CheckProductionReadiness::class, 'grantsContainDestructivePrivilege');
+        $command = app(CheckProductionReadiness::class);
+        $grants = [
+            'GRANT USAGE ON *.* TO `komibook_app`@`127.0.0.1`',
+            'GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, REFERENCES, INDEX, ALTER ON `komibook`.* TO `komibook_app`@`127.0.0.1`',
+            'GRANT ALL PRIVILEGES ON `komibook_restore_check_d284cd4`.* TO `komibook_app`@`127.0.0.1`',
+        ];
+
+        $this->assertFalse($method->invoke($command, $grants, 'komibook'));
+        $this->assertTrue($method->invoke($command, [
+            'GRANT SELECT, DROP ON `komibook`.* TO `komibook_app`@`127.0.0.1`',
+        ], 'komibook'));
+        $this->assertTrue($method->invoke($command, [
+            'GRANT ALL PRIVILEGES ON *.* TO `komibook_app`@`127.0.0.1`',
+        ], 'komibook'));
     }
 
     private function configureHealthyRuntime(): void

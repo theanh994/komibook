@@ -49,9 +49,8 @@ class CheckProductionReadiness extends Command
             if (DB::connection()->getDriverName() === 'mysql') {
                 $grants = collect(DB::select('SHOW GRANTS FOR CURRENT_USER'))
                     ->flatMap(fn (object $row) => array_values((array) $row))
-                    ->implode(' ');
-                $hasDestructivePrivilege = str_contains($grants, 'ALL PRIVILEGES')
-                    || preg_match('/(?:^|, )DROP(?:,| ON)/', $grants) === 1;
+                    ->all();
+                $hasDestructivePrivilege = $this->grantsContainDestructivePrivilege($grants, $databaseName);
                 $this->check($checks, 'runtime_database_drop_denied', ! $hasDestructivePrivilege, ! $hasDestructivePrivilege, true);
             }
         } catch (Throwable $exception) {
@@ -94,6 +93,31 @@ class CheckProductionReadiness extends Command
         }
 
         return $passed ? self::SUCCESS : self::FAILURE;
+    }
+
+    /** @param array<int, string> $grants */
+    private function grantsContainDestructivePrivilege(array $grants, string $databaseName): bool
+    {
+        $expectedDatabase = strtoupper($databaseName);
+
+        foreach ($grants as $grant) {
+            if (preg_match('/^GRANT (.+) ON (.+) TO /i', $grant, $matches) !== 1) {
+                continue;
+            }
+
+            $scope = strtoupper(str_replace('`', '', trim($matches[2])));
+            $scopeDatabase = explode('.', $scope, 2)[0];
+            if ($scopeDatabase !== '*' && $scopeDatabase !== $expectedDatabase) {
+                continue;
+            }
+
+            $privileges = array_map('trim', explode(',', strtoupper($matches[1])));
+            if (in_array('ALL PRIVILEGES', $privileges, true) || in_array('DROP', $privileges, true)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function check(array &$checks, string $name, bool $passed, mixed $actual, mixed $expected): void
