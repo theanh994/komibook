@@ -4,6 +4,8 @@ param(
 
     [string] $SharedEnv = 'C:\komibook_shared\.env',
 
+    [string] $SharedAssets = 'C:\komibook_shared\assets',
+
     [string] $FrankenPhp = 'C:\runtimes\frankenphp\frankenphp.exe'
 )
 
@@ -13,6 +15,7 @@ Set-StrictMode -Version Latest
 $candidate = (Resolve-Path -LiteralPath $CandidateBackend).Path
 $releaseRoot = (Resolve-Path -LiteralPath 'C:\komibook_releases').Path
 $sharedEnvPath = (Resolve-Path -LiteralPath $SharedEnv).Path
+$sharedAssetsPath = (Resolve-Path -LiteralPath $SharedAssets).Path
 $frankenPhpPath = (Resolve-Path -LiteralPath $FrankenPhp).Path
 
 if (-not $candidate.StartsWith($releaseRoot + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
@@ -34,6 +37,34 @@ if (-not (Test-Path -LiteralPath $configCache -PathType Leaf)) {
     throw 'Candidate does not have a production config cache.'
 }
 
+$releaseDirectory = Split-Path $candidate -Parent
+$releaseSha = Split-Path $releaseDirectory -Leaf
+$frontendIndex = Join-Path $releaseDirectory 'frontend\dist-social\index.html'
+$assetNamespace = 'r' + $releaseSha.Substring(0, 8)
+
+if (-not (Test-Path -LiteralPath $frontendIndex -PathType Leaf)) {
+    throw 'Candidate does not have a production frontend index.'
+}
+
+$frontendHtml = [IO.File]::ReadAllText($frontendIndex)
+$assetPrefix = "/assets/$assetNamespace/"
+$assetReferences = [regex]::Matches($frontendHtml, [regex]::Escape($assetPrefix) + '[^"''<> ]+') |
+    ForEach-Object { $_.Value } |
+    Select-Object -Unique
+
+if ($assetReferences.Count -eq 0) {
+    throw 'Candidate frontend does not use its release asset namespace.'
+}
+
+$missingAssets = @($assetReferences | Where-Object {
+    $relativePath = $_.Substring('/assets/'.Length)
+    -not (Test-Path -LiteralPath (Join-Path $sharedAssetsPath $relativePath) -PathType Leaf)
+})
+
+if ($missingAssets.Count -gt 0) {
+    throw "Candidate frontend has missing shared assets: $($missingAssets -join ', ')"
+}
+
 Push-Location $candidate
 try {
     $readinessOutput = & $frankenPhpPath php-cli artisan production:readiness --json --no-ansi 2>&1
@@ -51,6 +82,7 @@ try {
     }
 
     $readinessOutput | Write-Output
+    Write-Output "KOMIBOOK_FRONTEND_ASSETS=PASS"
     Write-Output 'KOMIBOOK_RELEASE_READINESS=PASS'
 } finally {
     Pop-Location

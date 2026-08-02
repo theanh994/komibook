@@ -73,10 +73,13 @@ Nếu gate trả khác 0, không sửa Caddyfile, không reload FrankenPHP và k
 3. Chạy `optimize:clear` sau khi `.env` đã được gắn.
 4. Chỉ chạy `migrate --force`; không dùng các biến thể fresh/refresh/reset/rollback.
 5. Tạo lại config cache bằng credential runtime.
-6. Chạy `Test-KomiBookReleaseReadiness.ps1`.
-7. Tạo backup production mới và ghi SHA-256.
-8. Validate Caddy candidate, cutover và reload dịch vụ.
-9. Smoke-test `/`, `/login`, `/api/books`, đăng nhập → `/api/auth/me`, ảnh bìa và dashboard theo vai trò.
-10. Nếu bất kỳ gate nào thất bại, giữ release cũ; không cố cutover.
+6. Chạy `Publish-KomiBookFrontendAssets.ps1` để đưa bundle vào namespace `/assets/r<SHA-8>/`; không xóa asset của release cũ.
+7. Chạy `Test-KomiBookReleaseReadiness.ps1`; gate phải xác minh toàn bộ asset được `index.html` tham chiếu đã tồn tại trong shared storage.
+8. Tạo backup production mới và ghi SHA-256.
+9. Validate Caddy candidate, cutover và reload dịch vụ.
+10. Smoke-test `/`, `/login`, `/api/books`, đăng nhập → `/api/auth/me`, ảnh bìa và dashboard theo vai trò. Bắt buộc tải trang bằng trình duyệt và kiểm tra console, không chỉ kiểm tra HTTP của HTML.
+11. Nếu bất kỳ gate nào thất bại, giữ release cũ; không cố cutover.
+
+Không được gắn cache `immutable` cho phản hồi asset 404. Asset chỉ được cache dài hạn khi matcher `file` xác nhận file tồn tại; phản hồi thiếu file phải dùng `no-store`.
 
 Cloudflare Tunnel không thuộc quy trình sửa lỗi này và không được thay đổi.
