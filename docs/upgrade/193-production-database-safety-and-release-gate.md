@@ -83,3 +83,12 @@ Nếu gate trả khác 0, không sửa Caddyfile, không reload FrankenPHP và k
 Không được gắn cache `immutable` cho phản hồi asset 404. Asset chỉ được cache dài hạn khi matcher `file` xác nhận file tồn tại; phản hồi thiếu file phải dùng `no-store`.
 
 Cloudflare Tunnel không thuộc quy trình sửa lỗi này và không được thay đổi.
+
+## Gate toàn vẹn media public
+
+Lệnh `production:readiness` phải đối chiếu mọi đường dẫn media do database quản lý với public disk dùng chung. Phạm vi gồm ảnh bài viết và media bài viết, ảnh bìa và album sách, avatar, logo Nhà bán/tổ chức, ảnh sách cũ và ảnh chiến dịch thông báo.
+
+- URL ngoài hệ thống và asset tĩnh không thuộc public disk được bỏ qua.
+- Đường dẫn tương đối, `/storage/...` và URL production trỏ vào `/storage/...` được chuẩn hóa về cùng một khóa file.
+- Chỉ cần một tham chiếu database không có file tương ứng, gate phải trả `blocked` và dừng cutover trước khi Caddy nhận release mới.
+- Khôi phục media production chỉ được bổ sung file còn thiếu vào `C:\komibook_shared\storage\app\public`; không ghi đè file đã tồn tại nếu chưa đối chiếu checksum.

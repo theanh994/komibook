@@ -24,6 +24,19 @@ return [
         ],
     ],
 
+    // Every database path managed by the public disk must resolve inside the
+    // shared storage before a release can receive production traffic.
+    'public_media_references' => [
+        ['table' => 'users', 'columns' => ['avatar']],
+        ['table' => 'vendors', 'columns' => ['logo']],
+        ['table' => 'organizations', 'columns' => ['logo']],
+        ['table' => 'books', 'columns' => ['cover_image'], 'json_columns' => ['gallery_images']],
+        ['table' => 'articles', 'columns' => ['cover_image', 'social_image']],
+        ['table' => 'article_media', 'columns' => ['path'], 'where' => ['disk' => 'public']],
+        ['table' => 'used_book_listings', 'json_columns' => ['actual_photos']],
+        ['table' => 'notification_campaigns', 'columns' => ['image_url']],
+    ],
+
     'forbidden_commands' => [
         'db:wipe',
         'migrate:fresh',

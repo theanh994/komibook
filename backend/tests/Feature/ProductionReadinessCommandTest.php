@@ -3,8 +3,10 @@
 namespace Tests\Feature;
 
 use App\Console\Commands\CheckProductionReadiness;
+use App\Services\ProductionMediaIntegrityService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use ReflectionMethod;
 use Tests\TestCase;
 
@@ -59,6 +61,63 @@ class ProductionReadinessCommandTest extends TestCase
         }
     }
 
+    public function test_readiness_blocks_cutover_when_database_media_is_missing(): void
+    {
+        $originalEnvironment = app()->environment();
+        app()->detectEnvironment(fn () => 'production');
+        $this->configureHealthyRuntime();
+        config(['production_safety.public_media_references' => [
+            ['table' => 'users', 'columns' => ['avatar']],
+        ]]);
+        DB::table('users')->insert([
+            'name' => 'Media Gate',
+            'email' => 'media-gate@example.test',
+            'password' => 'not-used',
+            'avatar' => 'avatars/missing.webp',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        try {
+            $media = app(ProductionMediaIntegrityService::class)->inspect();
+            $this->assertSame(1, $media['missing_count']);
+            $this->assertStringContainsString('avatars/missing.webp', $media['missing'][0]);
+
+            $this->artisan('production:readiness', ['--json' => true])
+                ->expectsOutputToContain('"status": "blocked"')
+                ->assertFailed();
+        } finally {
+            app()->detectEnvironment(fn () => $originalEnvironment);
+        }
+    }
+
+    public function test_readiness_accepts_database_media_present_on_public_disk(): void
+    {
+        $originalEnvironment = app()->environment();
+        app()->detectEnvironment(fn () => 'production');
+        $this->configureHealthyRuntime();
+        config(['production_safety.public_media_references' => [
+            ['table' => 'users', 'columns' => ['avatar']],
+        ]]);
+        Storage::disk('public')->put('avatars/present.webp', 'image');
+        DB::table('users')->insert([
+            'name' => 'Media Gate',
+            'email' => 'media-present@example.test',
+            'password' => 'not-used',
+            'avatar' => '/storage/avatars/present.webp?version=1',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        try {
+            $this->artisan('production:readiness', ['--json' => true])
+                ->expectsOutputToContain('"status": "ready"')
+                ->assertSuccessful();
+        } finally {
+            app()->detectEnvironment(fn () => $originalEnvironment);
+        }
+    }
+
     public function test_unrelated_database_all_privileges_do_not_block_production_database(): void
     {
         $method = new ReflectionMethod(CheckProductionReadiness::class, 'grantsContainDestructivePrivilege');
@@ -80,11 +139,14 @@ class ProductionReadinessCommandTest extends TestCase
 
     private function configureHealthyRuntime(): void
     {
+        Storage::fake('public');
+        $sharedRoot = dirname((string) config('filesystems.disks.public.root'));
+
         config([
             'app.url' => 'https://komibook.id.vn',
             'production_safety.expected_database' => DB::connection()->getDatabaseName(),
             'production_safety.expected_host' => 'komibook.id.vn',
-            'production_safety.shared_root' => 'C:/komibook_shared',
+            'production_safety.shared_root' => $sharedRoot,
             'production_safety.minimum_counts' => [
                 'users' => 0,
                 'books' => 0,
@@ -103,9 +165,8 @@ class ProductionReadinessCommandTest extends TestCase
             'session.domain' => 'komibook.id.vn',
             'session.secure' => true,
             'sanctum.stateful' => ['komibook.id.vn'],
-            'filesystems.disks.local.root' => 'C:/komibook_shared/storage/app',
-            'filesystems.disks.public.root' => 'C:/komibook_shared/storage/app/public',
-            'filesystems.disks.private.root' => 'C:/komibook_shared/storage/app/private',
+            'filesystems.disks.local.root' => $sharedRoot.'/local',
+            'filesystems.disks.private.root' => $sharedRoot.'/private',
         ]);
     }
 }

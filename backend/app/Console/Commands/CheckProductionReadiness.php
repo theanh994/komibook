@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Services\ProductionMediaIntegrityService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -13,7 +14,7 @@ class CheckProductionReadiness extends Command
 
     protected $description = 'Kiểm tra database, session và shared storage trước khi chuyển production sang release mới';
 
-    public function handle(): int
+    public function handle(ProductionMediaIntegrityService $mediaIntegrity): int
     {
         $checks = [];
 
@@ -73,6 +74,19 @@ class CheckProductionReadiness extends Command
         foreach (['local', 'public', 'private'] as $disk) {
             $root = $this->normalizePath((string) config("filesystems.disks.{$disk}.root"));
             $this->check($checks, "shared_storage_{$disk}", str_starts_with($root, $sharedRoot.'/'), $root, $sharedRoot.'/...');
+        }
+
+        try {
+            $media = $mediaIntegrity->inspect();
+            $this->check(
+                $checks,
+                'public_media_integrity',
+                $media['missing_count'] === 0,
+                $media,
+                ['missing_count' => 0],
+            );
+        } catch (Throwable $exception) {
+            $this->check($checks, 'public_media_integrity', false, $exception::class, ['missing_count' => 0]);
         }
 
         $passed = collect($checks)->every(fn (array $check) => $check['passed']);
