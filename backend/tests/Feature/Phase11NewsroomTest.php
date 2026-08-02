@@ -17,6 +17,8 @@ use App\Models\Vendor;
 use App\Models\VendorFlashSaleRequest;
 use App\Models\VendorFollow;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class Phase11NewsroomTest extends TestCase
@@ -58,6 +60,63 @@ class Phase11NewsroomTest extends TestCase
             ->assertOk()
             ->assertJsonPath('data.vendor.shop_name', $vendorA->shop_name)
             ->assertJsonPath('data.article_type', 'vendor_announcement');
+    }
+
+    public function test_vendor_can_correct_a_published_article_without_losing_publication_state(): void
+    {
+        Storage::fake('public');
+        [$vendorUser, $vendor] = $this->vendor('published-editor@example.test', 'published-editor');
+        $category = Category::create(['name' => 'Hiệu chỉnh', 'slug' => 'hieu-chinh']);
+        $book = $this->book($vendor, $category);
+        $article = Article::create([
+            'created_by' => $vendorUser->id,
+            'vendor_id' => $vendor->id,
+            'title' => 'Bài viết đã xuất bản',
+            'slug' => 'bai-viet-da-xuat-ban',
+            'body' => '<p>Nội dung ban đầu.</p>',
+            'status' => 'published',
+            'published_at' => now()->subMinute(),
+        ]);
+        $article->books()->attach($book->id);
+
+        $media = $this->actingAs($vendorUser)->post("/api/vendor/articles/{$article->id}/media", [
+            'image' => UploadedFile::fake()->image('minh-hoa.webp', 900, 1400),
+            'alt_text' => 'Minh họa giữ đúng tỷ lệ dọc',
+        ])->assertCreated();
+        $imageUrl = $media->json('data.url');
+        Storage::disk('public')->assertExists($media->json('data.path'));
+
+        $this->actingAs($vendorUser)->patchJson("/api/vendor/articles/{$article->id}", [
+            'title' => 'Bài viết đã xuất bản - bản hiệu chỉnh',
+            'title_format' => ['font' => 'literata', 'size' => '48', 'align' => 'center', 'weight' => 'bold', 'style' => 'italic'],
+            'body' => '<p class="ql-align-center ql-font-georgia ql-size-18px">Nội dung đã được hiệu chỉnh.</p><img src="'.$imageUrl.'" alt="Minh họa giữ đúng tỷ lệ dọc">',
+            'excerpt' => 'Tóm tắt có định dạng riêng.',
+            'excerpt_format' => ['font' => 'georgia', 'size' => '18', 'align' => 'justify', 'weight' => 'normal', 'style' => 'italic'],
+            'book_ids' => [$book->id],
+        ])->assertOk()
+            ->assertJsonPath('data.status', 'published')
+            ->assertJsonPath('data.revision', 2);
+
+        $this->assertDatabaseHas('article_revisions', [
+            'article_id' => $article->id,
+            'revision' => 2,
+        ]);
+        Article::create([
+            'created_by' => $vendorUser->id,
+            'vendor_id' => $vendor->id,
+            'title' => 'Bài viết mới hơn',
+            'slug' => 'bai-viet-moi-hon',
+            'body' => '<p>Nội dung mới hơn.</p>',
+            'status' => 'published',
+            'published_at' => now(),
+        ]);
+
+        $this->getJson('/api/articles/bai-viet-da-xuat-ban-ban-hieu-chinh')
+            ->assertOk()
+            ->assertJsonPath('data.body', '<p class="ql-align-center ql-font-georgia ql-size-18px">Nội dung đã được hiệu chỉnh.</p><img src="'.$imageUrl.'" alt="Minh họa giữ đúng tỷ lệ dọc" />')
+            ->assertJsonPath('data.title_format.font', 'literata')
+            ->assertJsonPath('data.excerpt_format.align', 'justify')
+            ->assertJsonPath('latest.0.slug', 'bai-viet-moi-hon');
     }
 
     public function test_comments_are_fail_closed_until_moderated_and_email_is_never_exposed(): void

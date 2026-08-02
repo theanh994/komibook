@@ -29,7 +29,7 @@
         <tr><td colspan="2"><strong>Lý do:</strong> {{ $document->reason ?? '—' }}</td></tr>
     </table>
     <table class="lines">
-        <thead><tr><th>STT</th><th>Sách</th><th>ISBN/SKU</th><th>Bản in</th><th class="number">Số lượng</th><th>Vị trí kệ</th></tr></thead>
+        <thead><tr><th>STT</th><th>Sách</th><th>ISBN/SKU</th><th>Bản in</th><th class="number">Số lượng</th></tr></thead>
         <tbody>
         @foreach ($document->lines as $line)
             <tr>
@@ -38,11 +38,10 @@
                 <td>{{ $line->book?->isbn ?? '—' }}</td>
                 <td>{{ $line->book?->print_edition ?? 1 }}</td>
                 <td class="number">{{ $document->type === 'count' ? ($line->actual_quantity ?? 0) : $line->quantity }}</td>
-                <td>{{ $line->shelf_location ?? '—' }}</td>
             </tr>
         @endforeach
         </tbody>
-        <tfoot><tr><th colspan="4" class="number">Tổng</th><th class="number">{{ $totalQuantity }}</th><th></th></tr></tfoot>
+        <tfoot><tr><th colspan="4" class="number">Tổng</th><th class="number">{{ $totalQuantity }}</th></tr></tfoot>
     </table>
     <p class="footer muted">Phiếu được kết xuất từ snapshot chứng từ KomiBook. Các bút toán đã ghi sổ không thể chỉnh sửa.</p>
 </body>

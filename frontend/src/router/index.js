@@ -117,6 +117,12 @@ const router = createRouter({
       meta: { requiresAuth: true }
     },
     {
+      path: '/wallet',
+      name: 'wallet',
+      component: () => import('@/views/WalletView.vue'),
+      meta: { requiresAuth: true, title: 'Ví KomiBook & Rút tiền' }
+    },
+    {
       path: '/wishlist',
       name: 'wishlist',
       component: () => import('@/views/WishlistView.vue'),
@@ -349,10 +355,16 @@ const router = createRouter({
           meta: { requiresAuth: true, role: 'admin', hideHeader: true, title: 'Chi tiết Users' }
         },
         {
+          path: 'users/:id/print',
+          name: 'admin-user-print',
+          component: () => import('@/views/admin/UserInformationPrintView.vue'),
+          meta: { requiresAuth: true, role: 'admin', hideHeader: true, title: 'Phiếu thông tin người dùng' }
+        },
+        {
           path: 'reconciliation',
           name: 'admin-reconciliation',
           component: () => import('@/views/admin/ReconciliationView.vue'),
-          meta: { requiresAuth: true, role: 'admin', hideHeader: true, title: 'Đối soát & Báo cáo' }
+          meta: { requiresAuth: true, role: 'admin', hideHeader: true, title: 'Quản lý yêu cầu rút tiền' }
         },
         {
           path: 'notifications',
@@ -529,7 +541,7 @@ const router = createRouter({
           path: 'finance',
           name: 'vendor-finance',
           component: () => import('@/views/vendor/FinanceView.vue'),
-          meta: { requiresAuth: true, role: 'vendor', hideHeader: true, title: 'Doanh thu & Rút tiền' }
+          meta: { requiresAuth: true, role: 'vendor', hideHeader: true, title: 'Báo cáo doanh thu' }
         },
         {
           path: 'flash-sales',
@@ -616,7 +628,7 @@ const router = createRouter({
           path: 'inventory',
           name: 'warehouse-manager-inventory',
           component: () => import('@/views/warehouse-manager/InventoryView.vue'),
-          meta: { requiresAuth: true, capability: 'warehouse_manager', hideHeader: true, title: 'Tồn kho & vị trí kệ' }
+          meta: { requiresAuth: true, capability: 'warehouse_manager', hideHeader: true, title: 'Tồn kho' }
         },
         {
           path: 'documents',

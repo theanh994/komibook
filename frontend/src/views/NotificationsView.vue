@@ -48,24 +48,30 @@
               <article
                 v-for="noti in notifications"
                 :key="noti.id"
-                class="w-full min-h-11 p-lg rounded-2xl border-2 transition-colors flex gap-lg hover:shadow-sm text-left"
-                :class="!noti.read_at ? 'border-primary/20 bg-primary/5' : 'border-outline-variant/10 hover:border-outline-variant/40'"
+                class="w-full min-h-11 p-lg rounded-2xl border-2 transition-all flex gap-lg hover:shadow-md text-left cursor-pointer group"
+                :class="!noti.read_at ? 'border-primary/20 bg-primary/5' : 'border-outline-variant/10 hover:border-outline-variant/40 bg-surface-container-lowest'"
+                role="button"
+                tabindex="0"
+                :aria-label="`Xem chi tiết thông báo: ${noti.title}`"
+                @click="openNotificationDetail(noti)"
+                @keydown.enter.self="openNotificationDetail(noti)"
+                @keydown.space.prevent.self="openNotificationDetail(noti)"
               >
                 <!-- Icon and Type Specific Colors -->
-                <div :class="['w-12 h-12 rounded-2xl shrink-0 flex items-center justify-center', noti.data?.colorClass || 'bg-slate-100 text-slate-600']">
+                <div :class="['w-12 h-12 rounded-2xl shrink-0 flex items-center justify-center transition-transform group-hover:scale-105', noti.data?.colorClass || 'bg-slate-100 text-slate-600']">
                   <span class="material-symbols-outlined text-2xl">{{ getMaterialIcon(noti.data?.icon) }}</span>
                 </div>
 
                 <div class="flex-1 min-w-0">
                   <div class="flex justify-between items-start mb-1 gap-4">
-                    <h4 :class="['text-sm font-bold leading-tight truncate', !noti.read_at ? 'text-on-surface' : 'text-on-surface-variant']">
+                    <h4 :class="['text-sm font-bold leading-tight truncate group-hover:text-primary transition-colors', !noti.read_at ? 'text-on-surface' : 'text-on-surface-variant']">
                       {{ noti.title }}
                     </h4>
                     <span class="text-xs font-bold text-outline whitespace-nowrap pt-0.5">
                       {{ formatRelativeTime(noti.created_at) }}
                     </span>
                   </div>
-                  <p class="text-sm text-on-surface-variant leading-relaxed">
+                  <p class="text-sm text-on-surface-variant leading-relaxed line-clamp-2">
                     {{ noti.content }}
                   </p>
 
@@ -102,7 +108,7 @@
                   type="button"
                   class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-xs font-bold text-primary hover:bg-primary/10"
                   :aria-label="`Đánh dấu đã đọc: ${noti.title}`"
-                  @click="handleMarkAsRead(noti)"
+                  @click.stop="handleMarkAsRead(noti)"
                 >
                   <span class="h-2 w-2 rounded-full bg-primary" aria-hidden="true"></span>
                 </button>
@@ -124,6 +130,79 @@
         </div>
       </main>
     </div>
+
+    <!-- Notification Detail Dialog -->
+    <Dialog
+      v-model:visible="showDetailModal"
+      modal
+      header="Chi tiết thông báo"
+      class="w-full max-w-lg mx-4 rounded-2xl overflow-hidden"
+      :breakpoints="{ '960px': '75vw', '641px': '90vw' }"
+    >
+      <div v-if="selectedNotification" class="flex flex-col gap-4 py-2">
+        <div class="flex items-start gap-3.5">
+          <div :class="['w-12 h-12 rounded-2xl shrink-0 flex items-center justify-center', selectedNotification.data?.colorClass || 'bg-slate-100 text-slate-600']">
+            <span class="material-symbols-outlined text-2xl">{{ getMaterialIcon(selectedNotification.data?.icon) }}</span>
+          </div>
+          <div class="flex-1 min-w-0">
+            <h3 class="text-base font-bold text-on-surface leading-snug">{{ selectedNotification.title }}</h3>
+            <p class="mt-1 text-xs font-bold text-outline">
+              {{ formatFullDateTime(selectedNotification.created_at) }} ({{ formatRelativeTime(selectedNotification.created_at) }})
+            </p>
+          </div>
+        </div>
+
+        <div class="border-t border-b border-outline-variant/15 py-4 my-1">
+          <p class="text-sm leading-relaxed text-on-surface whitespace-pre-line">{{ selectedNotification.content }}</p>
+
+          <div v-if="selectedNotification.data?.image_url" class="mt-4 rounded-xl overflow-hidden max-h-64 border border-outline-variant/20 shadow-sm">
+            <img :src="selectedNotification.data.image_url" class="w-full h-full object-contain" :alt="`Ảnh ${selectedNotification.title}`" />
+          </div>
+        </div>
+
+        <div v-if="isPendingWarehouseInvitation(selectedNotification)" class="flex flex-wrap gap-2 pt-1" aria-label="Phản hồi lời mời quản lý kho">
+          <button
+            type="button"
+            class="flex-1 min-h-11 rounded-xl bg-primary px-4 py-2 text-sm font-bold text-on-primary disabled:cursor-wait disabled:opacity-60"
+            :disabled="respondingId === selectedNotification.id"
+            @click="respondToWarehouseInvitation(selectedNotification, 'accept')"
+          >
+            <i v-if="respondingId === selectedNotification.id" class="pi pi-spin pi-spinner mr-2"></i>
+            Chấp nhận lời mời
+          </button>
+          <button
+            type="button"
+            class="flex-1 min-h-11 rounded-xl border border-outline-variant bg-transparent px-4 py-2 text-sm font-bold text-on-surface disabled:cursor-wait disabled:opacity-60"
+            :disabled="respondingId === selectedNotification.id"
+            @click="respondToWarehouseInvitation(selectedNotification, 'decline')"
+          >
+            Từ chối
+          </button>
+        </div>
+        <p v-else-if="isWarehouseInvitation(selectedNotification)" class="text-xs font-bold" :class="selectedNotification.data?.invitation_status === 'active' ? 'text-emerald-700' : 'text-on-surface-variant'">
+          {{ warehouseInvitationStatus(selectedNotification) }}
+        </p>
+
+        <div class="flex items-center justify-end gap-3 pt-2">
+          <RouterLink
+            v-if="getNotificationActionUrl(selectedNotification)"
+            :to="getNotificationActionUrl(selectedNotification)"
+            class="min-h-11 px-5 py-2.5 rounded-xl bg-primary text-on-primary font-bold text-sm no-underline flex items-center justify-center gap-1 shadow-sm"
+            @click="showDetailModal = false"
+          >
+            Chuyển tới trang liên quan
+            <span class="material-symbols-outlined text-[18px]">arrow_forward</span>
+          </RouterLink>
+          <button
+            type="button"
+            class="min-h-11 px-5 py-2.5 rounded-xl border border-outline-variant bg-surface-container-low font-bold text-sm text-on-surface cursor-pointer"
+            @click="showDetailModal = false"
+          >
+            Đóng
+          </button>
+        </div>
+      </div>
+    </Dialog>
   </div>
 </template>
 
@@ -133,9 +212,13 @@ import { useAuthStore } from '@/stores/auth'
 import UserSidebar from '@/components/profile/UserSidebar.vue'
 import apiClient from '@/services/axios'
 import { useToast } from 'primevue/usetoast'
+import Dialog from 'primevue/dialog'
 
 const authStore = useAuthStore()
 const toast = useToast()
+
+const selectedNotification = ref(null)
+const showDetailModal = ref(false)
 
 const getMaterialIcon = (iconName) => {
   if (!iconName) return 'notifications'
@@ -168,6 +251,35 @@ const warehouseInvitationStatus = (noti) => {
   if (noti.data?.invitation_status === 'active') return 'Bạn đã chấp nhận lời mời này.'
   if (noti.data?.invitation_status === 'declined') return 'Bạn đã từ chối lời mời này.'
   return 'Lời mời không còn hiệu lực.'
+}
+
+const openNotificationDetail = (noti) => {
+  selectedNotification.value = noti
+  showDetailModal.value = true
+  if (!noti.read_at) {
+    handleMarkAsRead(noti)
+  }
+}
+
+const getNotificationActionUrl = (noti) => {
+  if (!noti || !noti.data) return null
+  if (noti.data.action_url) return noti.data.action_url
+  if (noti.data.order_id) return { name: 'orders', query: { order_id: noti.data.order_id } }
+  if (noti.data.book_slug) return { name: 'book-detail', params: { slug: noti.data.book_slug } }
+  if (noti.data.vendor_slug) return { name: 'vendor-storefront', params: { slug: noti.data.vendor_slug } }
+  return null
+}
+
+const formatFullDateTime = (dateStr) => {
+  if (!dateStr) return ''
+  const date = new Date(dateStr)
+  return date.toLocaleString('vi-VN', {
+    hour: '2-digit',
+    minute: '2-digit',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  })
 }
 
 const respondToWarehouseInvitation = async (noti, decision) => {

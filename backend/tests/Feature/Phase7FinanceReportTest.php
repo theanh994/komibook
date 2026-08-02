@@ -21,7 +21,7 @@ class Phase7FinanceReportTest extends TestCase
         parent::tearDown();
     }
 
-    public function test_finance_report_is_portable_and_returns_a_complete_twelve_month_series(): void
+    public function test_finance_report_is_portable_and_returns_a_complete_twenty_four_month_series(): void
     {
         Carbon::setTestNow('2026-07-29 12:00:00');
 
@@ -70,13 +70,13 @@ class Phase7FinanceReportTest extends TestCase
             ->assertJsonPath('data.payout_stats.pending', 10000)
             ->assertJsonPath('data.payout_stats.approved', 90000)
             ->assertJsonPath('data.payout_stats.rejected', 50000)
-            ->assertJsonCount(12, 'data.revenue_by_month')
-            ->assertJsonPath('data.revenue_by_month.0.month', '2025-08')
+            ->assertJsonCount(24, 'data.revenue_by_month')
+            ->assertJsonPath('data.revenue_by_month.0.month', '2024-08')
             ->assertJsonPath('data.revenue_by_month.0.revenue', 0)
-            ->assertJsonPath('data.revenue_by_month.9.month', '2026-05')
-            ->assertJsonPath('data.revenue_by_month.9.revenue', 80000)
-            ->assertJsonPath('data.revenue_by_month.11.month', '2026-07')
-            ->assertJsonPath('data.revenue_by_month.11.revenue', 120000)
+            ->assertJsonPath('data.revenue_by_month.21.month', '2026-05')
+            ->assertJsonPath('data.revenue_by_month.21.revenue', 80000)
+            ->assertJsonPath('data.revenue_by_month.23.month', '2026-07')
+            ->assertJsonPath('data.revenue_by_month.23.revenue', 120000)
             ->assertJsonPath('data.top_vendors.0.shop_name', 'Komi Finance')
             ->assertJsonPath('data.top_vendors.0.revenue', 240000);
 

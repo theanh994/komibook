@@ -13,6 +13,7 @@ const metrics = ref({})
 const loading = ref(true)
 const error = ref('')
 const actionError = ref('')
+const transitionPanel = reactive({ article: null, status: '', reason: '', scheduled_at: '', saving: false })
 const filters = reactive({ search: '', status: '', type: '' })
 const page = ref(1)
 const lastPage = ref(1)
@@ -68,25 +69,40 @@ const reset = () => {
 
 const edit = (article) => router.push(`${routeBase.value}/${article.id}/edit`)
 
-const transition = async (article, status) => {
+const openTransition = (article, status) => {
   actionError.value = ''
+  Object.assign(transitionPanel, { article, status, reason: '', scheduled_at: '', saving: false })
+  window.requestAnimationFrame(() => document.querySelector('#article-transition-panel')?.scrollIntoView({ behavior: 'smooth', block: 'center' }))
+}
+
+const closeTransition = () => Object.assign(transitionPanel, { article: null, status: '', reason: '', scheduled_at: '', saving: false })
+
+const submitTransition = async () => {
+  const article = transitionPanel.article
+  const status = transitionPanel.status
+  if (!article || !status) return
   const reasonRequired = ['changes_requested', 'rejected', 'unpublished', 'archived'].includes(status)
-  const reason = reasonRequired ? window.prompt('Nhập lý do để người viết có thể xử lý:') : null
-  if (reasonRequired && !reason) return
-  const scheduledAt = status === 'scheduled'
-    ? window.prompt('Nhập thời điểm xuất bản, ví dụ 2026-08-01T09:00:00+07:00')
-    : null
-  if (status === 'scheduled' && !scheduledAt) return
+  if (reasonRequired && !transitionPanel.reason.trim()) {
+    actionError.value = 'Vui lòng nhập lý do rõ ràng để người viết biết cần xử lý gì.'
+    return
+  }
+  if (status === 'scheduled' && !transitionPanel.scheduled_at) {
+    actionError.value = 'Vui lòng chọn thời điểm xuất bản.'
+    return
+  }
+  transitionPanel.saving = true
   try {
     await apiClient.patch(`${baseUrl.value}/${article.id}/transition`, {
       to_status: status,
-      reason,
-      scheduled_at: scheduledAt,
+      reason: transitionPanel.reason || null,
+      scheduled_at: transitionPanel.scheduled_at || null,
       operation_key: `newsroom:${article.id}:${status}:${Date.now()}`,
     })
+    closeTransition()
     await load()
   } catch (requestError) {
     actionError.value = requestError.response?.data?.message || 'Không thể chuyển trạng thái bài viết.'
+    transitionPanel.saving = false
   }
 }
 
@@ -156,6 +172,19 @@ onMounted(load)
     </div>
 
     <p v-if="actionError" class="ui-alert ui-alert-error" role="alert">{{ actionError }}</p>
+    <section v-if="transitionPanel.article" id="article-transition-panel" class="ui-panel border-2 border-primary-container" aria-labelledby="transition-panel-title">
+      <div class="flex flex-wrap items-start justify-between gap-4"><div class="min-w-0"><p class="text-sm font-bold text-secondary">Xử lý ngay trên trang này</p><h2 id="transition-panel-title" class="mt-1 break-words text-xl font-bold text-primary">{{ transitionPanel.article.title }}</h2><p class="mt-2 text-sm text-on-surface-variant">{{ statusLabel(transitionPanel.article.status) }} → <strong>{{ statusLabel(transitionPanel.status) }}</strong></p></div><button class="ui-btn ui-btn-secondary" type="button" @click="closeTransition">Đóng</button></div>
+      <div class="mt-5 grid gap-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+        <label v-if="['changes_requested', 'rejected', 'unpublished', 'archived'].includes(transitionPanel.status)" class="block text-sm font-semibold">Lý do và hướng xử lý
+          <textarea v-model="transitionPanel.reason" class="ui-field mt-2 min-h-28" maxlength="2000" placeholder="Nêu rõ nội dung cần sửa hoặc nguyên nhân thay đổi trạng thái."></textarea>
+        </label>
+        <label v-else-if="transitionPanel.status === 'scheduled'" class="block text-sm font-semibold">Thời điểm xuất bản
+          <input v-model="transitionPanel.scheduled_at" class="ui-field mt-2" type="datetime-local" />
+        </label>
+        <p v-else class="rounded-lg bg-surface-container p-4 text-sm leading-6 text-on-surface-variant">Hệ thống sẽ ghi nhận người thao tác, thời gian và trạng thái mới trong lịch sử bài viết.</p>
+        <button class="ui-btn ui-btn-primary" type="button" :disabled="transitionPanel.saving" @click="submitTransition">{{ transitionPanel.saving ? 'Đang xử lý…' : `Xác nhận ${statusLabel(transitionPanel.status).toLowerCase()}` }}</button>
+      </div>
+    </section>
     <div v-if="loading" class="space-y-3" role="status" aria-label="Đang tải bài viết">
       <div v-for="index in 4" :key="index" class="ui-skeleton h-24"></div>
     </div>
@@ -186,7 +215,7 @@ onMounted(load)
             <td class="p-4">
               <div class="flex max-w-xs flex-wrap gap-2">
                 <button class="ui-btn ui-btn-secondary px-3 text-sm" type="button" @click="edit(article)">Chỉnh sửa</button>
-                <button v-for="[value, label] in actions(article.status)" :key="value" class="ui-btn ui-btn-primary px-3 text-sm" type="button" @click="transition(article, value)">{{ label }}</button>
+                <button v-for="[value, label] in actions(article.status)" :key="value" class="ui-btn ui-btn-primary px-3 text-sm" type="button" @click="openTransition(article, value)">{{ label }}</button>
               </div>
             </td>
           </tr>

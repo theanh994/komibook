@@ -124,6 +124,7 @@ class VnpayPaymentService
                             || empty($payload['vnp_ReturnUrl'])
                             || empty($payload['vnp_IpAddr'])
                             || empty($payload['vnp_CreateDate'])
+                            || empty($payload['vnp_ExpireDate'])
                             || $existingTxn->amount !== $session->total_amount
                             || $existingTxn->currency !== $session->currency
                             || $existingTxn->provider_reference !== $payload['vnp_TxnRef']
@@ -161,14 +162,19 @@ class VnpayPaymentService
                 }
 
                 // 7. Tạo attempt mới
-                $providerReference = 'CS_'.$session->id.'_'.time().'_'.strtolower(Str::random(6));
+                $providerReference = 'CS'.$session->id.time().strtolower(Str::random(8));
                 $idempotencyKey = 'IDEM_'.$session->id.'_'.time().'_'.strtolower(Str::random(6));
+
+                $returnUrl = trim((string) config('services.vnpay.return_url'));
+                if ($returnUrl === '') {
+                    $returnUrl = route('vnpay.return');
+                }
 
                 $gatewayResult = $gateway->createPaymentUrl(
                     $providerReference,
                     $session->total_amount,
                     $session->checkout_code,
-                    route('vnpay.return'),
+                    $returnUrl,
                     $clientIp,
                     now()
                 );

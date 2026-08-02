@@ -15,9 +15,12 @@ use App\Services\Otp\ProductionOtpSender;
 use App\Services\Refunds\FakeRefundGateway;
 use App\Services\Refunds\RefundGatewayInterface;
 use App\Services\Refunds\VnpayRefundGateway;
+use App\Support\ProductionCommandGuard;
 use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Console\Events\CommandStarting;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\ServiceProvider;
@@ -77,6 +80,8 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        Event::listen(CommandStarting::class, [ProductionCommandGuard::class, 'handle']);
+
         if (config('app.url')) {
             URL::forceRootUrl(config('app.url'));
         }

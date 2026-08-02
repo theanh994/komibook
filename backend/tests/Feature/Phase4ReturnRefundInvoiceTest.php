@@ -141,6 +141,24 @@ class Phase4ReturnRefundInvoiceTest extends TestCase
         ]);
     }
 
+    public function test_standard_physical_book_can_use_its_returnable_snapshot_policy(): void
+    {
+        [$buyer, , , $order, $item] = $this->completedPhysicalOrder();
+        $item->update([
+            'product_taxonomy_snapshot' => ['format' => 'physical', 'provenance' => 'publisher_catalog'],
+            'return_policy_snapshot' => ['is_returnable' => true, 'return_window_days' => 7],
+        ]);
+
+        Sanctum::actingAs($buyer);
+        $this->postJson("/api/orders/{$order->id}/returns", [
+            'reason' => 'Sách mới bị móp góc và rách bìa khi nhận.',
+            'idempotency_key' => 'standard-physical-return-'.$order->id,
+            'items' => [['order_item_id' => $item->id, 'quantity' => 1]],
+        ])->assertCreated()
+            ->assertJsonPath('data.status', 'requested')
+            ->assertJsonPath('data.refund_amount', 100000);
+    }
+
     public function test_invoice_snapshot_model_rejects_mutation(): void
     {
         [, , , $order] = $this->completedPhysicalOrder();
@@ -225,24 +243,24 @@ class Phase4ReturnRefundInvoiceTest extends TestCase
 
         $this->postJson("/api/vendor/returns/{$returnId}/refund", [
             'idempotency_key' => "online-{$returnId}-attempt-1",
-        ])->assertOk()->assertJsonPath('data.status', 'refund_failed');
-        $this->assertSame(1, $gateway->calls);
+        ])->assertOk()->assertJsonPath('data.status', 'refunded');
+        $this->assertSame(0, $gateway->calls);
         $this->assertDatabaseCount('refund_transaction_attempts', 1);
 
         $this->postJson("/api/vendor/returns/{$returnId}/refund", [
             'idempotency_key' => "online-{$returnId}-attempt-1",
-        ])->assertOk()->assertJsonPath('data.status', 'refund_failed');
-        $this->assertSame(1, $gateway->calls);
+        ])->assertOk()->assertJsonPath('data.status', 'refunded');
+        $this->assertSame(0, $gateway->calls);
 
         $this->postJson("/api/vendor/returns/{$returnId}/refund", [
             'idempotency_key' => "online-{$returnId}-attempt-2",
         ])->assertOk()->assertJsonPath('data.status', 'refunded');
-        $this->assertSame(2, $gateway->calls);
-        $this->assertDatabaseCount('refund_transaction_attempts', 2);
+        $this->assertSame(0, $gateway->calls);
+        $this->assertDatabaseCount('refund_transaction_attempts', 1);
         $this->assertDatabaseHas('refund_transactions', [
             'return_request_id' => $returnId,
             'status' => 'refunded',
-            'provider_reference' => 'VNPAY-REFUND-001',
+            'provider_reference' => 'KOMIBOOK-WALLET-REFUND-1',
         ]);
     }
 
@@ -355,18 +373,18 @@ class Phase4ReturnRefundInvoiceTest extends TestCase
         }
         $this->postJson("/api/vendor/returns/{$returnId}/refund", [
             'idempotency_key' => "pending-{$returnId}-refund",
-        ])->assertOk()->assertJsonPath('data.status', 'refund_processing');
-        $this->assertSame(1, $gateway->refundCalls);
-        $this->assertDatabaseMissing('vendor_earning_reversals', ['return_request_id' => $returnId]);
+        ])->assertOk()->assertJsonPath('data.status', 'refunded');
+        $this->assertSame(0, $gateway->refundCalls);
+        $this->assertDatabaseHas('vendor_earning_reversals', ['return_request_id' => $returnId]);
 
         $this->postJson("/api/vendor/returns/{$returnId}/refund/reconcile", [
             'idempotency_key' => "pending-{$returnId}-query",
         ])->assertOk()->assertJsonPath('data.status', 'refunded');
-        $this->assertSame(1, $gateway->queryCalls);
-        $this->assertDatabaseCount('refund_transaction_attempts', 2);
+        $this->assertSame(0, $gateway->queryCalls);
+        $this->assertDatabaseCount('refund_transaction_attempts', 1);
         $this->assertDatabaseHas('refund_transactions', [
             'return_request_id' => $returnId,
-            'provider_reference' => 'VNPAY-REFUND-FINAL-001',
+            'provider_reference' => 'KOMIBOOK-WALLET-REFUND-1',
             'status' => 'refunded',
         ]);
     }

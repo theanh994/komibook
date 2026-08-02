@@ -252,7 +252,6 @@ class BookController extends Controller
         $warehouseId = $data['warehouse_id'] ?? null;
         $submittedRelationships = $data;
         $externalCounterpartyName = $data['external_counterparty_name'] ?? null;
-        $initialShelfLocation = $data['initial_shelf_location'] ?? null;
         unset(
             $data['ebook_file'],
             $data['category_ids'],
@@ -262,12 +261,11 @@ class BookController extends Controller
             $data['supplier_relationship_id'],
             $data['responsible_organization_relationship_id'],
             $data['external_counterparty_name'],
-            $data['initial_shelf_location'],
             $data['operation_key'],
         );
 
         try {
-            [$book, $receipt] = DB::transaction(function () use ($request, $vendor, $taxonomy, $commercialParties, $supplyChainResolver, $inventoryOnboarding, $data, $categoryIds, $warehouseId, $submittedRelationships, $seriesNameProvided, $seriesName, $seriesIdProvided, $initialQuantity, $externalCounterpartyName, $initialShelfLocation, $receiptOperationKey) {
+            [$book, $receipt] = DB::transaction(function () use ($request, $vendor, $taxonomy, $commercialParties, $supplyChainResolver, $inventoryOnboarding, $data, $categoryIds, $warehouseId, $submittedRelationships, $seriesNameProvided, $seriesName, $seriesIdProvided, $initialQuantity, $externalCounterpartyName, $receiptOperationKey) {
                 if ($seriesNameProvided) {
                     if ($seriesName !== '') {
                         $series = Series::whereRaw('LOWER(title) = ?', [mb_strtolower($seriesName)])->firstOrCreate([
@@ -322,7 +320,6 @@ class BookController extends Controller
                         $request->user(),
                         $initialQuantity,
                         $externalCounterpartyName,
-                        $initialShelfLocation,
                         $receiptOperationKey,
                     )
                     : null;

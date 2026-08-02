@@ -26,7 +26,7 @@ class Phase8WarehouseDocumentsTest extends TestCase
             'type' => 'receipt',
             'destination_warehouse_id' => $warehouse->id,
             'operation_key' => 'phase8-receipt-create',
-            'lines' => [['book_id' => $book->id, 'quantity' => 7, 'shelf_location' => 'A-01']],
+            'lines' => [['book_id' => $book->id, 'quantity' => 7]],
         ])->assertCreated();
         $documentId = $created->json('data.id');
         $this->transition($vendorUser, $documentId, 'submitted', 'phase8-receipt-submit')->assertOk();
@@ -39,7 +39,6 @@ class Phase8WarehouseDocumentsTest extends TestCase
             'warehouse_id' => $warehouse->id,
             'book_id' => $book->id,
             'quantity' => 7,
-            'shelf_location' => 'A-01',
         ]);
         $this->assertSame(7, $book->fresh()->stock);
         $this->assertDatabaseCount('warehouse_stock_ledgers', 1);

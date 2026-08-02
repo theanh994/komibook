@@ -19,7 +19,7 @@ export const workflowActions = {
     { target: 'rejected', label: 'Từ chối', kind: 'transition', requiresReason: true },
   ],
   approved: [
-    { target: 'item_received', label: 'Xác nhận đã nhận hàng', kind: 'transition' },
+    { target: 'item_received', label: 'Xác nhận đã nhận hàng trả', kind: 'transition' },
   ],
   item_received: [
     { target: 'refund', label: 'Thực hiện hoàn tiền', kind: 'refund' },

@@ -1,6 +1,6 @@
 <template>
-  <article class="book-card group flex h-full flex-col overflow-hidden rounded-b-lg border border-outline-variant/25 bg-surface-container-lowest shadow-sm">
-    <div class="relative aspect-[2/3] overflow-hidden bg-white">
+  <article class="book-card group flex h-full flex-col overflow-hidden rounded-b-lg rounded-2xl border-0 bg-transparent transition-all duration-300 hover:-translate-y-1">
+    <div class="relative aspect-[2/3] w-full overflow-hidden rounded-xl bg-transparent flex items-center justify-center">
       <router-link
         :to="{ name: 'book-detail', params: { slug: book.slug } }"
         class="absolute inset-0 block focus-visible:z-10 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary-fixed-dim"
@@ -10,7 +10,7 @@
           v-if="coverUrl && !coverFailed"
           :src="coverUrl"
           :alt="`Bìa sách ${displayTitle}`"
-          class="book-cover h-full w-full rounded-none object-contain"
+          class="book-cover h-full w-full rounded-lg object-contain"
           loading="lazy"
           @error="markCoverFailed"
         />
@@ -53,13 +53,15 @@
       <button
         v-if="showWishlist"
         type="button"
-        class="absolute right-2 top-2 z-20 flex h-11 w-11 items-center justify-center rounded-full border border-outline-variant/30 bg-surface-container-lowest/95 text-outline shadow-md transition-colors hover:text-error focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary-fixed-dim"
-        :class="{ 'text-error': isFavorite }"
+        class="absolute right-2 top-2 z-20 flex h-11 w-11 items-center justify-center rounded-full border border-white/70 bg-slate-950/45 text-white shadow-sm transition-colors hover:bg-slate-950/65 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary-fixed-dim"
         :aria-label="isFavorite ? `Bỏ ${displayTitle} khỏi yêu thích` : `Thêm ${displayTitle} vào yêu thích`"
         :aria-pressed="isFavorite"
         @click="$emit('toggle-wishlist', book.id)"
       >
-        <span class="material-symbols-outlined text-[22px]" :class="{ 'fill-1': isFavorite }" aria-hidden="true">favorite</span>
+        <span
+          class="material-symbols-outlined text-[26px] transition-colors drop-shadow-[0_2px_4px_rgba(0,0,0,0.85)]"
+          :class="isFavorite ? 'text-error fill-1' : 'text-white hover:text-error'"
+          aria-hidden="true">favorite</span>
       </button>
 
       <div v-if="isPurchasable" class="card-actions absolute bottom-3 right-2 z-20 flex flex-col gap-2">
@@ -90,8 +92,8 @@
       </div>
     </div>
 
-    <div class="flex min-h-[96px] flex-grow flex-col px-3 pb-3 pt-2.5">
-      <h3 class="mb-1.5 line-clamp-2 text-sm font-medium leading-snug text-on-surface">
+    <div class="flex flex-grow flex-col px-2 pb-2 pt-2.5 text-center">
+      <h3 class="mb-1.5 flex min-h-[38px] items-center justify-center text-center text-sm font-medium leading-tight text-on-surface break-words line-clamp-2">
         <router-link
           :to="{ name: 'book-detail', params: { slug: book.slug } }"
           class="text-inherit no-underline transition-colors hover:text-primary focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-fixed-dim"
@@ -99,14 +101,14 @@
           {{ displayTitle }}
         </router-link>
       </h3>
-      <p v-if="book.type === 'ebook'" class="mb-1 text-xs font-bold text-primary">
+      <p v-if="book.type === 'ebook'" class="mb-1 text-center text-xs font-bold text-primary">
         {{ book.latest_ebook_version?.version
           ? `Phiên bản ${book.latest_ebook_version.version}`
           : 'Phiên bản đang cập nhật' }}
       </p>
 
-      <div v-if="isPurchasable" class="mt-auto flex flex-wrap items-baseline gap-2">
-        <span class="text-[15px] font-bold text-primary">
+      <div v-if="isPurchasable" class="mt-auto flex flex-wrap items-baseline justify-center gap-2">
+        <span class="text-[15px] font-bold text-green-600 dark:text-green-400">
           {{ formatCurrency(book.sale_price || book.price) }}
         </span>
         <span v-if="book.sale_price && book.price > book.sale_price" class="text-xs text-outline line-through">
@@ -182,8 +184,8 @@ const formatCurrency = (value) => {
   justify-content: center;
   border: 0;
   border-radius: 9999px;
-  color: var(--color-on-secondary, #ffffff);
-  background: var(--color-secondary, #d9043d);
+  color: var(--color-on-commerce, #ffffff);
+  background: var(--color-commerce, #15803d);
   box-shadow: 0 4px 12px rgba(15, 39, 64, 0.2);
   transition: filter 180ms ease, transform 180ms ease;
 }
@@ -192,7 +194,7 @@ const formatCurrency = (value) => {
 .card-action:focus-visible {
   filter: brightness(1.08);
   transform: scale(1.05);
-  outline: 3px solid color-mix(in srgb, var(--color-primary, #17324d) 30%, transparent);
+  outline: 3px solid color-mix(in srgb, var(--color-commerce, #15803d) 35%, transparent);
   outline-offset: 2px;
 }
 

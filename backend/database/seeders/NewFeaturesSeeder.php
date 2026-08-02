@@ -81,7 +81,7 @@ class NewFeaturesSeeder extends Seeder
         // 4. Tạo Tickets hỗ trợ & Tin nhắn
         $ticket1 = SupportTicket::create([
             'user_id' => $cust1->id,
-            'subject' => 'Lỗi giao dịch trừ tiền 2 lần qua MoMo',
+            'subject' => 'Cần kiểm tra trạng thái thanh toán VNPAY Sandbox',
             'category' => 'billing',
             'priority' => 'high',
             'status' => 'open',
@@ -90,7 +90,7 @@ class NewFeaturesSeeder extends Seeder
         TicketMessage::create([
             'support_ticket_id' => $ticket1->id,
             'sender_id' => $cust1->id,
-            'message' => 'Chào ban hỗ trợ, tôi bấm thanh toán đơn hàng bằng MoMo, ví MoMo đã trừ tiền nhưng trang web báo giao dịch thất bại và đơn hàng vẫn ở trạng thái chờ.',
+            'message' => 'Chào ban hỗ trợ, tôi đã thử thanh toán bằng VNPAY Sandbox nhưng đơn hàng vẫn ở trạng thái chờ. Nhờ kiểm tra giúp trạng thái giao dịch thử nghiệm.',
         ]);
 
         $ticket2 = SupportTicket::create([

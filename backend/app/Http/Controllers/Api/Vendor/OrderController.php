@@ -51,7 +51,7 @@ class OrderController extends Controller
      */
     public function show(Order $order): JsonResponse
     {
-        $order->load(['user', 'orderItems.book']);
+        $order->load(['user', 'orderItems.book', 'transitionOperations']);
 
         return response()->json([
             'status' => 'success',
@@ -75,7 +75,7 @@ class OrderController extends Controller
             return response()->json([
                 'status' => 'success',
                 'message' => 'Cập nhật trạng thái đơn hàng thành công!',
-                'data' => new OrderResource($updatedOrder->load('user')),
+                'data' => new OrderResource($updatedOrder->load(['user', 'orderItems.book', 'transitionOperations'])),
             ]);
         } catch (\LogicException $e) {
             return response()->json([

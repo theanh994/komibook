@@ -16,6 +16,10 @@ const kpis = ref({
 })
 
 const payoutRequests = ref([])
+const payoutAccounts = ref([])
+const accountReview = ref(null)
+const accountReviewReason = ref('')
+const reviewingAccount = ref(false)
 const currentPage = ref(1)
 const pagination = ref({ current_page: 1, last_page: 1, total: 0 })
 
@@ -46,12 +50,34 @@ const fetchReconciliations = async () => {
     })
     kpis.value = res.data.data.kpi
     payoutRequests.value = res.data.data.payout_requests
+    payoutAccounts.value = res.data.data.payout_accounts || []
     pagination.value = res.data.data.meta
   } catch (err) {
     toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Không thể tải dữ liệu đối soát.', life: 3000 })
   } finally {
     loading.value = false
   }
+}
+
+const openAccountReview = (account, target) => {
+  accountReview.value = { account, target }
+  accountReviewReason.value = target === 'verified' ? 'Đã đối chiếu đúng chủ tài khoản và thông tin ngân hàng.' : ''
+}
+
+const submitAccountReview = async () => {
+  if (!accountReviewReason.value.trim() || reviewingAccount.value) return
+  reviewingAccount.value = true
+  try {
+    await apiClient.patch(`/api/admin/reconciliation/payout-accounts/${accountReview.value.account.id}/review`, {
+      target: accountReview.value.target,
+      reason: accountReviewReason.value.trim(),
+    })
+    toast.add({ severity: 'success', summary: 'Đã cập nhật tài khoản', detail: 'Trạng thái tài khoản nhận tiền đã được lưu.', life: 3000 })
+    accountReview.value = null
+    await fetchReconciliations()
+  } catch (error) {
+    toast.add({ severity: 'error', summary: 'Không thể xét tài khoản', detail: error.response?.data?.message || 'Vui lòng thử lại.', life: 3500 })
+  } finally { reviewingAccount.value = false }
 }
 
 const changeTab = (tabKey) => {
@@ -103,8 +129,8 @@ onMounted(() => {
     <!-- Header -->
     <div class="flex flex-col md:flex-row md:items-center justify-between gap-md mb-xl animate-fade-in">
       <div>
-        <h1 class="font-headline-lg text-headline-lg text-on-surface font-bold">Đối soát & Yêu cầu rút tiền</h1>
-        <p class="font-body-md text-body-md text-on-surface-variant mt-xs">Quản lý và xét duyệt các yêu cầu thanh toán từ nhà bán hàng.</p>
+        <h1 class="font-headline-lg text-headline-lg text-on-surface font-bold">Quản lý yêu cầu rút tiền</h1>
+        <p class="font-body-md text-body-md text-on-surface-variant mt-xs">Xác minh tài khoản nhận tiền và xử lý yêu cầu của khách hàng, người bán sách cũ và Nhà bán.</p>
       </div>
       <div class="flex gap-sm">
         <button type="button" @click="fetchReconciliations" class="min-h-11 px-4 py-2 border border-outline-variant text-on-surface-variant rounded-lg font-label-md text-label-md hover:bg-surface-container-low transition-colors flex items-center gap-sm">
@@ -112,6 +138,11 @@ onMounted(() => {
         </button>
       </div>
     </div>
+
+    <section class="mb-xl rounded-xl border border-outline-variant/30 bg-surface-container-lowest p-lg" aria-labelledby="payout-account-review-title">
+      <div class="flex items-center justify-between gap-3"><div><h2 id="payout-account-review-title" class="text-xl font-black text-on-surface">Tài khoản nhận tiền chờ xác minh</h2><p class="mt-1 text-sm text-on-surface-variant">Chỉ tài khoản đã xác minh mới có thể tạo yêu cầu rút.</p></div><span class="rounded-full bg-surface-container px-3 py-1 text-sm font-bold">{{ payoutAccounts.length }}</span></div>
+      <div class="mt-4 grid gap-3 lg:grid-cols-2"><article v-for="account in payoutAccounts" :key="account.id" class="rounded-xl border border-outline-variant/30 bg-surface-container-low p-4"><div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div><p class="font-bold text-on-surface">{{ account.user?.name }}</p><p class="text-sm text-on-surface-variant">{{ account.user?.email }}</p><p class="mt-2 text-sm font-semibold">{{ account.bank_name }} · {{ account.masked_account }}</p><p class="text-sm uppercase text-on-surface-variant">{{ account.account_name }}</p></div><div class="flex gap-2"><button type="button" class="min-h-11 rounded-lg border border-error px-3 text-sm font-bold text-error" @click="openAccountReview(account, 'rejected')">Yêu cầu sửa</button><button type="button" class="min-h-11 rounded-lg bg-primary px-3 text-sm font-bold text-on-primary" @click="openAccountReview(account, 'verified')">Xác minh</button></div></div><p v-if="account.review_reason" class="mt-3 text-xs text-error">Lần trước: {{ account.review_reason }}</p></article><p v-if="!payoutAccounts.length" class="col-span-full rounded-xl bg-surface-container-low p-6 text-center text-on-surface-variant">Không có tài khoản nào đang chờ xử lý.</p></div>
+    </section>
 
     <!-- KPI Row -->
     <div class="grid grid-cols-2 md:grid-cols-4 gap-md mb-xl animate-slide-up">
@@ -167,7 +198,7 @@ onMounted(() => {
           <thead>
             <tr class="bg-surface-container-low text-on-surface-variant font-label-md text-[13px]">
               <th class="py-3 px-lg font-semibold">Mã YC</th>
-              <th class="py-3 px-lg font-semibold">Nhà cung cấp</th>
+              <th class="py-3 px-lg font-semibold">Chủ ví</th>
               <th class="py-3 px-lg font-semibold">Ngày tạo</th>
               <th class="py-3 px-lg font-semibold text-right">Số tiền rút</th>
               <th class="py-3 px-lg font-semibold">Thông tin nhận tiền</th>
@@ -185,7 +216,7 @@ onMounted(() => {
             </tr>
             <tr v-for="row in payoutRequests" :key="row.id" class="hover:bg-surface-variant/30 transition-colors">
               <td class="py-3.5 px-lg font-medium text-primary text-sm">#{{ row.id }}</td>
-              <td class="py-3.5 px-lg text-sm text-on-surface font-medium">{{ row.vendor?.shop_name || 'N/A' }}</td>
+              <td class="py-3.5 px-lg text-sm text-on-surface"><p class="font-medium">{{ row.vendor?.shop_name || row.user?.name || 'Tài khoản KomiBook' }}</p><p class="text-xs text-on-surface-variant">{{ row.user?.email }}</p></td>
               <td class="py-3.5 px-lg text-sm text-on-surface-variant">{{ new Date(row.created_at).toLocaleDateString('vi-VN') }}</td>
               <td class="py-3.5 px-lg text-sm text-primary text-right font-bold">{{ formatVND(row.amount) }}</td>
               <td class="py-3.5 px-lg text-sm text-on-surface">
@@ -235,6 +266,10 @@ onMounted(() => {
           <button type="button" class="min-h-11 px-4 rounded-lg border border-outline-variant disabled:opacity-40" :disabled="currentPage >= pagination.last_page" @click="changePage(currentPage + 1)">Trang sau</button>
         </div>
       </div>
+    </div>
+
+    <div v-if="accountReview" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true" aria-labelledby="account-review-title">
+      <form class="w-full max-w-lg rounded-2xl bg-surface-container-lowest p-5 shadow-xl" @submit.prevent="submitAccountReview"><h2 id="account-review-title" class="text-xl font-black text-on-surface">{{ accountReview.target === 'verified' ? 'Xác minh tài khoản nhận tiền' : 'Yêu cầu cập nhật tài khoản' }}</h2><p class="mt-2 text-sm text-on-surface-variant">{{ accountReview.account.user?.name }} · {{ accountReview.account.bank_name }} · {{ accountReview.account.masked_account }}</p><label class="mt-5 grid gap-2 text-sm font-bold">Ghi chú xét duyệt<textarea v-model.trim="accountReviewReason" rows="4" class="rounded-xl border border-outline-variant bg-surface p-3 font-normal" required></textarea></label><div class="mt-5 flex justify-end gap-2"><button type="button" class="min-h-11 rounded-xl border border-outline-variant px-4 font-bold" @click="accountReview = null">Hủy</button><button type="submit" class="min-h-11 rounded-xl bg-primary px-4 font-bold text-on-primary disabled:opacity-50" :disabled="reviewingAccount || !accountReviewReason.trim()">{{ reviewingAccount ? 'Đang lưu…' : 'Xác nhận' }}</button></div></form>
     </div>
   </div>
 </template>

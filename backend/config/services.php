@@ -35,7 +35,9 @@ return [
         'tmn_code' => env('VNPAY_TMN_CODE'),
         'hash_secret' => env('VNPAY_HASH_SECRET'),
         'url' => env('VNPAY_URL', 'https://sandbox.vnpayment.vn/paymentv2/vpcpay.html'),
-        'refund_url' => env('VNPAY_REFUND_URL'),
+        'return_url' => env('VNPAY_RETURN_URL'),
+        'refund_url' => env('VNPAY_REFUND_URL', 'https://sandbox.vnpayment.vn/merchant_webapi/api/transaction'),
+        'confirm_on_return' => env('VNPAY_CONFIRM_ON_RETURN', false),
     ],
 
     'google' => [

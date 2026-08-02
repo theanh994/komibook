@@ -247,21 +247,26 @@
                   </button>
 
                   <button
+                    v-for="provider in availablePaymentProviders"
+                    :key="provider.id"
                     type="button"
-                    @click="paymentMethod = 'VNPAY'"
-                    :aria-pressed="paymentMethod === 'VNPAY'"
-                    :class="['p-lg rounded-2xl border-2 cursor-pointer transition-all flex items-center gap-md', paymentMethod === 'VNPAY' ? 'border-primary bg-primary-container/5 shadow-sm' : 'border-outline-variant/20 hover:border-outline-variant/60']"
+                    @click="paymentMethod = provider.id.toUpperCase()"
+                    :aria-pressed="paymentMethod === provider.id.toUpperCase()"
+                    :class="['p-lg rounded-2xl border-2 cursor-pointer transition-all flex items-center gap-md text-left', paymentMethod === provider.id.toUpperCase() ? 'border-primary bg-primary-container/5 shadow-sm' : 'border-outline-variant/20 hover:border-outline-variant/60']"
                   >
-                    <div :class="['w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0', paymentMethod === 'VNPAY' ? 'border-primary' : 'border-outline']">
-                      <div v-if="paymentMethod === 'VNPAY'" class="w-3 h-3 rounded-full bg-primary"></div>
+                    <div :class="['w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0', paymentMethod === provider.id.toUpperCase() ? 'border-primary' : 'border-outline']">
+                      <div v-if="paymentMethod === provider.id.toUpperCase()" class="w-3 h-3 rounded-full bg-primary"></div>
                     </div>
                     <div class="flex-1">
-                      <div class="font-bold text-on-surface">Ví điện tử / Thẻ ATM (VNPAY)</div>
-                      <div class="text-xs text-on-surface-variant">Thanh toán qua cổng VNPAY an toàn</div>
+                      <div class="font-bold text-on-surface">{{ provider.name }}</div>
+                      <div class="text-xs text-on-surface-variant">{{ provider.notice }}</div>
                     </div>
-                    <span class="material-symbols-outlined text-3xl text-primary/40">account_balance_wallet</span>
+                    <span class="material-symbols-outlined text-3xl text-primary/40">{{ provider.supports_qr ? 'qr_code_2' : 'account_balance_wallet' }}</span>
                   </button>
                 </div>
+                <p v-if="availablePaymentProviders.some(provider => provider.mode === 'demo')" class="mt-md rounded-xl border border-amber-300 bg-amber-50 p-md text-sm leading-6 text-amber-950">
+                  Phương thức có nhãn demo chỉ mô phỏng nội bộ, không quét/chuyển tiền thật và không phát sinh phí.
+                </p>
               </section>
 
               <!-- Coupon -->
@@ -371,6 +376,27 @@
       </div>
     </div>
   </div>
+
+  <div v-if="pendingPayment" class="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-md" role="dialog" aria-modal="true" aria-labelledby="demo-payment-title">
+    <section class="w-full max-w-md rounded-2xl bg-surface-container-lowest p-xl shadow-2xl">
+      <div class="mb-lg flex items-start justify-between gap-md">
+        <div>
+          <p class="text-xs font-bold uppercase tracking-wider text-amber-700">Thanh toán mô phỏng</p>
+          <h2 id="demo-payment-title" class="mt-xs text-2xl font-bold text-on-surface">{{ pendingPayment.provider_name }}</h2>
+        </div>
+        <button type="button" class="min-h-11 min-w-11 rounded-full hover:bg-surface-container-high" aria-label="Đóng" @click="pendingPayment = null">
+          <span class="material-symbols-outlined">close</span>
+        </button>
+      </div>
+      <div v-if="pendingPayment.qr_payload" class="mx-auto mb-lg grid aspect-square w-52 place-items-center border-8 border-on-surface bg-white p-md text-center font-mono text-xs font-bold text-on-surface">
+        QR DEMO<br />KHÔNG QUÉT<br />{{ formatCurrency(pendingPayment.amount) }}
+      </div>
+      <p class="rounded-xl border border-amber-300 bg-amber-50 p-md text-sm leading-6 text-amber-950">{{ pendingPayment.notice }}</p>
+      <button type="button" class="mt-lg min-h-12 w-full rounded-xl bg-primary px-lg font-bold text-on-primary disabled:opacity-50" :disabled="isCompletingPayment" @click="completeSimulatedPayment">
+        {{ isCompletingPayment ? 'Đang xác nhận...' : 'Xác nhận thanh toán demo' }}
+      </button>
+    </section>
+  </div>
 </template>
 
 <script setup>
@@ -402,6 +428,11 @@ const shippingData = ref({
 })
 
 const paymentMethod = ref('COD')
+const paymentProviders = ref([])
+const pendingPayment = ref(null)
+const pendingOrderId = ref(null)
+const isCompletingPayment = ref(false)
+const availablePaymentProviders = computed(() => paymentProviders.value.filter(provider => provider.available))
 const addresses = ref([])
 const selectedAddress = ref(null)
 
@@ -419,6 +450,7 @@ const ebookPolicyLabel = computed(() => ebookPolicy.value?.version
 onMounted(() => {
   refreshCartBooks()
   fetchPublicPolicies()
+  fetchPaymentProviders()
   if (authStore.isAuthenticated) {
     fetchAddresses()
   }
@@ -433,6 +465,15 @@ onMounted(() => {
     toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Thanh toán không thành công hoặc bị hủy.', life: 5000 })
   }
 })
+
+const fetchPaymentProviders = async () => {
+  try {
+    const response = await apiClient.get('/api/payment-providers')
+    paymentProviders.value = response.data?.data || []
+  } catch {
+    paymentProviders.value = []
+  }
+}
 
 const fetchPublicPolicies = async () => {
   try {
@@ -560,6 +601,20 @@ const processCheckout = async () => {
     }
     const res = await cartStore.checkout(payload)
     
+    const selectedCapability = paymentProviders.value.find(
+      provider => provider.id === paymentMethod.value.toLowerCase()
+    )
+
+    if (selectedCapability?.mode === 'demo') {
+      const firstOrder = res[0]
+      if (!firstOrder) throw new Error('Không tìm thấy đơn hàng vừa tạo.')
+      const provider = paymentMethod.value.toLowerCase()
+      const paymentResponse = await apiClient.post(`/api/payments/${provider}/attempts`, { order_id: firstOrder.id })
+      pendingPayment.value = paymentResponse.data
+      pendingOrderId.value = firstOrder.id
+      return
+    }
+
     if (paymentMethod.value === 'VNPAY') {
        const firstOrder = res[0]
        if (firstOrder) {
@@ -584,6 +639,22 @@ const processCheckout = async () => {
     }
   } finally {
     isSubmitting.value = false
+  }
+}
+
+const completeSimulatedPayment = async () => {
+  if (!pendingPayment.value) return
+  isCompletingPayment.value = true
+  try {
+    await apiClient.post(`/api/payments/${pendingPayment.value.provider}/attempts/${pendingPayment.value.transaction_id}/complete`)
+    const orderId = pendingOrderId.value
+    pendingPayment.value = null
+    cartStore.clearCart()
+    router.push({ name: 'checkout-success', query: { order_id: orderId } })
+  } catch (error) {
+    toast.add({ severity: 'error', summary: 'Không thể xác nhận', detail: error.response?.data?.message || error.message, life: 5000 })
+  } finally {
+    isCompletingPayment.value = false
   }
 }
 </script>

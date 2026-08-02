@@ -45,7 +45,6 @@ class VendorOnboardingService
                 'onboarding_status' => $target,
                 'status' => $this->legacyStatus($target),
                 'last_review_reason' => $reason,
-                'rejection_reason' => $target === VendorOnboardingStatus::Rejected ? $reason : null,
             ];
             $timestamp = match ($target) {
                 VendorOnboardingStatus::Submitted, VendorOnboardingStatus::Resubmitted => 'submitted_at',

@@ -26,7 +26,7 @@ class Phase4EditorialCmsTest extends TestCase
     {
         $payload = [
             'title' => 'KomiBook Editorial',
-            'body' => '<p>Nội dung hợp lệ</p><script>alert(1)</script>',
+            'body' => '<p>Nội dung hợp lệ</p><img src="/storage/articles/demo.webp" alt="Ảnh minh họa"><script>alert(1)</script>',
             'category' => 'Tin sách',
             'tags' => ['Ra mắt', 'KomiBook'],
             'seo_title' => 'KomiBook Editorial',
@@ -39,6 +39,7 @@ class Phase4EditorialCmsTest extends TestCase
 
         $article = Article::findOrFail($response->json('data.id'));
         $this->assertStringNotContainsString('<script', $article->body);
+        $this->assertStringContainsString('<img src="/storage/articles/demo.webp" alt="Ảnh minh họa"', $article->body);
         $this->assertSame(2, $article->tags()->count());
         $this->assertSame(1, ArticleRevision::where('article_id', $article->id)->count());
 
@@ -105,6 +106,25 @@ class Phase4EditorialCmsTest extends TestCase
         $this->getJson("/api/articles/{$article->slug}")->assertNotFound();
         $this->transition($article, 'archived', 'u6', 'Hết hiệu lực')->assertOk();
         $this->getJson("/api/articles/{$article->slug}")->assertNotFound();
+    }
+
+    public function test_admin_can_correct_a_published_article_in_place(): void
+    {
+        $article = $this->createArticle();
+        foreach ([['submitted', 'edit-1'], ['under_review', 'edit-2'], ['approved', 'edit-3'], ['published', 'edit-4']] as [$status, $key]) {
+            $this->transition($article, $status, $key)->assertOk();
+        }
+
+        $this->actingAs($this->admin)->patchJson("/api/admin/articles/{$article->id}", [
+            'title' => 'Tiêu đề được hiệu chỉnh đầy đủ',
+            'body' => '<p>Nội dung hiệu chỉnh không bị mất.</p>',
+        ])->assertOk()
+            ->assertJsonPath('data.status', 'published')
+            ->assertJsonPath('data.revision', 2);
+
+        $this->getJson('/api/articles/tieu-de-duoc-hieu-chinh-day-du')
+            ->assertOk()
+            ->assertJsonPath('data.body', '<p>Nội dung hiệu chỉnh không bị mất.</p>');
     }
 
     private function createArticle(): Article

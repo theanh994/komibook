@@ -56,7 +56,6 @@ class StoreBookRequest extends FormRequest
             'ebook_file' => ['nullable', 'file', 'mimes:pdf,epub', 'max:51200', 'required_if:type,ebook'],
             'warehouse_id' => ['required_if:type,physical', 'nullable', 'integer', 'exists:warehouses,id'],
             'external_counterparty_name' => ['nullable', 'string', 'max:255'],
-            'initial_shelf_location' => ['nullable', 'string', 'max:255'],
             'operation_key' => ['nullable', 'string', 'max:128'],
             'publisher_relationship_id' => ['nullable', 'integer', 'exists:vendor_organization_relationships,id'],
             'supplier_relationship_id' => ['nullable', 'integer', 'exists:vendor_organization_relationships,id'],

@@ -7,6 +7,7 @@ const toast = useToast()
 
 const period = ref('Tháng Này (' + new Date().toLocaleDateString('vi-VN', { month: '2-digit', year: 'numeric' }) + ')')
 const loading = ref(true)
+const refreshing = ref(false)
 const error = ref('')
 
 const reportData = ref({
@@ -34,6 +35,23 @@ const fetchReport = async () => {
   }
 }
 
+const refreshReport = async () => {
+  refreshing.value = true
+  try {
+    await apiClient.post('/api/admin/finance-report/refresh')
+    await fetchReport()
+    toast.add({ severity: 'success', summary: 'Đã làm mới', detail: 'Báo cáo doanh thu 24 tháng đã được cập nhật.', life: 3000 })
+  } catch (requestError) {
+    toast.add({ severity: 'error', summary: 'Không thể làm mới', detail: requestError.response?.data?.message || 'Vui lòng thử lại.', life: 3000 })
+  } finally {
+    refreshing.value = false
+  }
+}
+
+const exportReport = () => {
+  window.open('/api/admin/finance-report/export', '_blank', 'noopener')
+}
+
 onMounted(() => {
   fetchReport()
 })
@@ -55,7 +73,11 @@ const kpiCards = computed(() => [
         <h1 class="font-headline-lg text-headline-lg font-semibold text-primary">Báo cáo tài chính</h1>
         <p class="text-on-surface-variant font-body-md text-body-md mt-1">Tổng quan doanh thu và đối soát</p>
       </div>
-      <div class="flex gap-md mt-md md:mt-0">
+      <div class="flex flex-wrap gap-md mt-md md:mt-0">
+        <button type="button" class="min-h-11 rounded-lg border border-outline-variant bg-surface-container-lowest px-4 font-bold text-primary" :disabled="refreshing" @click="refreshReport">
+          {{ refreshing ? 'Đang làm mới…' : 'Làm mới báo cáo' }}
+        </button>
+        <button type="button" class="min-h-11 rounded-lg bg-primary px-4 font-bold text-on-primary" @click="exportReport">Xuất CSV</button>
         <div class="relative bg-surface-container-lowest border border-outline-variant rounded-lg px-4 py-2 flex items-center gap-2 shadow-sm cursor-pointer hover:border-primary transition-colors">
           <span class="material-symbols-outlined text-on-surface-variant text-[20px]">calendar_month</span>
           <span class="font-label-md text-label-md text-on-surface">{{ period }}</span>
@@ -150,6 +172,27 @@ const kpiCards = computed(() => [
         </div>
       </div>
     </div>
+
+    <section v-if="!loading && !error" class="rounded-xl border border-outline-variant/20 bg-surface-container-lowest p-lg shadow-card" aria-labelledby="monthly-report-title">
+      <div class="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h2 id="monthly-report-title" class="text-xl font-bold text-on-surface">Kho báo cáo doanh thu 24 tháng</h2>
+          <p class="text-sm text-on-surface-variant">Dữ liệu hỗ trợ đối soát và kê khai; KomiBook không tính hoặc khấu trừ thuế.</p>
+        </div>
+      </div>
+      <div class="overflow-x-auto" tabindex="0">
+        <table class="w-full min-w-[780px] text-left">
+          <thead><tr class="border-b border-outline-variant/30 text-sm text-on-surface-variant">
+            <th class="px-3 py-3">Tháng</th><th class="px-3 py-3 text-right">Khách thanh toán</th><th class="px-3 py-3 text-right">Đơn hoàn tất</th><th class="px-3 py-3 text-right">Commission</th><th class="px-3 py-3 text-right">Nhà bán nhận</th><th class="px-3 py-3 text-right">Hoàn tiền</th>
+          </tr></thead>
+          <tbody class="divide-y divide-outline-variant/20">
+            <tr v-for="row in reportData.revenue_by_month" :key="row.month" class="hover:bg-surface-container-low/50">
+              <td class="px-3 py-3 font-semibold">{{ row.month }}</td><td class="px-3 py-3 text-right">{{ formatVND(row.revenue) }}</td><td class="px-3 py-3 text-right">{{ row.orders }}</td><td class="px-3 py-3 text-right">{{ formatVND(row.commission) }}</td><td class="px-3 py-3 text-right">{{ formatVND(row.vendor_net) }}</td><td class="px-3 py-3 text-right">{{ formatVND(row.refunds) }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
   </div>
 </template>
 

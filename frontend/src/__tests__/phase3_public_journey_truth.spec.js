@@ -192,8 +192,11 @@ describe('Phase 3C.2 Public Journey Truth Behavioral Tests', () => {
     setupState.order.value = { status: 'processing', shipping_status: 'delivering' }
     expect(setupState.currentStepIndex.value).toBe(3)
 
-    setupState.order.value = { status: 'completed', shipping_status: 'delivered' }
+    setupState.order.value = { status: 'shipped', shipping_status: 'awaiting_customer_confirmation' }
     expect(setupState.currentStepIndex.value).toBe(4)
+
+    setupState.order.value = { status: 'completed', shipping_status: 'delivered' }
+    expect(setupState.currentStepIndex.value).toBe(5)
 
     setupState.order.value = { status: 'processing', shipping_status: 'failed' }
     expect(setupState.currentStepIndex.value).toBe(0)
@@ -202,6 +205,53 @@ describe('Phase 3C.2 Public Journey Truth Behavioral Tests', () => {
     setupState.order.value = { status: 'cancelled', shipping_status: null }
     expect(setupState.currentStepIndex.value).toBe(0)
     expect(setupState.journeyException.value).toContain('đã bị hủy')
+  })
+
+  it('OrderTrackingView lets the customer confirm receipt through the dedicated endpoint', async () => {
+    const postSpy = vi.spyOn(apiClient, 'post').mockResolvedValue({
+      data: {
+        status: 'success',
+        data: { id: 10, status: 'completed', shipping_status: 'delivered', can_confirm_receipt: false }
+      }
+    })
+    const { setupState } = mountAndCapture(OrderTrackingView)
+    setupState.order.value = { id: 10, status: 'shipped', shipping_status: 'awaiting_customer_confirmation', can_confirm_receipt: true }
+
+    await setupState.confirmReceipt()
+
+    expect(postSpy).toHaveBeenCalledWith('/api/my-orders/10/confirm-received', expect.objectContaining({
+      idempotency_key: expect.stringContaining('customer-confirm-received-10')
+    }))
+    expect(setupState.order.value.status).toBe('completed')
+    expect(setupState.order.value.can_confirm_receipt).toBe(false)
+  })
+
+  it('OrderTrackingView renders API shipping history newest first without inventing events', async () => {
+    const { setupState } = mountAndCapture(OrderTrackingView)
+
+    setupState.order.value = {
+      shipping_events: [
+        {
+          code: 'ordered',
+          label: 'Đã đặt hàng',
+          description: 'KomiBook đã tiếp nhận đơn hàng.',
+          occurred_at: '2026-08-03T09:00:00+07:00'
+        },
+        {
+          code: 'picked_up',
+          label: 'Đơn vị vận chuyển đã nhận',
+          description: 'KomiBook Express đã nhận kiện hàng.',
+          occurred_at: '2026-08-03T10:00:00+07:00'
+        }
+      ]
+    }
+
+    expect(setupState.trackingEvents.value).toHaveLength(2)
+    expect(setupState.trackingEvents.value[0]).toMatchObject({
+      status: 'Đơn vị vận chuyển đã nhận',
+      location: 'KomiBook Express đã nhận kiện hàng.'
+    })
+    expect(setupState.trackingEvents.value[1].status).toBe('Đã đặt hàng')
   })
 
   it('LoginView and RegisterView keep otpSent false on sendPhoneOtp rejection and set otpSent true on resolve', async () => {

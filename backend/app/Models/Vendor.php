@@ -26,7 +26,6 @@ class Vendor extends Model
         'views_count',
         'logo',
         'status',
-        'rejection_reason',
         'onboarding_status',
         'business_model',
         'primary_organization_id',

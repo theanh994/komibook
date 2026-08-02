@@ -60,7 +60,20 @@ class ArticleController extends Controller
             ->when($article->article_category_id, fn ($query) => $query->where('article_category_id', $article->article_category_id))
             ->latest('published_at')->limit(4)->get();
 
-        return response()->json(['status' => 'success', 'data' => $article, 'related' => $related]);
+        $latest = Article::with(['category', 'vendor:id,shop_name,slug', 'creator:id,name'])
+            ->whereKeyNot($article->id)
+            ->where('status', ArticleStatus::Published)
+            ->where('published_at', '<=', now())
+            ->latest('published_at')
+            ->limit(5)
+            ->get();
+
+        return response()->json([
+            'status' => 'success',
+            'data' => $article,
+            'related' => $related,
+            'latest' => $latest,
+        ]);
     }
 
     public function track(Request $request, string $slug)

@@ -14,7 +14,7 @@ class PayoutRequest extends Model
     use HasFactory, MultiVendorScoped;
 
     protected $fillable = [
-        'vendor_id',
+        'vendor_id', 'user_id', 'wallet_payout_account_id',
         'operation_key',
         'amount',
         'bank_name',
@@ -37,6 +37,21 @@ class PayoutRequest extends Model
     public function vendor(): BelongsTo
     {
         return $this->belongsTo(Vendor::class);
+    }
+
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
+    }
+
+    public function walletPayoutAccount(): BelongsTo
+    {
+        return $this->belongsTo(WalletPayoutAccount::class);
+    }
+
+    public function walletEntries(): HasMany
+    {
+        return $this->hasMany(DemoWalletLedgerEntry::class);
     }
 
     public function ledgerEntries(): HasMany

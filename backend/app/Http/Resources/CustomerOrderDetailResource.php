@@ -3,6 +3,7 @@
 namespace App\Http\Resources;
 
 use App\Support\PublicMediaUrl;
+use App\Support\ShippingTimeline;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -25,10 +26,12 @@ class CustomerOrderDetailResource extends JsonResource
             'shipping_status' => $this->shipping_status,
             'shipping_carrier' => $this->shipping_carrier,
             'shipping_tracking_code' => $this->shipping_tracking_code,
+            'can_confirm_receipt' => $this->status === 'shipped' && $this->shipping_status === 'awaiting_customer_confirmation',
             'shipping_address' => $this->shipping_address,
             'phone' => $this->phone,
             'created_at' => $this->created_at?->toISOString(),
             'refund_status' => $this->refund_status ?? 'none',
+            'shipping_events' => ShippingTimeline::forOrder($this->resource),
 
             // Customer information
             'user' => [
@@ -50,6 +53,7 @@ class CustomerOrderDetailResource extends JsonResource
                         'title' => $item->book->title,
                         'cover_image' => PublicMediaUrl::storage($item->book->cover_image),
                         'type' => $item->book->type,
+                        'provenance' => $item->product_taxonomy_snapshot['provenance'] ?? $item->book->provenance,
                     ];
                 }
 
@@ -58,6 +62,11 @@ class CustomerOrderDetailResource extends JsonResource
                     'book_id' => $item->book_id,
                     'quantity' => $item->quantity,
                     'price' => $item->price,
+                    'return_policy' => [
+                        'is_returnable' => (bool) ($item->return_policy_snapshot['is_returnable'] ?? false),
+                        'return_window_days' => $item->return_policy_snapshot['return_window_days'] ?? null,
+                        'terms' => $item->return_policy_snapshot['terms'] ?? null,
+                    ],
                     'book' => $bookData,
                 ];
             }),

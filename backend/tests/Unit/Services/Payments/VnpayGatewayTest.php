@@ -38,7 +38,7 @@ class VnpayGatewayTest extends TestCase
         $occurredAt = CarbonImmutable::create(2026, 7, 25, 19, 0, 0, 'Asia/Ho_Chi_Minh');
 
         $result = $gateway->createPaymentUrl(
-            'REF-123456',
+            'REF123456',
             150000,
             'Thanh toan don hang REF-123456',
             'https://komibook.id.vn/vnpay-return',
@@ -58,13 +58,14 @@ class VnpayGatewayTest extends TestCase
         $this->assertEquals(self::TEST_TMN_CODE, $payload['vnp_TmnCode']);
         $this->assertEquals('15000000', $payload['vnp_Amount']);
         $this->assertEquals('VND', $payload['vnp_CurrCode']);
-        $this->assertEquals('REF-123456', $payload['vnp_TxnRef']);
-        $this->assertEquals('Thanh toan don hang REF-123456', $payload['vnp_OrderInfo']);
+        $this->assertEquals('REF123456', $payload['vnp_TxnRef']);
+        $this->assertEquals('Thanh toan don hang REF 123456', $payload['vnp_OrderInfo']);
         $this->assertEquals('billpayment', $payload['vnp_OrderType']);
         $this->assertEquals('vn', $payload['vnp_Locale']);
         $this->assertEquals('https://komibook.id.vn/vnpay-return', $payload['vnp_ReturnUrl']);
         $this->assertEquals('192.168.1.1', $payload['vnp_IpAddr']);
         $this->assertEquals('20260725190000', $payload['vnp_CreateDate']);
+        $this->assertEquals('20260725191500', $payload['vnp_ExpireDate']);
 
         // Payload must not contain signature or secret
         $this->assertArrayNotHasKey('vnp_SecureHash', $payload);
@@ -84,7 +85,7 @@ class VnpayGatewayTest extends TestCase
         $occurredAt = CarbonImmutable::now();
 
         $result = $gateway->createPaymentUrl(
-            'REF-IP-TEST',
+            'REFIPTEST',
             100000,
             'Test IP',
             'https://komibook.id.vn/return',
@@ -93,6 +94,36 @@ class VnpayGatewayTest extends TestCase
         );
 
         $this->assertEquals('127.0.0.1', $result['request_payload']['vnp_IpAddr']);
+    }
+
+    public function test_create_payment_url_rejects_non_alphanumeric_transaction_reference(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('VNPAY transaction reference must contain 1-100 alphanumeric characters.');
+
+        (new VnpayGateway)->createPaymentUrl(
+            'CS_123_INVALID',
+            100000,
+            'Thanh toán đơn hàng',
+            'https://komibook.id.vn/api/vnpay/return',
+            '127.0.0.1',
+            CarbonImmutable::now()
+        );
+    }
+
+    public function test_create_payment_url_normalizes_vietnamese_order_info_and_validates_return_url(): void
+    {
+        $result = (new VnpayGateway)->createPaymentUrl(
+            'CS123456',
+            100000,
+            'Thanh toán đơn #123 — KomiBook!',
+            'https://komibook.id.vn/api/vnpay/return',
+            '127.0.0.1',
+            CarbonImmutable::create(2026, 8, 2, 12, 0, 0, 'Asia/Ho_Chi_Minh')
+        );
+
+        $this->assertSame('Thanh toan don 123 KomiBook', $result['request_payload']['vnp_OrderInfo']);
+        $this->assertSame('20260802121500', $result['request_payload']['vnp_ExpireDate']);
     }
 
     /**
@@ -107,7 +138,7 @@ class VnpayGatewayTest extends TestCase
         $this->expectExceptionMessage($expectedMessage);
 
         $gateway->createPaymentUrl(
-            'REF-LIMIT-TEST',
+            'REFLIMITTEST',
             $amount,
             'Test amount limit',
             'https://komibook.id.vn/return',
@@ -118,7 +149,7 @@ class VnpayGatewayTest extends TestCase
 
     public static function invalidCreateAmountProvider(): array
     {
-        $maxAmount = intdiv(PHP_INT_MAX, 100);
+        $maxAmount = min(intdiv(PHP_INT_MAX, 100), 9_999_999_999);
 
         return [
             'negative amount' => [-500, 'Payment amount must be a positive integer within valid limits.'],
@@ -272,7 +303,7 @@ class VnpayGatewayTest extends TestCase
         $this->expectExceptionMessage($expectedMessage);
 
         $gateway->createPaymentUrl(
-            'REF-001',
+            'REF001',
             100000,
             'Test',
             'http://test.com',
@@ -292,6 +323,7 @@ class VnpayGatewayTest extends TestCase
             'ftp scheme url' => [self::TEST_TMN_CODE, self::TEST_HASH_SECRET, 'ftp://sandbox.vnpayment.vn/vpcpay.html', 'VNPAY payment URL must use HTTP or HTTPS scheme.'],
             'javascript scheme url' => [self::TEST_TMN_CODE, self::TEST_HASH_SECRET, 'javascript:alert(1)', 'VNPAY payment URL is invalid or unconfigured.'],
             'file scheme url' => [self::TEST_TMN_CODE, self::TEST_HASH_SECRET, 'file:///etc/passwd', 'VNPAY payment URL must use HTTP or HTTPS scheme.'],
+            'production url' => [self::TEST_TMN_CODE, self::TEST_HASH_SECRET, 'https://pay.vnpay.vn/vpcpay.html', 'Only the VNPAY Sandbox payment URL is allowed.'],
         ];
     }
 
@@ -349,5 +381,27 @@ class VnpayGatewayTest extends TestCase
 
         $normalized2 = $gateway->verifyAndNormalizeCallback($paramsInvalidPayDate);
         $this->assertNull($normalized2['provider_occurred_at']);
+    }
+
+    public function test_callback_checksum_includes_secure_hash_type_like_the_official_vnpay_return_sample(): void
+    {
+        $gateway = new VnpayGateway;
+        $params = [
+            'vnp_Amount' => '10000000',
+            'vnp_CurrCode' => 'VND',
+            'vnp_ResponseCode' => '00',
+            'vnp_SecureHashType' => 'SHA512',
+            'vnp_TmnCode' => self::TEST_TMN_CODE,
+            'vnp_TransactionStatus' => '00',
+            'vnp_TxnRef' => 'OFFICIALRETURN1',
+        ];
+        $canonical = 'vnp_Amount=10000000&vnp_CurrCode=VND&vnp_ResponseCode=00&vnp_SecureHashType=SHA512&vnp_TmnCode='.
+            self::TEST_TMN_CODE.'&vnp_TransactionStatus=00&vnp_TxnRef=OFFICIALRETURN1';
+        $params['vnp_SecureHash'] = hash_hmac('sha512', $canonical, self::TEST_HASH_SECRET);
+
+        $normalized = $gateway->verifyAndNormalizeCallback($params);
+
+        $this->assertSame('OFFICIALRETURN1', $normalized['provider_reference']);
+        $this->assertSame('SHA512', $normalized['payload']['vnp_SecureHashType']);
     }
 }

@@ -107,10 +107,9 @@ class BookPrintEditionWarehouseWorkflowTest extends TestCase
         $this->actingAs($user)->putJson("/api/vendor/warehouse-documents/{$receiptId}", [
             'reason' => 'Chờ xác nhận số lượng từ xưởng in',
             'external_counterparty_name' => 'Xưởng in thử nghiệm',
-            'lines' => [['book_id' => $bookId, 'quantity' => 0, 'shelf_location' => 'A-01']],
+            'lines' => [['book_id' => $bookId, 'quantity' => 0]],
         ])->assertOk()
-            ->assertJsonPath('data.lines.0.quantity', 0)
-            ->assertJsonPath('data.lines.0.shelf_location', 'A-01');
+            ->assertJsonPath('data.lines.0.quantity', 0);
 
         $this->transition($user, $receiptId, 'submitted', 'zero-submit')->assertOk();
         $this->transition($user, $receiptId, 'approved', 'zero-approve')->assertOk();

@@ -22,7 +22,7 @@ class OrderController extends Controller
     public function myOrders(Request $request)
     {
         $orders = Order::where('user_id', $request->user()->id)
-            ->with(['orderItems.book'])
+            ->with(['orderItems.book', 'transitionOperations'])
             ->orderBy('created_at', 'desc')
             ->get();
 
@@ -36,7 +36,7 @@ class OrderController extends Controller
         $order = Order::withoutGlobalScopes()
             ->where('user_id', $request->user()->id)
             ->where('id', $orderId)
-            ->with(['user', 'orderItems.book', 'invoiceSnapshot'])
+            ->with(['user', 'orderItems.book', 'invoiceSnapshot', 'transitionOperations'])
             ->first();
 
         if (! $order) {
@@ -50,6 +50,42 @@ class OrderController extends Controller
             'status' => 'success',
             'data' => new CustomerOrderDetailResource($order),
         ]);
+    }
+
+    public function confirmReceived(Request $request, int $order)
+    {
+        $validated = $request->validate([
+            'idempotency_key' => ['required', 'string', 'max:128'],
+        ]);
+        abort_unless(
+            Order::withoutGlobalScopes()
+                ->whereKey($order)
+                ->where('user_id', $request->user()->id)
+                ->exists(),
+            403,
+            'Bạn không có quyền xác nhận đơn hàng này.'
+        );
+
+        try {
+            $confirmed = app(OrderFulfillmentService::class)->confirmReceivedByCustomer(
+                $order,
+                (int) $request->user()->id,
+                $validated['idempotency_key']
+            );
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Cảm ơn bạn đã xác nhận nhận hàng.',
+                'data' => new CustomerOrderDetailResource(
+                    $confirmed->load(['user', 'orderItems.book', 'invoiceSnapshot', 'transitionOperations'])
+                ),
+            ]);
+        } catch (\LogicException $exception) {
+            return response()->json([
+                'status' => 'error',
+                'message' => $exception->getMessage(),
+            ], 422);
+        }
     }
 
     public function myLibrary(Request $request)
@@ -246,9 +282,9 @@ class OrderController extends Controller
     public function updateShippingStatus(Request $request, $id)
     {
         $request->validate([
-            'shipping_status' => 'required|in:pending_pickup,picked_up,delivering,delivered,failed',
-            'shipping_carrier' => 'nullable|string',
-            'shipping_tracking_code' => 'nullable|string',
+            'shipping_status' => 'required|in:pending_pickup,picked_up,delivering,awaiting_customer_confirmation,failed',
+            'shipping_carrier' => 'nullable|string|max:100',
+            'shipping_tracking_code' => 'nullable|string|max:100',
         ]);
 
         try {
@@ -265,7 +301,7 @@ class OrderController extends Controller
             return response()->json([
                 'status' => 'success',
                 'message' => 'Cập nhật trạng thái giao hàng thành công.',
-                'data' => $order,
+                'data' => new OrderResource($order->load(['user', 'orderItems.book', 'transitionOperations'])),
             ]);
         } catch (\LogicException $e) {
             return response()->json([

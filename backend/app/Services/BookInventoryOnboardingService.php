@@ -19,12 +19,11 @@ class BookInventoryOnboardingService
         User $actor,
         int $quantity,
         ?string $externalCounterpartyName,
-        ?string $shelfLocation,
         string $operationKey,
     ): WarehouseDocument {
         WarehouseStock::firstOrCreate(
             ['warehouse_id' => $warehouse->id, 'book_id' => $book->id],
-            ['quantity' => 0, 'shelf_location' => $shelfLocation],
+            ['quantity' => 0],
         );
 
         $document = WarehouseDocument::firstOrCreate(
@@ -53,7 +52,6 @@ class BookInventoryOnboardingService
             ['book_id' => $book->id],
             [
                 'quantity' => max(0, $quantity),
-                'shelf_location' => $shelfLocation,
             ],
         );
 

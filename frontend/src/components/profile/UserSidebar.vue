@@ -168,6 +168,7 @@ const menuItems = [
   { label: 'Tủ sách của tôi', to: '/my-library' },
   { label: 'Đơn hàng của tôi', to: '/orders' },
   { label: 'Trả hàng & hoàn tiền', to: '/returns' },
+  { label: 'Ví KomiBook & Rút tiền', to: '/wallet' },
   { label: 'Sách cũ của tôi', to: '/used-books/manage' },
   { label: 'Danh sách yêu thích', to: '/wishlist' },
   { label: 'Thông báo', to: '/notifications' },

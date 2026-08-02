@@ -146,3 +146,13 @@ Design source of truth: `design-system/komibook/MASTER.md`
 | 7E.1 | `/vendor/dashboard`, `/vendor/analytics`, `/vendor/orders` | Vendor core parity | 970 px | Không tràn ngang; dashboard tương thích API cũ; analytics báo lỗi thật của origin cũ; orders bỏ thao tác giả |
 | 7E.2 | `/vendor/finance`, `/vendor/flash-sales`, `/vendor/warehouses`, `/vendor/inventory/audits`, `/vendor/inventory/transfers` | Vendor operations parity | 970 px | Không tràn ngang; finance giải thích fallback của origin cũ; Flash Sale/kho/kiểm kê/điều chuyển hiển thị ổn định; browser smoke chỉ đọc |
 | 7F.2 | Guest `/`, `/catalog`, `/for-authors`; Customer `/orders`, `/my-library`, `/wishlist`, `/used-books/manage`; Vendor core/operations; Admin core/finance/config/campaign | E2E bốn vai trò | 970 px | Đúng route/guard, không tràn ngang; lỗi origin 8080 cũ hiển thị trung thực; không thao tác ghi; browser không hỗ trợ ép breakpoint |
+
+## Bổ sung Newsroom 2026-08-02
+
+| Route | Bề mặt | Nghiệm thu | Kết quả |
+|---|---|---|---|
+| Trang chủ | `Tin tức mới nhất` | Lưới thẻ nổi bật 1/2/3 cột; ảnh hiển thị trọn vẹn bằng `contain`, giới hạn chiều cao 380 px; bỏ nền/padding khung ảnh và bo góc trên | Browser 1152 px đạt: radius trên 0, viền trên 0, nền/padding ảnh 0, không tràn ngang |
+| `/blog` | Danh sách tin công khai | Trình duyệt 375 px và desktop; ảnh dọc giữ tỷ lệ; danh sách ngang ảnh-trái/nội-dung-phải; cột `Bài viết mới nhất` chuyển xuống dưới trên mobile | Đạt bằng test, lint và build; browser smoke bổ sung sau khi dev server sẵn sàng |
+| `/blog/:slug` | Trang đọc bài | Một luồng cột trái liên tục; bỏ nền màu tiêu đề, khung/padding ảnh và khe trắng với sidebar; tiêu đề có typography riêng | Browser 1152 px đạt: header trong suốt, ảnh full-width/padding 0, gap cột 0, không tràn ngang |
+| `/vendor/articles/:id/edit` | Trình biên tập | Quill không bị tháo DOM; nội dung có toolbar đầy đủ; tiêu đề và tóm tắt có toolbar riêng cho phông, cỡ, căn lề, đậm/nghiêng; định dạng lưu ở JSON riêng để bảo toàn slug/SEO | Migration nguồn và test API tạm; không tự ý chạy migration database hiện tại |
+| `/admin/articles` | Quản lý và xét bài | Chuyển trạng thái, lý do và lịch đăng trong panel cùng trang; bỏ `window.prompt` | Đạt bằng test contract, lint và build |

@@ -12,8 +12,7 @@ const orderId = route.params.id
 const selectedOrder = ref(null)
 const loading = ref(true)
 
-const newStatus = ref(null)
-const updatingStatus = ref(false)
+const updatingShipping = ref(false)
 
 // ─── Status Config ───
 const statusMap = {
@@ -24,18 +23,44 @@ const statusMap = {
   cancelled:  { label: 'Đã hủy',       bg: 'bg-error-container', text: 'text-on-error-container', dot: 'bg-error', icon: 'cancel' },
 }
 
-const statusOptions = [
-  { label: 'Đang xử lý', value: 'processing' },
-  { label: 'Đang giao hàng', value: 'shipped' },
-  { label: 'Hoàn thành', value: 'completed' },
-  { label: 'Hủy đơn', value: 'cancelled' },
-]
-
 const getStatus = (status) => statusMap[status] || statusMap.pending
 
 const isTerminal = computed(() => {
   if (!selectedOrder.value) return true
   return ['completed', 'cancelled'].includes(selectedOrder.value.status)
+})
+
+const shippingStatusMap = {
+  pending_pickup: { label: 'Chờ đơn vị vận chuyển nhận', icon: 'inventory_2' },
+  picked_up: { label: 'Đơn vị vận chuyển đã nhận', icon: 'local_shipping' },
+  delivering: { label: 'Đang giao đến khách hàng', icon: 'route' },
+  awaiting_customer_confirmation: { label: 'Chờ khách xác nhận đã nhận', icon: 'hourglass_top' },
+  delivered: { label: 'Đã giao thành công', icon: 'verified' },
+  failed: { label: 'Giao hàng thất bại', icon: 'error' },
+}
+
+const currentShippingStatus = computed(() => {
+  if (!selectedOrder.value) return null
+  return shippingStatusMap[selectedOrder.value.shipping_status] || null
+})
+
+const shippingAction = computed(() => {
+  const order = selectedOrder.value
+  if (!order || isTerminal.value || order.shipping_status === 'failed') return null
+
+  if (order.status === 'processing') {
+    return { label: 'Bàn giao cho KomiBook Express', type: 'order', next: 'shipped', icon: 'package_2' }
+  }
+  if (order.status === 'shipped' && (!order.shipping_status || order.shipping_status === 'pending_pickup')) {
+    return { label: 'Xác nhận đơn vị vận chuyển đã nhận', type: 'shipping', next: 'picked_up', icon: 'local_shipping' }
+  }
+  if (order.shipping_status === 'picked_up') {
+    return { label: 'Bắt đầu giao hàng', type: 'shipping', next: 'delivering', icon: 'route' }
+  }
+  if (order.shipping_status === 'delivering') {
+    return { label: 'Xác nhận ĐVVC đã giao tới khách', type: 'shipping', next: 'awaiting_customer_confirmation', icon: 'where_to_vote' }
+  }
+  return null
 })
 
 // ─── Formatters ───
@@ -57,7 +82,6 @@ const fetchOrder = async () => {
   try {
     const res = await apiClient.get(`/api/vendor/orders/${orderId}`)
     selectedOrder.value = res.data.data
-    newStatus.value = selectedOrder.value.status
   } catch (error) {
     toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Không thể tải chi tiết đơn hàng.', life: 3000 })
     router.push({ name: 'vendor-orders' })
@@ -66,20 +90,25 @@ const fetchOrder = async () => {
   }
 }
 
-const updateStatus = async () => {
-  if (!newStatus.value || !selectedOrder.value || newStatus.value === selectedOrder.value.status) return
-  updatingStatus.value = true
+const advanceShipping = async () => {
+  const action = shippingAction.value
+  if (!action || !selectedOrder.value) return
+  updatingShipping.value = true
   try {
-    await apiClient.patch(`/api/vendor/orders/${selectedOrder.value.id}/status`, {
-      status: newStatus.value,
-    })
-    toast.add({ severity: 'success', summary: 'Thành công', detail: 'Đã cập nhật trạng thái đơn hàng!', life: 3000 })
-    selectedOrder.value.status = newStatus.value
+    const endpoint = action.type === 'order'
+      ? `/api/vendor/orders/${selectedOrder.value.id}/status`
+      : `/api/vendor/orders/${selectedOrder.value.id}/shipping`
+    const payload = action.type === 'order'
+      ? { status: action.next }
+      : { shipping_status: action.next }
+    const response = await apiClient.patch(endpoint, payload)
+    selectedOrder.value = response.data.data
+    toast.add({ severity: 'success', summary: 'Đã cập nhật hành trình', detail: action.label, life: 3000 })
   } catch (e) {
-    const msg = e.response?.data?.message || 'Không thể cập nhật trạng thái.'
+    const msg = e.response?.data?.message || 'Không thể cập nhật hành trình giao hàng.'
     toast.add({ severity: 'error', summary: 'Lỗi', detail: msg, life: 4000 })
   } finally {
-    updatingStatus.value = false
+    updatingShipping.value = false
   }
 }
 
@@ -128,18 +157,9 @@ onMounted(() => {
               <span class="material-symbols-outlined text-[18px]">print</span>
               In hóa đơn
             </button>
-            <button type="button" class="flex min-h-11 items-center gap-xs px-md py-sm border border-secondary text-secondary rounded-lg hover:bg-secondary/10 transition-colors bg-transparent font-label-md text-label-md">
+            <button type="button" class="flex min-h-11 items-center gap-xs px-md py-sm border border-secondary text-secondary rounded-lg hover:bg-secondary/10 transition-colors bg-transparent font-label-md text-label-md" @click="router.push({ name: 'vendor-returns' })">
               <span class="material-symbols-outlined text-[18px]">undo</span>
               Hoàn tiền
-            </button>
-            <button 
-              @click="updateStatus"
-              :disabled="updatingStatus || isTerminal || newStatus === selectedOrder.status"
-              class="flex items-center gap-xs px-md py-sm bg-primary text-on-primary rounded-lg hover:opacity-90 transition-opacity font-label-md text-label-md shadow-sm disabled:opacity-50"
-            >
-              <span v-if="updatingStatus" class="material-symbols-outlined text-[18px] animate-spin">progress_activity</span>
-              <span v-else class="material-symbols-outlined text-[18px]">update</span>
-              Cập nhật trạng thái
             </button>
           </div>
         </div>
@@ -281,29 +301,54 @@ onMounted(() => {
               </div>
             </div>
 
-            <!-- Quick Status Update -->
-            <div v-if="!isTerminal" class="bg-surface-container-lowest rounded-xl shadow-[0_4px_12px_rgba(26,58,90,0.04)] border border-outline-variant/30 overflow-hidden p-lg">
-              <h3 class="font-headline-md text-[18px] font-semibold text-on-surface mb-md flex items-center gap-sm">
-                <span class="material-symbols-outlined text-outline">published_with_changes</span>
-                Đổi trạng thái nhanh
-              </h3>
-              <div class="flex flex-col gap-3">
-                <select 
-                  v-model="newStatus"
-                  aria-label="Trạng thái mới của đơn hàng"
-                  class="w-full min-h-11 appearance-none bg-surface-container-low border border-outline-variant/50 text-on-surface font-body-md rounded-lg px-md py-sm focus:outline-none focus:border-primary"
-                >
-                  <option v-for="opt in statusOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
-                </select>
-                <button 
-                  type="button"
-                  @click="updateStatus"
-                  :disabled="updatingStatus || newStatus === selectedOrder.status"
-                  class="w-full min-h-11 py-sm bg-primary text-on-primary rounded-lg font-label-md transition-opacity hover:opacity-90 disabled:opacity-50"
-                >
-                  Xác nhận thay đổi
-                </button>
+            <!-- Demo shipping workflow -->
+            <div class="bg-surface-container-lowest rounded-xl shadow-[0_4px_12px_rgba(26,58,90,0.04)] border border-outline-variant/30 overflow-hidden p-lg">
+              <div class="mb-md flex items-start justify-between gap-sm">
+                <h3 class="font-headline-md text-[18px] font-semibold text-on-surface flex items-center gap-sm">
+                  <span class="material-symbols-outlined text-outline">local_shipping</span>
+                  Vận chuyển đơn hàng
+                </h3>
+                <span class="rounded-full bg-surface-container-high px-2 py-1 text-[11px] font-bold text-primary">MÔ PHỎNG</span>
               </div>
+
+              <div class="space-y-sm rounded-lg border border-outline-variant/20 bg-surface-container-low p-md">
+                <div class="flex items-start gap-sm">
+                  <span class="material-symbols-outlined text-primary">{{ currentShippingStatus?.icon || 'package_2' }}</span>
+                  <div class="min-w-0">
+                    <p class="font-label-md font-semibold text-on-surface">{{ currentShippingStatus?.label || 'Chưa bàn giao vận chuyển' }}</p>
+                    <p class="mt-1 text-sm text-on-surface-variant">
+                      {{ selectedOrder.shipping_carrier || 'Hệ thống sẽ tự gán KomiBook Express khi bàn giao.' }}
+                    </p>
+                  </div>
+                </div>
+                <div v-if="selectedOrder.shipping_tracking_code" class="flex items-center justify-between gap-sm border-t border-outline-variant/20 pt-sm text-sm">
+                  <span class="text-on-surface-variant">Mã vận đơn</span>
+                  <span class="font-mono font-semibold text-on-surface">{{ selectedOrder.shipping_tracking_code }}</span>
+                </div>
+              </div>
+
+              <button
+                v-if="shippingAction"
+                type="button"
+                @click="advanceShipping"
+                :disabled="updatingShipping"
+                class="mt-md flex min-h-11 w-full items-center justify-center gap-xs rounded-lg bg-primary px-md py-sm font-label-md text-on-primary transition-opacity hover:opacity-90 disabled:cursor-wait disabled:opacity-50"
+              >
+                <span class="material-symbols-outlined text-[18px]" :class="{ 'animate-spin': updatingShipping }">
+                  {{ updatingShipping ? 'progress_activity' : shippingAction.icon }}
+                </span>
+                {{ updatingShipping ? 'Đang cập nhật...' : shippingAction.label }}
+              </button>
+
+              <p v-else-if="selectedOrder.shipping_status === 'delivered' || selectedOrder.status === 'completed'" class="mt-md rounded-lg bg-emerald-50 p-sm text-sm font-medium text-emerald-700">
+                Đơn hàng đã giao thành công và hoàn tất hành trình.
+              </p>
+              <p v-else-if="selectedOrder.shipping_status === 'awaiting_customer_confirmation'" class="mt-md rounded-lg bg-amber-50 p-sm text-sm font-medium text-amber-800">
+                Đơn vị vận chuyển đã giao kiện hàng. Đơn chỉ hoàn tất sau khi khách hàng xác nhận đã nhận.
+              </p>
+              <p v-else-if="selectedOrder.shipping_status === 'failed'" class="mt-md rounded-lg bg-red-50 p-sm text-sm font-medium text-red-700">
+                Giao hàng thất bại. Vui lòng liên hệ hỗ trợ để xử lý ngoại lệ.
+              </p>
             </div>
 
           </div>

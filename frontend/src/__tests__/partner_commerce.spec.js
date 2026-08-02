@@ -15,12 +15,14 @@ describe('partner commerce UI contracts', () => {
   })
 
   it('does not allow payout bank details to be entered at withdrawal time', () => {
-    const source = read('../views/vendor/FinanceView.vue')
-    expect(source).toContain('Tài khoản nhận doanh thu')
-    expect(source).toContain("payoutAccount.status !== 'verified'")
-    expect(source).not.toContain('v-model="withdrawForm.bank_name"')
-    expect(source).not.toContain('v-model="withdrawForm.account_number"')
-    expect(source).not.toContain('v-model="withdrawForm.account_name"')
+    const finance = read('../views/vendor/FinanceView.vue')
+    const wallet = read('../views/WalletView.vue')
+    expect(finance).toContain('to="/wallet"')
+    expect(wallet).toContain("data.value.payout_account?.status === 'verified'")
+    expect(wallet).toContain('/api/wallet/withdrawals')
+    expect(wallet).not.toContain('withdrawForm.bank_name')
+    expect(wallet).not.toContain('withdrawForm.account_number')
+    expect(wallet).not.toContain('withdrawForm.account_name')
   })
 
   it('exposes agreement moderation and an organization entry point', () => {

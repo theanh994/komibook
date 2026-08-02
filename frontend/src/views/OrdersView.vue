@@ -76,7 +76,7 @@
                   </div>
                   <div class="flex items-center gap-3">
                     <span :class="['px-3 py-1 rounded-lg text-xs font-black tracking-wide shadow-sm', getStatusStyle(order.status)]">
-                      {{ getStatusText(order.status) }}
+                      {{ getStatusText(order) }}
                     </span>
                     <span :class="['px-3 py-1 rounded-lg text-xs font-black tracking-wide shadow-sm', getPaymentStatusStyle(order.payment_status)]">
                       {{ getPaymentStatusText(order.payment_status) }}
@@ -134,6 +134,14 @@
                     <span class="text-lg font-black text-primary">{{ formatCurrency(order.total_amount) }}</span>
                   </div>
                   <div class="flex items-center gap-3">
+                    <button
+                      v-if="order.can_confirm_receipt"
+                      @click="$router.push(`/tracking/${order.id}`)"
+                      class="min-h-11 rounded-xl bg-primary px-4 py-2 text-xs font-bold text-on-primary transition-opacity hover:opacity-90 flex items-center gap-1 cursor-pointer"
+                    >
+                      <span class="material-symbols-outlined text-[18px]">package_2</span>
+                      Xác nhận đã nhận hàng
+                    </button>
                     <button
                       v-if="canRequestReturn(order)"
                       @click="$router.push({ path: '/returns', query: { order: order.id } })"
@@ -276,8 +284,10 @@ const getCoverUrl = (path) => {
   return `/storage/${path}`
 }
 
-const getStatusText = (status) => {
-  const map = { pending: 'Chờ xử lý', processing: 'Đang xử lý', completed: 'Hoàn thành', cancelled: 'Đã hủy' }
+const getStatusText = (order) => {
+  if (order.shipping_status === 'awaiting_customer_confirmation') return 'Chờ bạn xác nhận'
+  const status = order.status
+  const map = { pending: 'Chờ xử lý', processing: 'Đang xử lý', shipped: 'Đang vận chuyển', completed: 'Hoàn thành', cancelled: 'Đã hủy' }
   return map[status] || status
 }
 
@@ -285,6 +295,7 @@ const getStatusStyle = (status) => {
   const map = {
     pending: 'bg-amber-100 text-amber-700 border border-amber-200',
     processing: 'bg-blue-100 text-blue-700 border border-blue-200',
+    shipped: 'bg-indigo-100 text-indigo-700 border border-indigo-200',
     completed: 'bg-emerald-100 text-emerald-700 border border-emerald-200',
     cancelled: 'bg-error-container text-error border border-error/20'
   }
@@ -312,7 +323,7 @@ const getPaymentMethodText = (method) => {
 
 const canRequestReturn = (order) => order.status === 'completed'
   && order.shipping_status === 'delivered'
-  && order.items?.some((item) => item.book?.type === 'physical' && item.book?.provenance === 'used_resale')
+  && order.items?.some((item) => item.book?.type === 'physical' && item.return_policy?.is_returnable)
   && !['refunding', 'refunded'].includes(order.refund_status)
 
 const payNow = async (order) => {

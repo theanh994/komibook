@@ -20,16 +20,17 @@ const selectedOrderId = ref(null)
 const quantities = ref({})
 const reason = ref('')
 const error = ref('')
+const returnOperationKey = ref('')
 
 const eligibleOrders = computed(() => orders.value.filter((order) =>
   order.status === 'completed'
   && order.shipping_status === 'delivered'
-  && order.items?.some((item) => item.book?.type === 'physical' && item.book?.provenance === 'used_resale')
+  && order.items?.some((item) => item.book?.type === 'physical' && item.return_policy?.is_returnable)
   && !['refunding', 'refunded'].includes(order.refund_status)
 ))
 const selectedOrder = computed(() => eligibleOrders.value.find((order) => Number(order.id) === Number(selectedOrderId.value)))
 const physicalItems = computed(() => selectedOrder.value?.items?.filter((item) =>
-  item.book?.type === 'physical' && item.book?.provenance === 'used_resale'
+  item.book?.type === 'physical' && item.return_policy?.is_returnable
 ) || [])
 const selectedItems = computed(() => physicalItems.value
   .map((item) => ({ order_item_id: item.id, quantity: Number(quantities.value[item.id] || 0) }))
@@ -41,6 +42,7 @@ const statusOf = (status) => returnStatus[status] || { label: status, tone: 'bg-
 const selectOrder = (value) => {
   selectedOrderId.value = value ? Number(value) : null
   quantities.value = {}
+  returnOperationKey.value = ''
 }
 
 const fetchData = async () => {
@@ -71,11 +73,12 @@ const fetchData = async () => {
 const submitReturn = async () => {
   if (!canSubmit.value) return
   submitting.value = true
+  returnOperationKey.value ||= operationKey(`customer-return-${selectedOrderId.value}`)
   try {
     await apiClient.post(`/api/orders/${selectedOrderId.value}/returns`, {
       reason: reason.value.trim(),
       items: selectedItems.value,
-      idempotency_key: operationKey(`customer-return-${selectedOrderId.value}`),
+      idempotency_key: returnOperationKey.value,
     })
     toast.add({ severity: 'success', summary: 'Đã gửi yêu cầu', detail: 'KomiBook đã ghi nhận yêu cầu trả hàng.', life: 3500 })
     reason.value = ''
@@ -103,8 +106,8 @@ onMounted(fetchData)
       <main class="flex-1 min-w-0 space-y-6" aria-labelledby="returns-title">
         <section class="bg-surface-container-lowest rounded-3xl border border-outline-variant/30 soft-shadow p-lg md:p-xl">
           <div class="mb-6">
-            <h1 id="returns-title" class="text-2xl font-black text-on-surface">Trả hàng & hoàn tiền sách cũ</h1>
-            <p class="text-sm text-on-surface-variant mt-1">Chỉ áp dụng cho sách cũ vật lý đủ điều kiện trong 7 ngày kể từ khi nhận hàng. Ebook không được hoàn trả.</p>
+            <h1 id="returns-title" class="text-2xl font-black text-on-surface">Trả hàng & hoàn tiền</h1>
+            <p class="text-sm text-on-surface-variant mt-1">Áp dụng cho sách vật lý có chính sách trả hàng trong đơn mua. Thời hạn được tính từ lúc bạn xác nhận đã nhận hàng; ebook không thuộc luồng trả hàng vật lý.</p>
           </div>
 
           <div v-if="loading" class="py-12 text-center text-on-surface-variant" role="status" aria-live="polite">Đang tải dữ liệu...</div>
@@ -130,6 +133,7 @@ onMounted(fetchData)
                 <div>
                   <p class="font-bold text-sm text-on-surface">{{ item.book?.title || 'Sách giấy' }}</p>
                   <p class="text-xs text-on-surface-variant">Đã mua: {{ item.quantity }} · {{ formatMoney(item.price) }}/quyển</p>
+                  <p class="mt-1 text-xs font-medium text-primary">Thời hạn yêu cầu: {{ item.return_policy?.return_window_days }} ngày sau khi nhận</p>
                 </div>
                 <input v-model.number="quantities[item.id]" type="number" min="0" :max="item.quantity" class="min-h-11 w-20 rounded-lg border border-outline-variant px-3 py-2 text-center" :aria-label="`Số lượng trả ${item.book?.title || ''}`">
               </div>
@@ -142,7 +146,7 @@ onMounted(fetchData)
               </button>
             </div>
             <p v-else-if="eligibleOrders.length === 0" class="rounded-xl bg-surface-container-low p-4 text-sm text-on-surface-variant">
-              Hiện không có đơn sách cũ vật lý đã giao nào còn đủ điều kiện trả hàng.
+              Hiện không có đơn sách vật lý đã nhận nào còn đủ điều kiện trả hàng theo chính sách lúc mua.
             </p>
           </form>
         </section>
@@ -163,6 +167,15 @@ onMounted(fetchData)
                 <span class="text-on-surface-variant">{{ entry.items?.map((item) => `${item.book?.title || 'Sách'} ×${item.quantity}`).join(', ') }}</span>
                 <strong class="text-primary">{{ formatMoney(entry.refund_amount, entry.currency) }}</strong>
               </div>
+              <ol v-if="entry.transitions?.length" class="mt-4 space-y-2 border-l-2 border-outline-variant/40 pl-4">
+                <li v-for="transition in entry.transitions" :key="`${transition.to}-${transition.occurred_at}`" class="text-xs text-on-surface-variant">
+                  <strong class="text-on-surface">{{ statusOf(transition.to).label }}</strong>
+                  · {{ formatReturnDate(transition.occurred_at) }}
+                  <span v-if="transition.reason" class="block mt-0.5">{{ transition.reason }}</span>
+                </li>
+              </ol>
+              <p v-if="entry.resolution_reason" class="mt-3 rounded-lg bg-surface-container-low px-3 py-2 text-xs text-on-surface-variant"><strong>Kết quả xử lý:</strong> {{ entry.resolution_reason }}</p>
+              <p v-if="entry.status === 'refunded'" class="mt-3 rounded-lg bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700">Khoản hoàn đã được chuyển vào Ví KomiBook của bạn.</p>
               <p v-if="entry.refund_transaction?.failure_reason" class="mt-3 rounded-lg bg-error-container px-3 py-2 text-xs text-error">{{ entry.refund_transaction.failure_reason }}</p>
             </article>
           </div>

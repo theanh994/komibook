@@ -225,6 +225,24 @@
               </div>
             </div>
 
+            <div v-if="order.can_confirm_receipt" class="rounded-3xl border border-amber-200 bg-amber-50 p-5" role="status">
+              <div class="flex items-start gap-3">
+                <span class="material-symbols-outlined text-amber-700">package_2</span>
+                <div>
+                  <p class="font-bold text-amber-900">Đơn vị vận chuyển đã giao tới bạn</p>
+                  <p class="mt-1 text-sm leading-relaxed text-amber-800">Hãy kiểm tra kiện hàng trước khi xác nhận. Doanh thu chỉ được ghi nhận cho nhà bán sau thao tác này.</p>
+                </div>
+              </div>
+              <button type="button" class="mt-4 min-h-11 w-full rounded-xl bg-primary px-5 py-3 text-sm font-bold text-on-primary disabled:cursor-wait disabled:opacity-50" :disabled="confirmingReceipt" @click="confirmDialogVisible = true">
+                {{ confirmingReceipt ? 'Đang xác nhận...' : 'Tôi đã nhận được hàng' }}
+              </button>
+            </div>
+
+            <router-link v-if="order.status === 'completed' && order.items?.some((item) => item.return_policy?.is_returnable)" :to="{ path: '/returns', query: { order: order.id } }" class="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-primary px-5 py-3 text-sm font-bold text-primary transition-colors hover:bg-primary hover:text-on-primary">
+              <span class="material-symbols-outlined text-[20px]">assignment_return</span>
+              Yêu cầu trả hàng / hoàn tiền
+            </router-link>
+
             <button
               disabled
               title="Chưa có thông tin liên hệ tài xế cho đơn hàng này."
@@ -274,24 +292,43 @@
       </div>
     </div>
   </main>
+
+  <Dialog v-model:visible="confirmDialogVisible" modal header="Xác nhận đã nhận hàng" :style="{ width: 'min(92vw, 480px)' }">
+    <div class="space-y-5">
+      <p class="text-sm leading-relaxed text-on-surface-variant">Bạn xác nhận đã nhận đúng kiện hàng của đơn <strong class="text-on-surface">#{{ order?.order_code || order?.id }}</strong>. Thao tác này sẽ hoàn tất đơn hàng và không thể hoàn tác.</p>
+      <div class="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+        <button type="button" class="min-h-11 rounded-xl px-5 py-3 text-sm font-bold text-on-surface-variant" :disabled="confirmingReceipt" @click="confirmDialogVisible = false">Kiểm tra lại</button>
+        <button type="button" class="min-h-11 rounded-xl bg-primary px-5 py-3 text-sm font-bold text-on-primary disabled:cursor-wait disabled:opacity-50" :disabled="confirmingReceipt" @click="confirmReceipt">
+          {{ confirmingReceipt ? 'Đang xử lý...' : 'Xác nhận đã nhận hàng' }}
+        </button>
+      </div>
+    </div>
+  </Dialog>
 </template>
 
 <script setup>
 import { ref, onMounted, computed } from 'vue'
 import { useRoute } from 'vue-router'
+import { useToast } from 'primevue/usetoast'
+import Dialog from 'primevue/dialog'
 import apiClient from '@/services/axios'
+import { operationKey } from '@/services/returnWorkflow'
 
 const route = useRoute()
+const toast = useToast()
 const order = ref(null)
 const loading = ref(true)
 const error = ref(null)
+const confirmingReceipt = ref(false)
+const confirmDialogVisible = ref(false)
 
 const trackingSteps = [
   { label: 'Đã đặt hàng', icon: 'check_circle' },
   { label: 'Đang xử lý', icon: 'pending' },
   { label: 'Giao cho ĐVVC', icon: 'local_shipping' },
   { label: 'Đang giao', icon: 'route' },
-  { label: 'Thành công', icon: 'verified' }
+  { label: 'Chờ bạn xác nhận', icon: 'fact_check' },
+  { label: 'Hoàn tất', icon: 'verified' }
 ]
 
 const currentStepIndex = computed(() => {
@@ -299,7 +336,8 @@ const currentStepIndex = computed(() => {
   const sStatus = order.value.shipping_status
   const status = order.value.status
   if (status === 'cancelled' || sStatus === 'failed') return 0
-  if (status === 'completed' || sStatus === 'delivered') return 4
+  if (status === 'completed' || sStatus === 'delivered') return 5
+  if (sStatus === 'awaiting_customer_confirmation') return 4
   if (sStatus === 'delivering') return 3
   if (sStatus === 'picked_up') return 2
   if (sStatus === 'pending_pickup') return 1
@@ -329,7 +367,25 @@ const estimatedDelivery = computed(() => {
   }).format(date)
 })
 
-const trackingEvents = computed(() => [])
+const trackingEvents = computed(() => {
+  const events = Array.isArray(order.value?.shipping_events) ? order.value.shipping_events : []
+
+  return [...events]
+    .sort((left, right) => new Date(right.occurred_at || 0) - new Date(left.occurred_at || 0))
+    .map((event) => {
+      const occurredAt = event.occurred_at ? new Date(event.occurred_at) : null
+      return {
+        status: event.label,
+        location: event.description || event.location || 'KomiBook Express (mô phỏng)',
+        date: occurredAt && !Number.isNaN(occurredAt.getTime())
+          ? occurredAt.toLocaleDateString('vi-VN')
+          : '—',
+        time: occurredAt && !Number.isNaN(occurredAt.getTime())
+          ? occurredAt.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
+          : '',
+      }
+    })
+})
 
 const fetchOrder = async () => {
   loading.value = true
@@ -358,6 +414,23 @@ const fetchOrder = async () => {
   }
 }
 
+const confirmReceipt = async () => {
+  if (!order.value?.can_confirm_receipt || confirmingReceipt.value) return
+  confirmingReceipt.value = true
+  try {
+    const response = await apiClient.post(`/api/my-orders/${order.value.id}/confirm-received`, {
+      idempotency_key: operationKey(`customer-confirm-received-${order.value.id}`),
+    })
+    order.value = response.data.data
+    confirmDialogVisible.value = false
+    toast.add({ severity: 'success', summary: 'Đã xác nhận nhận hàng', detail: 'Đơn hàng đã hoàn tất. Cảm ơn bạn!', life: 3500 })
+  } catch (requestError) {
+    toast.add({ severity: 'error', summary: 'Không thể xác nhận', detail: requestError.response?.data?.message || 'Vui lòng thử lại.', life: 4000 })
+  } finally {
+    confirmingReceipt.value = false
+  }
+}
+
 const formatCurrency = (value) => {
   return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(value || 0)
 }
@@ -373,6 +446,7 @@ const getCoverUrl = (path) => {
 const getStatusText = (orderData) => {
   if (orderData.shipping_status === 'failed') return 'Giao hàng thất bại'
   if (orderData.shipping_status === 'delivered') return 'Đã giao hàng'
+  if (orderData.shipping_status === 'awaiting_customer_confirmation') return 'Chờ bạn xác nhận đã nhận'
   if (orderData.shipping_status === 'delivering') return 'Đang giao hàng'
   if (orderData.shipping_status === 'picked_up') return 'Đơn vị vận chuyển đã nhận'
   if (orderData.shipping_status === 'pending_pickup') return 'Chờ đơn vị vận chuyển nhận'
@@ -384,6 +458,7 @@ const getStatusText = (orderData) => {
 const getStatusStyle = (orderData) => {
   if (orderData.shipping_status === 'failed') return 'bg-rose-500 text-white shadow-rose-500/20'
   if (orderData.shipping_status === 'delivered') return 'bg-emerald-500 text-white shadow-emerald-500/20'
+  if (orderData.shipping_status === 'awaiting_customer_confirmation') return 'bg-amber-500 text-white shadow-amber-500/20'
   const status = orderData.status
   const map = {
     pending: 'bg-amber-500 text-white shadow-amber-500/20',

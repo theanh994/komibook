@@ -67,7 +67,7 @@ class WarehouseDocumentExportService
 
         $lines = $spreadsheet->createSheet();
         $lines->setTitle('Dòng hàng');
-        $lines->fromArray(['STT', 'Sách', 'ISBN/SKU', 'Bản in', 'Số lượng', 'Thực tế', 'Vị trí kệ'], null, 'A1');
+        $lines->fromArray(['STT', 'Sách', 'ISBN/SKU', 'Bản in', 'Số lượng', 'Thực tế'], null, 'A1');
         foreach ($document->lines as $index => $line) {
             $lines->fromArray([
                 $index + 1,
@@ -76,10 +76,9 @@ class WarehouseDocumentExportService
                 $line->book?->print_edition ?? 1,
                 $line->quantity,
                 $line->actual_quantity,
-                $this->safeSpreadsheetValue($line->shelf_location),
             ], null, 'A'.($index + 2));
         }
-        foreach (range('A', 'G') as $column) {
+        foreach (range('A', 'F') as $column) {
             $lines->getColumnDimension($column)->setAutoSize(true);
         }
 

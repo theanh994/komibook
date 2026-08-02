@@ -233,13 +233,15 @@ class Phase2CriticalJourneyTest extends TestCase
         $fulfillmentService->updateOrderStatusByVendor($orderA->id, 'shipped', 'vendor', $vendorA->user_id);
         $fulfillmentService->updateShippingStatus($orderA->id, 'picked_up', 'GHN', 'GHN111', 'vendor', $vendorA->user_id);
         $fulfillmentService->updateShippingStatus($orderA->id, 'delivering', 'GHN', 'GHN111', 'vendor', $vendorA->user_id);
-        $fulfillmentService->updateShippingStatus($orderA->id, 'delivered', 'GHN', 'GHN111', 'vendor', $vendorA->user_id);
+        $fulfillmentService->updateShippingStatus($orderA->id, 'awaiting_customer_confirmation', 'GHN', 'GHN111', 'vendor', $vendorA->user_id);
+        $fulfillmentService->confirmReceivedByCustomer($orderA->id, (int) $buyer->id);
 
         // Order B fulfillment
         $fulfillmentService->updateOrderStatusByVendor($orderB->id, 'shipped', 'vendor', $vendorB->user_id);
         $fulfillmentService->updateShippingStatus($orderB->id, 'picked_up', 'GHTK', 'GHTK222', 'vendor', $vendorB->user_id);
         $fulfillmentService->updateShippingStatus($orderB->id, 'delivering', 'GHTK', 'GHTK222', 'vendor', $vendorB->user_id);
-        $fulfillmentService->updateShippingStatus($orderB->id, 'delivered', 'GHTK', 'GHTK222', 'vendor', $vendorB->user_id);
+        $fulfillmentService->updateShippingStatus($orderB->id, 'awaiting_customer_confirmation', 'GHTK', 'GHTK222', 'vendor', $vendorB->user_id);
+        $fulfillmentService->confirmReceivedByCustomer($orderB->id, (int) $buyer->id);
 
         $this->assertEquals('completed', $orderA->fresh()->status);
         $this->assertEquals('completed', $orderB->fresh()->status);
@@ -273,8 +275,8 @@ class Phase2CriticalJourneyTest extends TestCase
             (new DeliverOrderSideEffect($outbox->id))->handle();
         }
 
-        $fulfillmentService->updateShippingStatus($orderA->id, 'delivered', 'GHN', 'GHN111', 'vendor', $vendorA->user_id);
-        $fulfillmentService->updateShippingStatus($orderB->id, 'delivered', 'GHTK', 'GHTK222', 'vendor', $vendorB->user_id);
+        $fulfillmentService->confirmReceivedByCustomer($orderA->id, (int) $buyer->id);
+        $fulfillmentService->confirmReceivedByCustomer($orderB->id, (int) $buyer->id);
 
         // Assert zero duplicate side effects or mutations
         $this->assertEquals('completed', $orderA->fresh()->status);
@@ -376,12 +378,14 @@ class Phase2CriticalJourneyTest extends TestCase
         $fulfillmentService->updateOrderStatusByVendor($orderA->id, 'shipped', 'vendor', $vendorA->user_id);
         $fulfillmentService->updateShippingStatus($orderA->id, 'picked_up', 'GHN', 'GHN333', 'vendor', $vendorA->user_id);
         $fulfillmentService->updateShippingStatus($orderA->id, 'delivering', 'GHN', 'GHN333', 'vendor', $vendorA->user_id);
-        $fulfillmentService->updateShippingStatus($orderA->id, 'delivered', 'GHN', 'GHN333', 'vendor', $vendorA->user_id);
+        $fulfillmentService->updateShippingStatus($orderA->id, 'awaiting_customer_confirmation', 'GHN', 'GHN333', 'vendor', $vendorA->user_id);
+        $fulfillmentService->confirmReceivedByCustomer($orderA->id, (int) $buyer->id);
 
         $fulfillmentService->updateOrderStatusByVendor($orderB->id, 'shipped', 'vendor', $vendorB->user_id);
         $fulfillmentService->updateShippingStatus($orderB->id, 'picked_up', 'GHTK', 'GHTK444', 'vendor', $vendorB->user_id);
         $fulfillmentService->updateShippingStatus($orderB->id, 'delivering', 'GHTK', 'GHTK444', 'vendor', $vendorB->user_id);
-        $fulfillmentService->updateShippingStatus($orderB->id, 'delivered', 'GHTK', 'GHTK444', 'vendor', $vendorB->user_id);
+        $fulfillmentService->updateShippingStatus($orderB->id, 'awaiting_customer_confirmation', 'GHTK', 'GHTK444', 'vendor', $vendorB->user_id);
+        $fulfillmentService->confirmReceivedByCustomer($orderB->id, (int) $buyer->id);
 
         $this->assertEquals('completed', $orderA->fresh()->status);
         $this->assertEquals('completed', $orderB->fresh()->status);

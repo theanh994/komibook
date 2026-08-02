@@ -43,8 +43,8 @@ const isTransferModalOpen = ref(false)
 
 // Form states
 const newWarehouse = ref({ name: '', address: '', capacity: '0%', status: 'Hoạt động' })
-const adjustForm = ref({ book_id: '', source_warehouse_id: '', quantity: 1, shelf_location: '' })
-const transferForm = ref({ book_id: '', source_warehouse_id: '', target_warehouse_id: '', quantity: 1, shelf_location: '' })
+const adjustForm = ref({ book_id: '', source_warehouse_id: '', quantity: 1 })
+const transferForm = ref({ book_id: '', source_warehouse_id: '', target_warehouse_id: '', quantity: 1 })
 
 // List of books for stock adjustments
 const allBooksList = ref([])
@@ -412,7 +412,6 @@ onMounted(() => {
                         <div class="flex items-center gap-2">
                           <span class="material-symbols-outlined text-outline">warehouse</span>
                           <span class="font-medium text-on-surface">{{ b.warehouse_name }}</span>
-                          <span class="text-sm text-on-surface-variant ml-2">{{ b.shelf_location }}</span>
                         </div>
                         <span class="font-bold text-primary">{{ b.quantity }} cuốn</span>
                       </div>
@@ -500,10 +499,6 @@ onMounted(() => {
             <label class="text-label-md font-medium text-on-surface">Số lượng tồn kho mới</label>
             <input v-model.number="adjustForm.quantity" type="number" min="0" class="border border-outline p-md rounded-lg focus:outline-none"/>
           </div>
-          <div class="flex flex-col gap-xs">
-            <label class="text-label-md font-medium text-on-surface">Vị trí kệ (Không bắt buộc)</label>
-            <input v-model="adjustForm.shelf_location" type="text" placeholder="Ví dụ: Kệ A3" class="border border-outline p-md rounded-lg focus:outline-none"/>
-          </div>
         </div>
         <div class="p-lg bg-surface-container-low flex justify-end gap-md">
           <button @click="isAdjustModalOpen = false" class="px-md py-sm border border-outline rounded-lg hover:bg-surface-container-high text-on-surface">Hủy</button>
@@ -544,10 +539,6 @@ onMounted(() => {
           <div class="flex flex-col gap-xs">
             <label class="text-label-md font-medium text-on-surface">Số lượng điều chuyển</label>
             <input v-model.number="transferForm.quantity" type="number" min="1" class="border border-outline p-md rounded-lg focus:outline-none"/>
-          </div>
-          <div class="flex flex-col gap-xs">
-            <label class="text-label-md font-medium text-on-surface">Vị trí kệ mới (Không bắt buộc)</label>
-            <input v-model="transferForm.shelf_location" type="text" placeholder="Ví dụ: Kệ B2" class="border border-outline p-md rounded-lg focus:outline-none"/>
           </div>
         </div>
         <div class="p-lg bg-surface-container-low flex justify-end gap-md">

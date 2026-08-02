@@ -129,7 +129,6 @@ class WarehouseDocumentController extends Controller
             'lines.*.book_id' => ['required', 'integer', 'distinct', 'exists:books,id'],
             'lines.*.quantity' => ['nullable', 'integer', 'min:1'],
             'lines.*.actual_quantity' => ['nullable', 'integer', 'min:0'],
-            'lines.*.shelf_location' => ['nullable', 'string', 'max:255'],
             'lines.*.notes' => ['nullable', 'string', 'max:1000'],
         ]);
 
@@ -191,7 +190,6 @@ class WarehouseDocumentController extends Controller
                     'book_id' => $line['book_id'],
                     'quantity' => $line['quantity'] ?? 0,
                     'actual_quantity' => $line['actual_quantity'] ?? null,
-                    'shelf_location' => $line['shelf_location'] ?? null,
                     'notes' => $line['notes'] ?? null,
                 ]);
             }
@@ -214,7 +212,6 @@ class WarehouseDocumentController extends Controller
             'lines.*.book_id' => ['required', 'integer', 'distinct', 'exists:books,id'],
             'lines.*.quantity' => ['nullable', 'integer', 'min:0'],
             'lines.*.actual_quantity' => ['nullable', 'integer', 'min:0'],
-            'lines.*.shelf_location' => ['nullable', 'string', 'max:255'],
             'lines.*.notes' => ['nullable', 'string', 'max:1000'],
         ]);
         $bookIds = collect($validated['lines'])->pluck('book_id');
@@ -236,7 +233,6 @@ class WarehouseDocumentController extends Controller
                     'book_id' => $line['book_id'],
                     'quantity' => $line['quantity'] ?? 0,
                     'actual_quantity' => $line['actual_quantity'] ?? null,
-                    'shelf_location' => $line['shelf_location'] ?? null,
                     'notes' => $line['notes'] ?? null,
                 ]);
             }

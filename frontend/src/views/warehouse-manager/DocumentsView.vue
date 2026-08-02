@@ -31,7 +31,7 @@ const pendingTransition = ref(null)
 const transitionReason = ref('')
 const transitioning = ref(false)
 const filters = ref({ search: '', type: null, status: null })
-const emptyLine = () => ({ book_id: null, quantity: 1, actual_quantity: null, shelf_location: '' })
+const emptyLine = () => ({ book_id: null, quantity: 1, actual_quantity: null })
 const emptyForm = () => ({ type: 'receipt', receipt_mode: 'restock_existing', external_counterparty_name: '', source_warehouse_id: null, destination_warehouse_id: null, reason: '', lines: [emptyLine()] })
 const form = ref(emptyForm())
 const allDocumentTypes = [
@@ -165,7 +165,6 @@ const editDocument = (document) => {
       book_id: line.book_id,
       quantity: line.quantity,
       actual_quantity: line.actual_quantity,
-      shelf_location: line.shelf_location || '',
     })),
   }
   globalThis.scrollTo?.({ top: 0, behavior: 'smooth' })
@@ -266,10 +265,9 @@ onMounted(load)
         <fieldset class="min-w-0 max-w-full space-y-3">
           <legend class="text-base font-bold">Dòng sản phẩm</legend>
           <div v-for="(line, index) in form.lines" :key="index" class="warehouse-line grid min-w-0 max-w-full gap-3 overflow-hidden rounded-xl bg-surface-container p-4 lg:grid-cols-12 lg:items-end">
-            <div class="min-w-0 lg:col-span-6"><label :for="`line-book-${index}`" class="mb-2 block text-sm font-semibold">Sách / Bản in</label><Select :id="`line-book-${index}`" v-model="line.book_id" :options="scope.books" optionLabel="display_title" optionValue="id" filter class="min-h-11 w-full max-w-full" /></div>
-            <div v-if="form.type !== 'count'" class="min-w-0 lg:col-span-2"><label :for="`line-quantity-${index}`" class="mb-2 block text-sm font-semibold">Số lượng</label><InputNumber :id="`line-quantity-${index}`" v-model="line.quantity" :min="1" class="w-full max-w-full" /></div>
-            <div v-else class="min-w-0 lg:col-span-2"><label :for="`line-actual-${index}`" class="mb-2 block text-sm font-semibold">Số đếm thực tế</label><InputNumber :id="`line-actual-${index}`" v-model="line.actual_quantity" :min="0" class="w-full max-w-full" /></div>
-            <div class="min-w-0 lg:col-span-3"><label :for="`line-shelf-${index}`" class="mb-2 block text-sm font-semibold">Vị trí kệ</label><input :id="`line-shelf-${index}`" v-model="line.shelf_location" class="min-h-11 w-full min-w-0 max-w-full rounded-lg border border-outline-variant bg-surface-container-lowest px-3" /></div>
+            <div class="min-w-0 lg:col-span-8"><label :for="`line-book-${index}`" class="mb-2 block text-sm font-semibold">Sách / Bản in</label><Select :id="`line-book-${index}`" v-model="line.book_id" :options="scope.books" optionLabel="display_title" optionValue="id" filter class="min-h-11 w-full max-w-full" /></div>
+            <div v-if="form.type !== 'count'" class="min-w-0 lg:col-span-3"><label :for="`line-quantity-${index}`" class="mb-2 block text-sm font-semibold">Số lượng</label><InputNumber :id="`line-quantity-${index}`" v-model="line.quantity" :min="1" class="w-full max-w-full" /></div>
+            <div v-else class="min-w-0 lg:col-span-3"><label :for="`line-actual-${index}`" class="mb-2 block text-sm font-semibold">Số đếm thực tế</label><InputNumber :id="`line-actual-${index}`" v-model="line.actual_quantity" :min="0" class="w-full max-w-full" /></div>
             <Button type="button" icon="pi pi-trash" aria-label="Xóa dòng sản phẩm" severity="danger" text class="min-h-11 min-w-11" :disabled="form.lines.length === 1" @click="removeLine(index)" />
           </div>
         </fieldset>
@@ -313,10 +311,9 @@ onMounted(load)
             <details class="rounded-xl border border-outline-variant/40 bg-surface-container-low">
               <summary class="cursor-pointer px-4 py-3 text-sm font-bold text-primary">Xem nội dung cần đối chiếu</summary>
               <div class="space-y-2 border-t border-outline-variant/30 p-4">
-                <div v-for="line in document.lines" :key="line.id || line.book_id" class="grid gap-2 rounded-lg bg-surface-container-lowest p-3 text-sm sm:grid-cols-[1fr_auto_auto] sm:items-center">
+                <div v-for="line in document.lines" :key="line.id || line.book_id" class="grid gap-2 rounded-lg bg-surface-container-lowest p-3 text-sm sm:grid-cols-[1fr_auto] sm:items-center">
                   <div class="min-w-0"><strong class="block truncate">{{ line.book?.display_title || line.book?.title || `Sách #${line.book_id}` }}</strong><span class="text-xs text-on-surface-variant">ISBN/SKU: {{ line.book?.isbn || 'Chưa khai báo' }} · Bản in {{ line.book?.print_edition || 1 }}</span></div>
                   <span class="font-bold">{{ document.type === 'count' ? (line.actual_quantity ?? 0) : line.quantity }} cuốn</span>
-                  <span class="text-xs text-on-surface-variant">{{ line.shelf_location || 'Chưa rõ kệ' }}</span>
                 </div>
               </div>
             </details>
@@ -351,7 +348,7 @@ onMounted(load)
             <div class="col-span-2 rounded-xl bg-surface-container p-3 sm:col-span-1"><p class="text-xs text-on-surface-variant">Tổng lượng</p><strong>{{ documentTotalQuantity(pendingTransition.document) }}</strong></div>
           </div>
           <div class="max-h-64 space-y-2 overflow-y-auto rounded-xl border border-outline-variant/40 p-3">
-            <div v-for="line in pendingTransition.document.lines" :key="line.id || line.book_id" class="flex items-start justify-between gap-3 rounded-lg bg-surface-container-low p-3 text-sm"><div class="min-w-0"><strong class="block truncate">{{ line.book?.display_title || line.book?.title || `Sách #${line.book_id}` }}</strong><span class="text-xs text-on-surface-variant">Bản in {{ line.book?.print_edition || 1 }} · {{ line.shelf_location || 'Chưa rõ kệ' }}</span></div><strong class="shrink-0">{{ pendingTransition.document.type === 'count' ? (line.actual_quantity ?? 0) : line.quantity }} cuốn</strong></div>
+            <div v-for="line in pendingTransition.document.lines" :key="line.id || line.book_id" class="flex items-start justify-between gap-3 rounded-lg bg-surface-container-low p-3 text-sm"><div class="min-w-0"><strong class="block truncate">{{ line.book?.display_title || line.book?.title || `Sách #${line.book_id}` }}</strong><span class="text-xs text-on-surface-variant">Bản in {{ line.book?.print_edition || 1 }}</span></div><strong class="shrink-0">{{ pendingTransition.document.type === 'count' ? (line.actual_quantity ?? 0) : line.quantity }} cuốn</strong></div>
           </div>
           <div><label for="transition-reason" class="mb-2 block text-sm font-semibold">{{ pendingTransition.toStatus === 'cancelled' ? 'Lý do hủy *' : 'Ghi chú xét duyệt' }}</label><Textarea id="transition-reason" v-model="transitionReason" rows="3" class="w-full" :placeholder="pendingTransition.toStatus === 'cancelled' ? 'Nêu rõ lý do hủy phiếu' : 'Ghi lại lưu ý nếu cần'" /></div>
         </div>

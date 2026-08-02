@@ -85,8 +85,8 @@ class ReturnRefundService
                 ->where('transition_kind', 'shipping')
                 ->where('to_state', 'delivered')
                 ->max('occurred_at');
-            if (! $deliveredAt || now()->isAfter(Carbon::parse($deliveredAt)->addDays(7))) {
-                throw new LogicException('Đơn hàng đã quá thời hạn trả hàng 7 ngày.');
+            if (! $deliveredAt) {
+                throw new LogicException('Không xác định được thời điểm khách hàng nhận hàng.');
             }
             if (! $order->invoiceSnapshot) {
                 throw new LogicException('Đơn hàng không có invoice snapshot để tính hoàn tiền.');
@@ -119,14 +119,16 @@ class ReturnRefundService
                     throw new LogicException('E-book không thuộc luồng trả hàng vật lý.');
                 }
 
-                $provenance = $orderItem->product_taxonomy_snapshot['provenance']
-                    ?? $invoiceLine['provenance']
-                    ?? null;
-                $returnable = $orderItem->return_policy_snapshot['is_returnable']
-                    ?? $invoiceLine['return_policy_snapshot']['is_returnable']
-                    ?? false;
-                if ($provenance !== 'used_resale' || ! $returnable) {
-                    throw new LogicException('Chỉ sách cũ đủ điều kiện mới thuộc luồng trả hàng và hoàn tiền.');
+                $policy = $orderItem->return_policy_snapshot
+                    ?? $invoiceLine['return_policy_snapshot']
+                    ?? [];
+                $returnable = (bool) ($policy['is_returnable'] ?? false);
+                $returnWindowDays = (int) ($policy['return_window_days'] ?? 0);
+                if (! $returnable || $returnWindowDays < 1) {
+                    throw new LogicException('Sản phẩm này không thuộc chính sách trả hàng của đơn mua.');
+                }
+                if (now()->isAfter(Carbon::parse($deliveredAt)->addDays($returnWindowDays))) {
+                    throw new LogicException("Sản phẩm đã quá thời hạn trả hàng {$returnWindowDays} ngày.");
                 }
 
                 $alreadyRequested = (int) ReturnRequestItem::query()
@@ -293,10 +295,32 @@ class ReturnRefundService
             return $return->load(['order.checkoutSessionOrder.checkoutSession.paymentTransactions', 'refundTransaction']);
         });
 
+        if ($return->status === 'refunded') {
+            return $return->load(['items.orderItem.book', 'transitions', 'refundTransaction.attempts']);
+        }
+
         $refund = $return->refundTransaction;
         if (! $refund) {
             throw new LogicException('Không tìm thấy giao dịch hoàn tiền.');
         }
+
+        // Refund destination is always the buyer's KomiBook Wallet. This is an
+        // internal, fee-free operation and never calls the original provider.
+        $attempt = RefundTransactionAttempt::firstOrCreate(
+            ['operation_key' => $operationKey],
+            [
+                'refund_transaction_id' => $refund->id,
+                'attempt_number' => $refund->attempts()->count() + 1,
+                'status' => 'succeeded',
+                'request_payload' => ['refund_destination' => 'komibook_wallet'],
+                'response_payload' => ['internal_wallet_credit' => true, 'no_external_call' => true],
+                'attempted_at' => now(),
+            ]
+        );
+        $refund->provider_reference = 'KOMIBOOK-WALLET-REFUND-'.$attempt->id;
+        $refund->save();
+
+        return $this->finalizeRefund($return->id, $actor, $operationKey.':complete');
 
         if ($refund->provider === 'cod') {
             if (! $manualEvidence) {
@@ -309,6 +333,42 @@ class ReturnRefundService
         $payment = $refund->paymentTransaction;
         if (! $payment) {
             throw new LogicException('Không tìm thấy giao dịch thanh toán gốc.');
+        }
+
+        if ($refund->provider === 'payos') {
+            throw new LogicException('payOS đã ngừng hỗ trợ; giao dịch lịch sử cần được Admin xử lý thủ công.');
+        }
+
+        if ($refund->provider === 'momo') {
+            throw new LogicException('MoMo đã ngừng hỗ trợ; giao dịch lịch sử cần được Admin xử lý thủ công.');
+        }
+
+        $isDemoPayment = (bool) ($payment->request_payload['demo_only'] ?? false);
+        if (in_array($refund->provider, ['vnpay', 'demo_wallet'], true) && $isDemoPayment) {
+
+            $attempt = RefundTransactionAttempt::firstOrCreate(
+                ['operation_key' => $operationKey],
+                [
+                    'refund_transaction_id' => $refund->id,
+                    'attempt_number' => $refund->attempts()->count() + 1,
+                    'status' => 'succeeded',
+                    'request_payload' => ['demo_only' => true],
+                    'response_payload' => ['demo_only' => true, 'no_external_call' => true],
+                    'attempted_at' => now(),
+                ]
+            );
+            if ($refund->provider === 'demo_wallet') {
+                $buyer = $payment->checkoutSession()->firstOrFail()->user()->firstOrFail();
+                app(DemoWalletService::class)->creditRefund($buyer, $payment, (int) $refund->amount, $return->id);
+            }
+            $refund->provider_reference = 'DEMO-REFUND-'.$attempt->id;
+            $refund->save();
+
+            return $this->finalizeRefund($return->id, $actor, $operationKey.':complete');
+        }
+
+        if ($refund->provider === 'demo_wallet') {
+            throw new LogicException('Không được hoàn giao dịch provider thật bằng luồng mô phỏng.');
         }
 
         $attempt = DB::transaction(function () use ($refund, $operationKey) {
@@ -449,14 +509,14 @@ class ReturnRefundService
         $order = Order::withoutGlobalScopes()
             ->with('checkoutSessionOrder.checkoutSession.paymentTransactions')
             ->findOrFail($return->order_id);
-        $provider = $order->payment_method === 'cod' ? 'cod' : 'vnpay';
-        $payment = $provider === 'vnpay'
-            ? $order->checkoutSessionOrder?->checkoutSession?->paymentTransactions
-                ?->first(fn ($transaction) => $transaction->status === PaymentTransactionStatus::PAID)
-            : null;
+        $payment = $order->payment_method === 'cod'
+            ? null
+            : $order->checkoutSessionOrder?->checkoutSession?->paymentTransactions
+                ?->first(fn ($transaction) => $transaction->status === PaymentTransactionStatus::PAID);
+        $provider = $order->payment_method === 'cod' ? 'cod' : ($payment?->provider ?? 'online');
 
-        if ($provider === 'vnpay' && ! $payment) {
-            throw new LogicException('Không tìm thấy giao dịch VNPAY đã thanh toán.');
+        if ($order->payment_method !== 'cod' && ! $payment) {
+            throw new LogicException('Không tìm thấy giao dịch online đã thanh toán.');
         }
 
         if ($payment) {
@@ -512,6 +572,16 @@ class ReturnRefundService
             $refund->failure_reason = null;
             $refund->refunded_at = now();
             $refund->save();
+
+            $order = Order::withoutGlobalScopes()->whereKey($return->order_id)->lockForUpdate()->firstOrFail();
+            $buyer = User::whereKey($return->user_id)->lockForUpdate()->firstOrFail();
+            app(DemoWalletService::class)->creditRefund(
+                $buyer,
+                $refund->paymentTransaction,
+                $order,
+                (int) $refund->amount,
+                $return->id
+            );
 
             $this->reverseFinancialEffects($return);
 
@@ -629,13 +699,18 @@ class ReturnRefundService
                 'operation_key' => "vendor-refund:{$return->id}",
                 'gross_amount' => $reversal['gross_amount'],
                 'commission_amount' => $reversal['commission_amount'],
+                'tax_amount' => $reversal['tax_amount'],
                 'net_amount' => $reversal['net_amount'],
                 'currency' => $return->currency,
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
-            $vendor->balance = max(0, (int) $vendor->balance - $reversal['net_amount']);
-            $vendor->save();
+            app(DemoWalletService::class)->debitVendorRefund(
+                $vendor,
+                $order,
+                $reversal['net_amount'],
+                $return->id
+            );
         }
 
         $pointLedger = $order->loyaltyPointLedger()->first();
@@ -670,7 +745,7 @@ class ReturnRefundService
     }
 
     /**
-     * @return array{gross_amount:int, commission_amount:int, net_amount:int}
+     * @return array{gross_amount:int, commission_amount:int, tax_amount:int, net_amount:int}
      */
     private function calculateVendorReversal(ReturnRequest $return): array
     {
@@ -686,6 +761,9 @@ class ReturnRefundService
         $alreadyCommission = (int) DB::table('vendor_earning_reversals')
             ->where('order_id', $order->id)
             ->sum('commission_amount');
+        $alreadyTax = (int) DB::table('vendor_earning_reversals')
+            ->where('order_id', $order->id)
+            ->sum('tax_amount');
         $refundedBefore = (int) ReturnRequest::where('order_id', $order->id)
             ->where('status', 'refunded')
             ->where('id', '!=', $return->id)
@@ -702,11 +780,17 @@ class ReturnRefundService
             (int) round((int) $earning->commission_amount * $cumulativeRatio)
         );
         $commission = min($gross, max(0, $targetCommission - $alreadyCommission));
+        $targetTax = min(
+            (int) $earning->tax_amount,
+            (int) round((int) $earning->tax_amount * $cumulativeRatio)
+        );
+        $tax = min(max(0, $gross - $commission), max(0, $targetTax - $alreadyTax));
 
         return [
             'gross_amount' => $gross,
             'commission_amount' => $commission,
-            'net_amount' => max(0, $gross - $commission),
+            'tax_amount' => $tax,
+            'net_amount' => max(0, $gross - $commission - $tax),
         ];
     }
 

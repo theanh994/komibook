@@ -75,7 +75,7 @@
             <!-- Loại sách -->
             <div class="border-t border-outline-variant/30 pt-lg mb-lg">
               <h3 class="text-sm font-semibold text-on-surface mb-md">Định dạng</h3>
-              <div class="grid grid-cols-2 gap-2">
+              <div class="grid gap-2">
                 <button v-for="option in productOptions" :key="option.value" type="button" :class="filterButtonClass(filterProduct === option.value)" :aria-pressed="filterProduct === option.value" @click="filterProduct = option.value; applyFilters()">
                   {{ option.label }}
                 </button>
@@ -85,7 +85,7 @@
             <!-- Lứa tuổi -->
             <div class="border-t border-outline-variant/30 pt-lg mb-lg">
               <h3 class="text-sm font-semibold text-on-surface mb-md">Lứa tuổi</h3>
-              <div class="grid grid-cols-2 gap-2">
+              <div class="grid gap-2">
                 <button v-for="option in ageOptions" :key="option.value" type="button" :class="filterButtonClass(filterAge === option.value)" :aria-pressed="filterAge === option.value" @click="filterAge = option.value; applyFilters()">
                   {{ option.label }}
                 </button>

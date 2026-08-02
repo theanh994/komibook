@@ -4,6 +4,7 @@ namespace App\Services\Payments;
 
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
+use Illuminate\Support\Str;
 use InvalidArgumentException;
 
 class VnpayGateway
@@ -37,6 +38,10 @@ class VnpayGateway
         $scheme = parse_url($url, PHP_URL_SCHEME);
         if (! is_string($scheme) || ! in_array(strtolower($scheme), ['http', 'https'], true)) {
             throw new InvalidArgumentException('VNPAY payment URL must use HTTP or HTTPS scheme.');
+        }
+
+        if (strtolower((string) parse_url($url, PHP_URL_HOST)) !== 'sandbox.vnpayment.vn') {
+            throw new InvalidArgumentException('Only the VNPAY Sandbox payment URL is allowed.');
         }
 
         return [
@@ -98,17 +103,33 @@ class VnpayGateway
     ): array {
         $config = $this->getConfig();
 
-        if (empty($providerReference) || trim($providerReference) === '') {
-            throw new InvalidArgumentException('Provider reference cannot be empty.');
+        $providerReference = trim($providerReference);
+        if (! preg_match('/^[A-Za-z0-9]{1,100}$/', $providerReference)) {
+            throw new InvalidArgumentException('VNPAY transaction reference must contain 1-100 alphanumeric characters.');
         }
 
-        $maxAmount = intdiv(PHP_INT_MAX, 100);
+        $maxAmount = min(intdiv(PHP_INT_MAX, 100), 9_999_999_999);
         if ($amount <= 0 || $amount > $maxAmount) {
             throw new InvalidArgumentException('Payment amount must be a positive integer within valid limits.');
         }
 
+        if (filter_var($returnUrl, FILTER_VALIDATE_URL) === false
+            || ! in_array(strtolower((string) parse_url($returnUrl, PHP_URL_SCHEME)), ['http', 'https'], true)) {
+            throw new InvalidArgumentException('VNPAY return URL must be a valid HTTP or HTTPS URL.');
+        }
+
+        $normalizedOrderInfo = Str::ascii($orderInfo);
+        $normalizedOrderInfo = preg_replace('/[^A-Za-z0-9 ]+/', ' ', $normalizedOrderInfo) ?? '';
+        $normalizedOrderInfo = preg_replace('/\s+/', ' ', trim($normalizedOrderInfo)) ?? '';
+        $normalizedOrderInfo = mb_substr($normalizedOrderInfo, 0, 255);
+        if ($normalizedOrderInfo === '') {
+            $normalizedOrderInfo = 'Thanh toan KomiBook';
+        }
+
         $validIp = filter_var($clientIp, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) ? $clientIp : '127.0.0.1';
-        $createDate = $occurredAt->copy()->setTimezone('Asia/Ho_Chi_Minh')->format('YmdHis');
+        $vietnamTime = $occurredAt->copy()->setTimezone('Asia/Ho_Chi_Minh');
+        $createDate = $vietnamTime->format('YmdHis');
+        $expireDate = $vietnamTime->addMinutes(15)->format('YmdHis');
 
         $params = [
             'vnp_Version' => '2.1.0',
@@ -116,13 +137,14 @@ class VnpayGateway
             'vnp_TmnCode' => $config['tmn_code'],
             'vnp_Amount' => (string) ($amount * 100),
             'vnp_CurrCode' => 'VND',
-            'vnp_TxnRef' => trim($providerReference),
-            'vnp_OrderInfo' => $orderInfo,
+            'vnp_TxnRef' => $providerReference,
+            'vnp_OrderInfo' => $normalizedOrderInfo,
             'vnp_OrderType' => 'billpayment',
             'vnp_Locale' => 'vn',
             'vnp_ReturnUrl' => $returnUrl,
             'vnp_IpAddr' => $validIp,
             'vnp_CreateDate' => $createDate,
+            'vnp_ExpireDate' => $expireDate,
         ];
 
         $canonicalQuery = $this->buildCanonicalQuery($params);
@@ -162,10 +184,12 @@ class VnpayGateway
             throw new InvalidArgumentException('Callback payload is missing secure hash.');
         }
 
-        // Tách các tham số vnp_ để ký, loại bỏ vnp_SecureHash và vnp_SecureHashType
+        // Tách các tham số vnp_ để ký. Theo mẫu ReturnURL chính thức của
+        // VNPAY, vnp_SecureHashType (nếu có) vẫn thuộc dữ liệu checksum;
+        // chỉ chính giá trị chữ ký vnp_SecureHash bị loại bỏ.
         $vnpParams = [];
         foreach ($queryParams as $key => $value) {
-            if (str_starts_with($key, 'vnp_') && $key !== 'vnp_SecureHash' && $key !== 'vnp_SecureHashType') {
+            if (str_starts_with($key, 'vnp_') && $key !== 'vnp_SecureHash') {
                 $vnpParams[$key] = $value;
             }
         }

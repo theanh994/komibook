@@ -105,6 +105,21 @@ class User extends Authenticatable
         return $this->hasMany(CheckoutSession::class);
     }
 
+    public function demoWallet(): HasOne
+    {
+        return $this->hasOne(DemoWalletAccount::class);
+    }
+
+    public function walletPayoutAccount(): HasOne
+    {
+        return $this->hasOne(WalletPayoutAccount::class);
+    }
+
+    public function payoutRequests(): HasMany
+    {
+        return $this->hasMany(PayoutRequest::class);
+    }
+
     public function loyaltyPointLedgers(): HasMany
     {
         return $this->hasMany(LoyaltyPointLedger::class);

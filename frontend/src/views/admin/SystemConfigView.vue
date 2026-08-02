@@ -11,7 +11,8 @@ const router = useRouter()
 const activeSection = computed(() => route.query.section === 'fees' ? 'fees' : 'general')
 
 const setSection = (section) => {
-  router.replace({ name: 'admin-system-config', query: section === 'fees' ? { section: 'fees' } : {} })
+  const query = section === 'fees' ? { section: 'fees' } : {}
+  router.replace({ name: 'admin-system-config', query })
 }
 
 const config = ref({
@@ -23,18 +24,21 @@ const config = ref({
   maxUploadSize: 5,
 })
 
-const gateways = ref([
-  { id: 'momo', name: 'Ví Momo', description: 'Thanh toán qua mã QR', icon: 'account_balance_wallet', color: '#A50064', enabled: true },
-  { id: 'vnpay', name: 'VNPay', description: 'Cổng thanh toán nội địa', icon: 'payments', color: '#005BAA', enabled: true },
-  { id: 'stripe', name: 'Credit Card (Stripe)', description: 'Thẻ quốc tế Visa/Master', icon: 'credit_card', color: '#73777e', enabled: false },
-])
+const gateways = ref([])
+const gatewayMeta = {
+  demo_wallet: { description: 'Ví nội bộ cho thanh toán, hoàn tiền, doanh thu và yêu cầu rút; không hỗ trợ nạp tiền ngoài', icon: 'wallet', color: '#1A3A5A' },
+  vnpay: { description: 'Cổng VNPAY Sandbox, không phát sinh tiền thật', icon: 'payments', color: '#005BAA' },
+}
 
 const loading = ref(true)
 const saving = ref(false)
 
 const fetchConfig = async () => {
   try {
-    const res = await apiClient.get('/api/admin/config')
+    const [res, providersRes] = await Promise.all([
+      apiClient.get('/api/admin/config'),
+      apiClient.get('/api/admin/payment-providers'),
+    ])
     const data = res.data.data
     config.value = {
       systemName: data.site_name,
@@ -44,10 +48,35 @@ const fetchConfig = async () => {
       maintenanceMode: data.maintenance_mode,
       maxUploadSize: data.max_upload_size,
     }
+    gateways.value = (providersRes.data.data || []).map((provider) => ({
+      ...provider,
+      ...(gatewayMeta[provider.id] || { description: 'Phương thức thanh toán', icon: 'payments', color: '#1A3A5A' }),
+      enabled: provider.available,
+      canConfigureDemo: provider.id === 'demo_wallet',
+    }))
   } catch (error) {
     toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Không thể tải cấu hình hệ thống.', life: 3000 })
   } finally {
     loading.value = false
+  }
+}
+
+const updateGateway = async (gateway) => {
+  if (!gateway.canConfigureDemo) return
+  const nextEnabled = !gateway.available
+  gateway.updating = true
+  try {
+    const response = await apiClient.put(`/api/admin/payment-providers/${gateway.id}`, {
+      enabled: nextEnabled,
+      mode: nextEnabled ? 'demo' : 'disabled',
+      reason: nextEnabled ? 'Bật mô phỏng không phát sinh phí từ cấu hình hệ thống' : 'Tắt mô phỏng từ cấu hình hệ thống',
+    })
+    Object.assign(gateway, response.data.data, { enabled: response.data.data.available })
+    toast.add({ severity: 'success', summary: 'Đã cập nhật', detail: response.data.data.notice, life: 3500 })
+  } catch (error) {
+    toast.add({ severity: 'error', summary: 'Không thể cập nhật', detail: error.response?.data?.message || 'Cấu hình thanh toán bị từ chối.', life: 4000 })
+  } finally {
+    gateway.updating = false
   }
 }
 
@@ -83,7 +112,9 @@ onMounted(() => {
       <div>
         <h1 class="font-headline-lg text-headline-lg text-primary font-bold">Cấu hình hệ thống</h1>
         <p class="font-body-md text-body-md text-on-surface-variant mt-xs">
-          {{ activeSection === 'fees' ? 'Quản lý lịch Commission, phí dịch vụ và cách phân bổ dòng tiền.' : 'Quản lý thông tin chung, thanh toán và các tham số vận hành cốt lõi.' }}
+          {{ activeSection === 'fees'
+            ? 'Quản lý lịch Commission, phí dịch vụ và cách phân bổ dòng tiền.'
+            : 'Quản lý thông tin chung, thanh toán và các tham số vận hành cốt lõi.' }}
         </p>
       </div>
       <button
@@ -215,23 +246,29 @@ onMounted(() => {
                   <p class="text-[13px] text-on-surface-variant">{{ gw.description }}</p>
                 </div>
               </div>
-              <!-- Toggle Switch -->
-              <label class="relative inline-flex items-center cursor-pointer">
-                <input type="checkbox" v-model="gw.enabled" class="sr-only peer"/>
-                <div class="w-11 h-6 bg-outline-variant peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
-              </label>
+              <button
+                type="button"
+                class="min-h-11 min-w-11 rounded-full px-sm focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary-fixed-dim disabled:cursor-not-allowed disabled:opacity-50"
+                :class="gw.available ? 'bg-primary text-on-primary' : 'bg-surface-container-high text-on-surface-variant'"
+                :disabled="!gw.canConfigureDemo || gw.updating"
+                :aria-label="`${gw.available ? 'Tắt' : 'Bật'} ${gw.name}`"
+                :title="gw.canConfigureDemo ? gw.notice : 'Không thay đổi trong phạm vi tích hợp không phát sinh phí'"
+                @click="updateGateway(gw)"
+              >
+                <span class="material-symbols-outlined text-[20px]">{{ gw.updating ? 'progress_activity' : (gw.available ? 'toggle_on' : 'toggle_off') }}</span>
+              </button>
             </div>
           </div>
           <div class="p-md bg-surface-container-low border-t border-outline-variant/10">
             <button type="button" disabled class="min-h-11 w-full text-on-surface-variant font-label-md text-label-md flex items-center justify-center gap-xs cursor-not-allowed opacity-70">
               <span class="material-symbols-outlined text-[18px]">add</span>
-              Thêm cổng thanh toán mới — Chưa hỗ trợ
+              Chỉ cho phép chế độ demo — không gọi API, không phát sinh phí
             </button>
           </div>
         </section>
       </div>
     </div>
-    <FeeSchedulesView v-else embedded class="animate-slide-up" />
+    <FeeSchedulesView v-else-if="activeSection === 'fees'" embedded class="animate-slide-up" />
   </div>
 </template>
 

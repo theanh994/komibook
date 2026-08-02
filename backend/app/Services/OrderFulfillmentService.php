@@ -18,7 +18,7 @@ use LogicException;
 
 class OrderFulfillmentService
 {
-    private const ALLOWED_ACTOR_TYPES = ['vendor', 'system'];
+    private const ALLOWED_ACTOR_TYPES = ['vendor', 'customer', 'system'];
 
     /**
      * Validate actor identity before authorization.
@@ -43,6 +43,12 @@ class OrderFulfillmentService
             }
         }
 
+        if ($actorType === 'customer') {
+            if ($actorId === null || (int) $order->user_id !== $actorId) {
+                throw new LogicException("Customer ID {$actorId} is not authorized to confirm order ID {$order->id}.");
+            }
+        }
+
         if ($actorType === 'system') {
             if ($actorId !== null) {
                 throw new LogicException('System actor must not specify an actor ID.');
@@ -64,7 +70,8 @@ class OrderFulfillmentService
             $approvedShippingEdges = [
                 'pending_pickup' => ['picked_up', 'failed'],
                 'picked_up' => ['delivering', 'failed'],
-                'delivering' => ['delivered', 'failed'],
+                'delivering' => ['awaiting_customer_confirmation', 'failed'],
+                'awaiting_customer_confirmation' => ['delivered'],
             ];
 
             return isset($approvedShippingEdges[$fromState]) && in_array($toState, $approvedShippingEdges[$fromState], true);
@@ -176,6 +183,8 @@ class OrderFulfillmentService
             if (empty($order->shipping_status) || $order->shipping_status === 'pending_pickup') {
                 $order->shipping_status = 'pending_pickup';
             }
+            $order->shipping_carrier = $order->shipping_carrier ?: $this->demoCarrierName();
+            $order->shipping_tracking_code = $order->shipping_tracking_code ?: $this->demoTrackingCode($order);
             $order->save();
 
             OrderTransitionOperation::create([
@@ -208,7 +217,7 @@ class OrderFulfillmentService
         ?int $actorId,
         ?string $operationKey = null
     ): Order {
-        $allowedShippingStatuses = ['pending_pickup', 'picked_up', 'delivering', 'delivered', 'failed'];
+        $allowedShippingStatuses = ['pending_pickup', 'picked_up', 'delivering', 'awaiting_customer_confirmation', 'failed'];
         if (! in_array($newShippingStatus, $allowedShippingStatuses, true)) {
             throw new LogicException("Invalid shipping status '{$newShippingStatus}'.");
         }
@@ -221,6 +230,8 @@ class OrderFulfillmentService
             $this->assertActorAndVendorAuthorization($order, $actorType, $actorId, ['vendor']);
 
             $currentShipping = $order->shipping_status ?? 'pending_pickup';
+            $carrier = trim((string) $carrier) ?: ($order->shipping_carrier ?: $this->demoCarrierName());
+            $trackingCode = trim((string) $trackingCode) ?: ($order->shipping_tracking_code ?: $this->demoTrackingCode($order));
 
             if ($currentShipping === 'failed' && $newShippingStatus !== 'failed') {
                 throw new LogicException("Cannot transition from failed shipping status for order ID {$order->id}.");
@@ -251,10 +262,6 @@ class OrderFulfillmentService
                 $opKey = $existingOp->operation_key;
                 $fromState = $existingOp->from_state;
 
-                if ($newShippingStatus === 'delivered') {
-                    return $this->executeOrderCompletion($order, $carrier, $trackingCode, $actorType, $actorId, $opKey);
-                }
-
                 $verifiedOp = $this->checkOrVerifyOperation($order, $opKey, 'shipping', $fromState, $newShippingStatus, $actorType, $actorId, $expectedMeta);
                 if ($verifiedOp) {
                     return $order;
@@ -266,7 +273,7 @@ class OrderFulfillmentService
             $validTransitions = [
                 'pending_pickup' => ['picked_up', 'failed'],
                 'picked_up' => ['delivering', 'failed'],
-                'delivering' => ['delivered', 'failed'],
+                'delivering' => ['awaiting_customer_confirmation', 'failed'],
             ];
 
             if (! isset($validTransitions[$currentShipping]) || ! in_array($newShippingStatus, $validTransitions[$currentShipping], true)) {
@@ -274,19 +281,6 @@ class OrderFulfillmentService
             }
 
             $opKey = $operationKey ?? "shipping-update:{$order->id}:{$currentShipping}:{$newShippingStatus}";
-
-            if ($newShippingStatus === 'delivered') {
-                $existingOp = OrderTransitionOperation::where('operation_key', $opKey)->first();
-                if ($existingOp) {
-                    return $this->executeOrderCompletion($order, $carrier, $trackingCode, $actorType, $actorId, $opKey);
-                }
-
-                if ($currentShipping !== 'delivering') {
-                    throw new LogicException("Cannot complete delivery from shipping status '{$currentShipping}'. Expected 'delivering'.");
-                }
-
-                return $this->executeOrderCompletion($order, $carrier, $trackingCode, $actorType, $actorId, $opKey);
-            }
 
             $existingOp = $this->checkOrVerifyOperation($order, $opKey, 'shipping', $currentShipping, $newShippingStatus, $actorType, $actorId, $expectedMeta);
             if ($existingOp) {
@@ -317,6 +311,48 @@ class OrderFulfillmentService
 
             return $order;
         });
+    }
+
+    /**
+     * Khách hàng xác nhận đã nhận kiện hàng do đơn vị vận chuyển giao tới.
+     */
+    public function confirmReceivedByCustomer(
+        Order|int $orderOrId,
+        int $customerId,
+        ?string $operationKey = null
+    ): Order {
+        $orderId = is_object($orderOrId) ? $orderOrId->id : (int) $orderOrId;
+        $opKey = $operationKey ?? "customer-confirm-received:{$orderId}:{$customerId}";
+
+        return DB::transaction(function () use ($orderId, $customerId, $opKey) {
+            $order = Order::withoutGlobalScopes()->whereKey($orderId)->lockForUpdate()->firstOrFail();
+            $this->assertActorAndVendorAuthorization($order, 'customer', $customerId, ['customer']);
+
+            if ($order->shipping_status !== 'awaiting_customer_confirmation' && $order->shipping_status !== 'delivered') {
+                throw new LogicException('Chỉ có thể xác nhận sau khi đơn vị vận chuyển đã giao hàng tới khách.');
+            }
+
+            return $this->executeOrderCompletion(
+                $order,
+                $order->shipping_carrier,
+                $order->shipping_tracking_code,
+                'customer',
+                $customerId,
+                $opKey
+            );
+        });
+    }
+
+    private function demoCarrierName(): string
+    {
+        return trim((string) config('shipping.demo_carrier.name', 'KomiBook Express (mô phỏng)'));
+    }
+
+    private function demoTrackingCode(Order $order): string
+    {
+        $prefix = strtoupper(preg_replace('/[^A-Z0-9]/', '', (string) config('shipping.demo_carrier.tracking_prefix', 'KBX')) ?: 'KBX');
+
+        return $prefix.'-'.str_pad((string) $order->id, 8, '0', STR_PAD_LEFT);
     }
 
     /**
@@ -435,13 +471,35 @@ class OrderFulfillmentService
             throw new LogicException("Invalid snapshot commission or gross amount for order ID {$order->id}.");
         }
 
-        $netAmount = $grossAmount - $commissionAmount;
+        $existingOp = OrderTransitionOperation::where('operation_key', $opKey)->first();
+        $existingEarning = $existingOp
+            ? VendorEarningLedger::where('order_id', $order->id)->first()
+            : null;
+        if ($existingOp) {
+            $taxAmount = (int) ($existingEarning?->tax_amount ?? 0);
+            $taxScheduleId = $existingEarning?->vendor_tax_schedule_id;
+        } else {
+            // KomiBook does not calculate or withhold vendor tax. Historical
+            // ledger values remain immutable, while every new earning is tax-free.
+            $taxAmount = 0;
+            $taxScheduleId = null;
+        }
+
+        if ($taxAmount < 0 || $commissionAmount + $taxAmount > $grossAmount) {
+            throw new LogicException("Invalid tax, commission or gross amount for order ID {$order->id}.");
+        }
+
+        $netAmount = $grossAmount - $commissionAmount - $taxAmount;
         $points = (int) floor($grossAmount / 10000);
 
         // Lock Projections
         $user = User::where('id', $order->user_id)->lockForUpdate()->firstOrFail();
 
-        $fromState = $isEbook ? 'processing' : ($order->shipping_status === 'delivered' ? 'delivering' : ($order->shipping_status ?? 'delivering'));
+        $fromState = $isEbook
+            ? 'processing'
+            : ($existingOp?->from_state ?? ($order->shipping_status === 'delivered'
+                ? 'awaiting_customer_confirmation'
+                : ($order->shipping_status ?? 'awaiting_customer_confirmation')));
         $toState = $isEbook ? 'completed' : 'delivered';
         $kind = $isEbook ? 'order' : 'shipping';
 
@@ -450,6 +508,7 @@ class OrderFulfillmentService
             'payment_status' => 'paid',
             'gross_amount' => $grossAmount,
             'commission_amount' => $commissionAmount,
+            'tax_amount' => $taxAmount,
             'net_amount' => $netAmount,
             'points' => $points,
         ] : [
@@ -459,12 +518,15 @@ class OrderFulfillmentService
             'shipping_tracking_code' => $trackingCode ?? $order->shipping_tracking_code,
             'gross_amount' => $grossAmount,
             'commission_amount' => $commissionAmount,
+            'tax_amount' => $taxAmount,
             'net_amount' => $netAmount,
             'points' => $points,
         ];
 
         // Check Idempotency & Ledger Corruption
-        $existingOp = OrderTransitionOperation::where('operation_key', $opKey)->first();
+        if ($existingOp && ! array_key_exists('tax_amount', $existingOp->metadata ?? [])) {
+            unset($expectedCompletionMetadata['tax_amount']);
+        }
         if ($existingOp) {
             $this->checkOrVerifyOperation($order, $opKey, $kind, $fromState, $toState, $actorType, $actorId, $expectedCompletionMetadata);
 
@@ -476,6 +538,7 @@ class OrderFulfillmentService
                 || $earningLedger->operation_key !== "vendor-earning:{$order->id}"
                 || (int) $earningLedger->gross_amount !== $grossAmount
                 || (int) $earningLedger->commission_amount !== $commissionAmount
+                || (int) $earningLedger->tax_amount !== $taxAmount
                 || (int) $earningLedger->net_amount !== $netAmount
                 || $earningLedger->currency !== 'VND'
             ) {
@@ -549,6 +612,8 @@ class OrderFulfillmentService
             'operation_key' => "vendor-earning:{$order->id}",
             'gross_amount' => $grossAmount,
             'commission_amount' => $commissionAmount,
+            'tax_amount' => $taxAmount,
+            'vendor_tax_schedule_id' => $taxScheduleId,
             'net_amount' => $netAmount,
             'currency' => 'VND',
         ]);
@@ -567,8 +632,7 @@ class OrderFulfillmentService
         $order->payment_status = 'paid';
         $order->save();
 
-        $vendor->balance += $netAmount;
-        $vendor->save();
+        app(DemoWalletService::class)->creditVendorEarning($vendor, $order, $netAmount);
 
         if ($points > 0) {
             $user->points += $points;

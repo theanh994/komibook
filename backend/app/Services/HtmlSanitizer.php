@@ -18,7 +18,7 @@ class HtmlSanitizer
             $config = HTMLPurifier_Config::createDefault();
 
             // Allowlist thẻ HTML
-            $config->set('HTML.Allowed', 'p,br,strong,b,em,i,u,ul,ol,li,blockquote,h2,h3,h4,h5,h6,a[href|target|rel],span,sub,sup');
+            $config->set('HTML.Allowed', 'p[class],br,strong,b,em,i,u,s,strike,ul[class],ol[class],li[class],blockquote[class],h2[class],h3[class],h4[class],h5[class],h6[class],a[href|target|rel],img[src|alt|width|height],span[class],sub,sup');
 
             // Bảo mật liên kết target="_blank"
             $config->set('HTML.TargetBlank', true);

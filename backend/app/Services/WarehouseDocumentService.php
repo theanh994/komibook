@@ -133,7 +133,6 @@ class WarehouseDocumentService
         }
         $stock->update([
             'quantity' => $balance,
-            'shelf_location' => $line->shelf_location ?: $stock->shelf_location,
         ]);
         WarehouseStockLedger::create([
             'warehouse_document_id' => $document->id,

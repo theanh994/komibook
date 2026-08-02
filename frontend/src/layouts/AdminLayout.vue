@@ -2,6 +2,7 @@
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import apiClient from '@/services/axios'
 import Avatar from 'primevue/avatar'
 import Menu from 'primevue/menu'
 
@@ -11,6 +12,8 @@ const authStore = useAuthStore()
 const sidebarCollapsed = ref(false)
 const isMobile = ref(false)
 const userMenu = ref()
+const unreadNotificationsCount = ref(0)
+let notificationTimer
 
 // ─── Menu động theo Role ───────────────────────────────────────────────────
 const vendorMenuItems = [
@@ -71,9 +74,14 @@ const vendorMenuItems = [
     route: '/vendor/returns',
   },
   {
-    label: 'Doanh thu & Rút tiền',
+    label: 'Báo cáo doanh thu',
     icon: 'pi pi-wallet',
     route: '/vendor/finance',
+  },
+  {
+    label: 'Ví KomiBook & Rút tiền',
+    icon: 'pi pi-wallet',
+    route: '/wallet',
   },
   {
     label: 'Đăng ký Flash Sale',
@@ -87,11 +95,7 @@ const vendorMenuItems = [
   },
 ]
 
-const expandedSubmenus = ref({
-  'Quản lý Sách': true,
-  'Sách cũ & Kho': true,
-  'Newsroom': true,
-})
+const expandedSubmenus = ref({})
 
 const adminMenuItems = [
   {
@@ -141,12 +145,12 @@ const adminMenuItems = [
     route: '/admin/coupons',
   },
   {
-    label: 'Báo cáo tài chính',
+    label: 'Báo cáo doanh thu',
     icon: 'pi pi-chart-line',
     route: '/admin/finance-report',
   },
   {
-    label: 'Đối soát',
+    label: 'Quản lý rút tiền',
     icon: 'pi pi-check-square',
     route: '/admin/reconciliation',
   },
@@ -182,7 +186,7 @@ const warehouseManagerMenuItems = [
     route: '/warehouse-manager/dashboard',
   },
   {
-    label: 'Tồn kho & vị trí kệ',
+    label: 'Tồn kho',
     icon: 'pi pi-box',
     route: '/warehouse-manager/inventory',
   },
@@ -205,16 +209,12 @@ const panelLabel = computed(() => {
   return 'Vendor Panel'
 })
 
-const bottomItems = [
-  {
-    label: 'Quay lại Trang chủ',
-    icon: 'pi pi-arrow-left',
-    route: '/',
-  },
-]
-
 const toggleSubmenu = (label) => {
-  expandedSubmenus.value[label] = !expandedSubmenus.value[label]
+  const nextState = !expandedSubmenus.value[label]
+  expandedSubmenus.value = Object.fromEntries(
+    Object.keys(expandedSubmenus.value).map((key) => [key, false]),
+  )
+  expandedSubmenus.value[label] = nextState
 }
 
 const isActive = (item) => {
@@ -235,6 +235,23 @@ const closeMobileSidebar = () => {
   if (isMobile.value) sidebarCollapsed.value = true
 }
 
+const syncExpandedSubmenus = () => {
+  const next = {}
+  menuItems.value.forEach((item) => {
+    if (item.children) next[item.label] = isActive(item)
+  })
+  expandedSubmenus.value = next
+}
+
+const fetchUnreadCount = async () => {
+  try {
+    const response = await apiClient.get('/api/notifications')
+    unreadNotificationsCount.value = Number(response.data?.unread_count) || 0
+  } catch {
+    unreadNotificationsCount.value = 0
+  }
+}
+
 const handleGlobalKeydown = (event) => {
   if (event.key === 'Escape') closeMobileSidebar()
 }
@@ -244,7 +261,11 @@ const syncViewport = () => {
   if (isMobile.value) sidebarCollapsed.value = true
 }
 
-watch(() => route.fullPath, closeMobileSidebar)
+watch(() => route.fullPath, () => {
+  closeMobileSidebar()
+  syncExpandedSubmenus()
+  fetchUnreadCount()
+})
 
 const userMenuItems = ref([
   {
@@ -290,11 +311,15 @@ const userAvatarUrl = computed(() => {
 
 onMounted(() => {
   syncViewport()
+  syncExpandedSubmenus()
+  fetchUnreadCount()
+  notificationTimer = window.setInterval(fetchUnreadCount, 60000)
   window.addEventListener('keydown', handleGlobalKeydown)
   window.addEventListener('resize', syncViewport)
 })
 
 onUnmounted(() => {
+  if (notificationTimer) window.clearInterval(notificationTimer)
   window.removeEventListener('keydown', handleGlobalKeydown)
   window.removeEventListener('resize', syncViewport)
 })
@@ -324,8 +349,8 @@ onUnmounted(() => {
       <!-- Sidebar Header -->
       <div class="sidebar-header">
         <router-link to="/" class="sidebar-brand" title="Về trang chủ KomiBook">
-          <div class="brand-icon overflow-hidden bg-white/10 p-0.5 shadow-md flex items-center justify-center">
-            <img src="@/assets/logo.png" alt="KomiBook Logo" class="w-full h-full object-cover rounded-lg" />
+          <div class="brand-icon overflow-hidden flex items-center justify-center">
+            <img src="@/assets/logo.png" alt="KomiBook Logo" class="h-full w-full object-contain" />
           </div>
           <Transition name="fade">
             <div v-if="!sidebarCollapsed" class="brand-text">
@@ -334,16 +359,6 @@ onUnmounted(() => {
             </div>
           </Transition>
         </router-link>
-        <button
-          class="sidebar-collapse-button"
-          type="button"
-          :aria-label="sidebarCollapsed ? 'Mở rộng thanh điều hướng' : 'Thu gọn thanh điều hướng'"
-          :aria-expanded="!sidebarCollapsed"
-          aria-controls="management-sidebar"
-          @click="toggleSidebar"
-        >
-          <i :class="sidebarCollapsed ? 'pi pi-angle-right' : 'pi pi-angle-left'"></i>
-        </button>
       </div>
 
       <!-- Navigation -->
@@ -436,22 +451,6 @@ onUnmounted(() => {
           </div>
         </div>
         <ul class="nav-list">
-          <li
-            v-for="item in bottomItems"
-            :key="item.route"
-          >
-            <router-link
-              :to="item.route"
-              class="nav-item nav-item-bottom"
-              :aria-label="item.label"
-              @click="closeMobileSidebar"
-            >
-              <i :class="item.icon" class="nav-icon"></i>
-              <Transition name="fade">
-                <span v-if="!sidebarCollapsed" class="nav-text">{{ item.label }}</span>
-              </Transition>
-            </router-link>
-          </li>
           <li>
             <button class="nav-item nav-item-bottom sidebar-logout" type="button" aria-label="Đăng xuất" @click="logout">
               <i class="pi pi-sign-out nav-icon"></i>
@@ -462,21 +461,23 @@ onUnmounted(() => {
       </div>
     </aside>
 
+    <button
+      class="sidebar-edge-toggle"
+      :class="{ collapsed: sidebarCollapsed }"
+      type="button"
+      :aria-label="sidebarCollapsed ? 'Mở rộng thanh điều hướng' : 'Thu gọn thanh điều hướng'"
+      :aria-expanded="!sidebarCollapsed"
+      aria-controls="management-sidebar"
+      @click="toggleSidebar"
+    >
+      <i :class="sidebarCollapsed ? 'pi pi-angle-right' : 'pi pi-angle-left'" aria-hidden="true"></i>
+    </button>
+
     <!-- ═══ MAIN CONTENT AREA ═══ -->
     <div class="admin-main" :class="{ 'main-expanded': sidebarCollapsed }">
       <!-- Topbar -->
       <header class="admin-topbar">
         <div class="topbar-left">
-          <button
-            class="toggle-btn mobile-menu-button"
-            type="button"
-            :aria-label="sidebarCollapsed ? 'Mở thanh điều hướng' : 'Đóng thanh điều hướng'"
-            :aria-expanded="!sidebarCollapsed"
-            aria-controls="management-sidebar"
-            @click="toggleSidebar"
-          >
-            <i :class="sidebarCollapsed ? 'pi pi-bars' : 'pi pi-times'"></i>
-          </button>
           <div class="breadcrumb">
             <span class="breadcrumb-text">{{ route.meta.title || 'Dashboard' }}</span>
           </div>
@@ -487,11 +488,11 @@ onUnmounted(() => {
           <button
             class="topbar-icon-btn"
             type="button"
-            aria-label="Thông báo"
+            :aria-label="unreadNotificationsCount > 0 ? `Thông báo, ${unreadNotificationsCount} chưa đọc` : 'Thông báo'"
             @click="router.push('/notifications')"
           >
             <i class="pi pi-bell"></i>
-            <span class="notification-dot"></span>
+            <span v-if="unreadNotificationsCount > 0" class="notification-badge" aria-hidden="true">{{ unreadNotificationsCount > 9 ? '9+' : unreadNotificationsCount }}</span>
           </button>
 
           <!-- User Profile -->
@@ -588,36 +589,48 @@ onUnmounted(() => {
   color: inherit;
 }
 
-.sidebar-collapse-button {
-  width: 40px;
-  height: 40px;
-  flex: 0 0 40px;
-  display: grid;
-  place-items: center;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 8px;
-  color: #cbd5e1;
-  background: rgba(255, 255, 255, 0.05);
-  cursor: pointer;
-}
-
-.sidebar-collapse-button:hover {
-  color: #fff;
-  background: rgba(255, 255, 255, 0.12);
-}
-
 .brand-icon {
   width: 40px;
   height: 40px;
   min-width: 40px;
-  border-radius: 12px;
-  background: linear-gradient(135deg, #6366f1 0%, #818cf8 100%);
+  border-radius: 10px;
+  background: transparent;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 18px;
-  color: white;
-  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+  box-shadow: none;
+}
+
+.sidebar-edge-toggle {
+  position: fixed;
+  top: 16px;
+  left: 238px;
+  z-index: 1001;
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border: 0;
+  color: #e2e8f0;
+  background: transparent;
+  box-shadow: none;
+  cursor: pointer;
+  transition: left 220ms ease, color 180ms ease, background-color 180ms ease;
+}
+
+.sidebar-edge-toggle.collapsed {
+  left: 50px;
+}
+
+.sidebar-edge-toggle:hover,
+.sidebar-edge-toggle:focus-visible {
+  color: #ffffff;
+  background: transparent;
+}
+
+.sidebar-edge-toggle:focus-visible {
+  outline: 3px solid var(--color-primary-fixed-dim);
+  outline-offset: 2px;
 }
 
 .brand-text {
@@ -818,10 +831,6 @@ onUnmounted(() => {
   cursor: pointer;
 }
 
-.mobile-menu-button {
-  display: none;
-}
-
 .nav-divider {
   height: 1px;
   background: rgba(255, 255, 255, 0.06);
@@ -876,29 +885,6 @@ onUnmounted(() => {
   gap: 16px;
 }
 
-.toggle-btn {
-  width: 44px;
-  height: 44px;
-  border-radius: 8px;
-  border: 1px solid #e2e8f0;
-  background: white;
-  color: #64748b;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition:
-    background-color var(--ui-duration-normal) var(--ui-ease-standard),
-    border-color var(--ui-duration-normal) var(--ui-ease-standard),
-    color var(--ui-duration-normal) var(--ui-ease-standard);
-}
-
-.toggle-btn:hover {
-  background: #f1f5f9;
-  color: #334155;
-  border-color: #cbd5e1;
-}
-
 .breadcrumb-text {
   font-size: 15px;
   font-weight: 600;
@@ -933,15 +919,22 @@ onUnmounted(() => {
   color: #334155;
 }
 
-.notification-dot {
+.notification-badge {
   position: absolute;
-  top: 8px;
-  right: 8px;
-  width: 7px;
-  height: 7px;
+  top: 4px;
+  right: 3px;
+  display: grid;
+  min-width: 17px;
+  height: 17px;
+  place-items: center;
+  padding: 0 4px;
   background: #ef4444;
-  border-radius: 50%;
+  color: #ffffff;
+  border-radius: 999px;
   border: 2px solid white;
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 1;
 }
 
 .topbar-user {
@@ -1017,10 +1010,6 @@ onUnmounted(() => {
 }
 
 @media (max-width: 1024px) {
-  .mobile-menu-button {
-    display: flex;
-  }
-
   .admin-sidebar {
     width: 72px;
   }
@@ -1075,6 +1064,15 @@ onUnmounted(() => {
   .admin-sidebar:not(.sidebar-collapsed) {
     transform: translateX(0) !important;
     box-shadow: 4px 0 24px rgba(0, 0, 0, 0.25);
+  }
+
+  .sidebar-edge-toggle {
+    left: 238px;
+  }
+
+  .sidebar-edge-toggle.collapsed {
+    left: 4px;
+    color: #0f172a;
   }
 
   .admin-main {

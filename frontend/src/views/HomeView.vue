@@ -30,10 +30,10 @@
       </div>
     </Transition>
 
-    <!-- ═══ HERO CAROUSEL ═══ -->
-    <section class="mx-auto w-full max-w-[1440px] px-4 py-8 md:px-gutter md:py-12" aria-labelledby="home-hero-title">
+    <!-- ═══ HERO CAROUSEL (FULL WIDTH EDGE-TO-EDGE) ═══ -->
+    <section class="relative w-full overflow-hidden bg-slate-950" aria-labelledby="home-hero-title">
       <div
-        class="relative isolate flex min-h-[420px] items-end overflow-hidden rounded-2xl bg-primary shadow-elevated md:min-h-[500px]"
+        class="relative isolate flex min-h-[440px] items-end overflow-hidden w-full md:min-h-[520px]"
         aria-roledescription="carousel"
         aria-label="Sự kiện nổi bật"
       >
@@ -43,32 +43,35 @@
           :alt="activeHero.title"
           class="absolute inset-0 h-full w-full object-cover"
         />
-        <div class="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/70 to-primary/20"></div>
+        <div class="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/70 to-slate-900/30"></div>
 
-        <div class="relative z-10 max-w-3xl p-6 text-white md:p-12 lg:p-16">
-          <p class="mb-3 text-sm font-bold uppercase tracking-[0.18em] text-indigo-200">{{ activeHero.eyebrow }}</p>
-          <h1 id="home-hero-title" class="text-3xl font-bold leading-tight tracking-tight md:text-5xl">{{ activeHero.title }}</h1>
-          <p class="mt-4 max-w-2xl text-base leading-7 text-slate-200 md:text-lg">{{ activeHero.excerpt }}</p>
-          <router-link
-            :to="activeHero.to"
-            class="mt-7 inline-flex min-h-11 items-center gap-2 rounded-lg bg-secondary px-5 py-3 text-sm font-bold text-on-secondary no-underline transition-colors hover:bg-secondary-container"
-          >
-            {{ activeHero.cta }}
-            <span class="material-symbols-outlined text-[18px]" aria-hidden="true">arrow_forward</span>
-          </router-link>
-          <p v-if="heroError" class="mt-4 text-sm text-slate-300" role="status">
-            Tin nổi bật chưa tải được; nội dung giới thiệu KomiBook đang được hiển thị.
-          </p>
+        <!-- Inner Content Grid (Centered & Aligned with page grid) -->
+        <div class="relative z-10 mx-auto w-full max-w-[1280px] px-4 py-8 md:px-gutter md:py-14 text-white">
+          <div class="max-w-3xl">
+            <p class="mb-3 text-sm font-bold uppercase tracking-[0.18em] text-indigo-200">{{ activeHero.eyebrow }}</p>
+            <h1 id="home-hero-title" class="text-3xl font-bold leading-tight tracking-tight md:text-5xl lg:text-6xl">{{ activeHero.title }}</h1>
+            <p class="mt-4 max-w-2xl text-base leading-7 text-slate-200 md:text-lg">{{ activeHero.excerpt }}</p>
+            <router-link
+              :to="activeHero.to"
+              class="mt-7 inline-flex min-h-11 items-center gap-2 rounded-xl bg-secondary px-6 py-3.5 text-sm font-bold text-on-secondary no-underline shadow-lg transition-transform hover:scale-105 active:scale-95"
+            >
+              {{ activeHero.cta }}
+              <span class="material-symbols-outlined text-[18px]" aria-hidden="true">arrow_forward</span>
+            </router-link>
+            <p v-if="heroError" class="mt-4 text-sm text-slate-300" role="status">
+              Tin nổi bật chưa tải được; nội dung giới thiệu KomiBook đang được hiển thị.
+            </p>
+          </div>
         </div>
 
         <template v-if="heroSlides.length > 1">
-          <button type="button" class="absolute left-3 top-1/2 z-20 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-slate-950/60 text-white transition-colors hover:bg-slate-950" aria-label="Nội dung nổi bật trước" @click="previousHero">
-            <span class="material-symbols-outlined" aria-hidden="true">chevron_left</span>
+          <button type="button" class="absolute left-4 top-1/2 z-20 flex h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full bg-slate-950/60 text-white backdrop-blur-md transition-all hover:bg-slate-950 hover:scale-110" aria-label="Nội dung nổi bật trước" @click="previousHero">
+            <span class="material-symbols-outlined text-2xl" aria-hidden="true">chevron_left</span>
           </button>
-          <button type="button" class="absolute right-3 top-1/2 z-20 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-slate-950/60 text-white transition-colors hover:bg-slate-950" aria-label="Nội dung nổi bật tiếp theo" @click="nextHero">
-            <span class="material-symbols-outlined" aria-hidden="true">chevron_right</span>
+          <button type="button" class="absolute right-4 top-1/2 z-20 flex h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full bg-slate-950/60 text-white backdrop-blur-md transition-all hover:bg-slate-950 hover:scale-110" aria-label="Nội dung nổi bật tiếp theo" @click="nextHero">
+            <span class="material-symbols-outlined text-2xl" aria-hidden="true">chevron_right</span>
           </button>
-          <div class="absolute bottom-4 right-4 z-20 flex gap-2" aria-label="Chọn nội dung nổi bật">
+          <div class="absolute bottom-6 right-6 z-20 flex gap-2" aria-label="Chọn nội dung nổi bật">
             <button
               v-for="(slide, index) in heroSlides"
               :key="slide.key"
@@ -78,7 +81,7 @@
               :aria-current="currentHeroIndex === index ? 'true' : undefined"
               @click="currentHeroIndex = index"
             >
-              <span class="block h-2.5 w-2.5 rounded-full border border-white" :class="currentHeroIndex === index ? 'bg-white' : 'bg-white/30'"></span>
+              <span class="block h-2.5 w-2.5 rounded-full border border-white transition-all" :class="currentHeroIndex === index ? 'bg-white scale-125' : 'bg-white/30'"></span>
             </button>
           </div>
         </template>
@@ -112,13 +115,9 @@
 
     <!-- ═══ RECOMMENDATION ═══ -->
     <section class="mx-auto w-full max-w-[1280px] px-4 py-8 md:px-gutter md:py-xl" aria-labelledby="recommendation-title">
-      <div class="mb-6 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <p class="text-sm font-bold uppercase tracking-[0.16em] text-secondary">Đề xuất đọc tiếp</p>
-          <h2 id="recommendation-title" class="mt-2 text-2xl font-bold tracking-tight text-primary md:text-3xl">Gợi ý dành riêng cho bạn</h2>
-          <p class="mt-2 text-sm text-on-surface-variant">{{ recommendationExplanation }}</p>
-        </div>
-        <router-link to="/catalog" class="inline-flex min-h-11 items-center gap-1 text-sm font-bold text-primary no-underline">
+      <div class="relative mb-6 text-center">
+        <h2 id="recommendation-title" class="text-2xl font-bold tracking-tight text-primary md:text-3xl">Gợi ý dành riêng cho bạn</h2>
+        <router-link to="/catalog" class="mt-2 inline-flex min-h-11 items-center gap-1 text-sm font-bold text-primary no-underline sm:absolute sm:right-0 sm:top-1/2 sm:mt-0 sm:-translate-y-1/2">
           Xem thêm <span class="material-symbols-outlined text-[18px]" aria-hidden="true">chevron_right</span>
         </router-link>
       </div>
@@ -156,27 +155,23 @@
 
     <!-- ═══ COMMERCE & CONTENT FEED ═══ -->
     <section class="mx-auto w-full max-w-[1280px] px-4 py-8 md:px-gutter md:py-xl" aria-labelledby="commerce-feed-title">
-      <div class="mb-8">
-        <p class="text-sm font-bold uppercase tracking-[0.16em] text-secondary">Khám phá theo nhu cầu</p>
-        <h2 id="commerce-feed-title" class="mt-2 text-2xl font-bold tracking-tight text-primary md:text-3xl">Sách nổi bật trên KomiBook</h2>
+      <div class="mb-8 text-center">
+        <h2 id="commerce-feed-title" class="text-2xl font-bold tracking-tight text-primary md:text-3xl">Sách nổi bật trên KomiBook</h2>
       </div>
 
       <div class="space-y-12">
         <section v-for="group in commerceGroups" :key="group.key" :aria-labelledby="`home-${group.key}`">
-          <div class="mb-5 flex items-end justify-between gap-4">
-            <div>
-              <h3 :id="`home-${group.key}`" class="text-xl font-bold text-on-surface md:text-2xl">{{ group.title }}</h3>
-              <p class="mt-1 text-sm text-on-surface-variant">{{ group.subtitle }}</p>
-            </div>
-            <router-link :to="group.to" class="inline-flex min-h-11 shrink-0 items-center gap-1 text-sm font-bold text-primary no-underline">
+          <div class="relative mb-5 text-center">
+            <h3 :id="`home-${group.key}`" class="text-xl font-bold text-on-surface md:text-2xl">{{ group.title }}</h3>
+            <router-link :to="group.to" class="mt-2 inline-flex min-h-11 shrink-0 items-center gap-1 text-sm font-bold text-primary no-underline sm:absolute sm:right-0 sm:top-1/2 sm:mt-0 sm:-translate-y-1/2">
               Xem thêm <span class="material-symbols-outlined text-[18px]" aria-hidden="true">chevron_right</span>
             </router-link>
           </div>
 
-          <div v-if="commerceState[group.key].loading" class="grid grid-cols-2 gap-4 md:grid-cols-4 lg:grid-cols-5" role="status" :aria-label="`Đang tải ${group.title}`">
-            <div v-for="i in 5" :key="i" class="overflow-hidden rounded-xl border border-outline-variant/30 bg-surface-container-lowest">
+          <div v-if="commerceState[group.key].loading" class="recommendation-grid" role="status" :aria-label="`Đang tải ${group.title}`">
+            <div v-for="i in 5" :key="i" class="recommendation-item min-w-0 overflow-hidden rounded-xl border border-outline-variant/30 bg-surface-container-lowest">
               <Skeleton height="220px" borderRadius="0" />
-              <div class="space-y-3 p-4"><Skeleton height="16px" /><Skeleton height="14px" width="60%" /></div>
+              <div class="space-y-3 p-4"><Skeleton height="16px" /><Skeleton height="60%" width="60%" /></div>
             </div>
           </div>
           <div v-else-if="commerceState[group.key].error" class="ui-state-panel" role="alert">
@@ -187,18 +182,22 @@
             <p class="font-bold">Chưa có {{ group.title.toLowerCase() }}</p>
             <p class="mt-2 text-sm text-on-surface-variant">Nội dung sẽ xuất hiện khi có sách đủ điều kiện.</p>
           </div>
-          <div v-else class="grid grid-cols-2 gap-4 md:grid-cols-4 lg:grid-cols-5">
-            <BookCard
+          <div v-else class="recommendation-grid">
+            <div
               v-for="book in commerceState[group.key].items"
               :key="book.id"
-              :book="book"
-              show-wishlist
-              :is-favorite="wishlistStore.isFavorite(book.id)"
-              @quick-view="openQuickView"
-              @add-to-cart="addToCart"
-              @buy-now="buyNow"
-              @toggle-wishlist="toggleWishlist"
-            />
+              class="recommendation-item min-w-0"
+            >
+              <BookCard
+                :book="book"
+                show-wishlist
+                :is-favorite="wishlistStore.isFavorite(book.id)"
+                @quick-view="openQuickView"
+                @add-to-cart="addToCart"
+                @buy-now="buyNow"
+                @toggle-wishlist="toggleWishlist"
+              />
+            </div>
           </div>
         </section>
       </div>
@@ -206,11 +205,43 @@
 
     <!-- ═══ NEWS AT THE END OF THE FEED ═══ -->
     <section class="mx-auto w-full max-w-[1280px] px-4 py-8 md:px-gutter md:py-xl" aria-labelledby="vendor-feed-title">
-      <div class="mb-6 flex items-end justify-between gap-4"><div><p class="text-sm font-bold uppercase tracking-[0.16em] text-secondary">Từ cộng đồng xuất bản</p><h2 id="vendor-feed-title" class="mt-2 text-2xl font-bold tracking-tight text-primary md:text-3xl">Tin tức mới nhất</h2></div><router-link to="/blog" class="inline-flex min-h-11 shrink-0 items-center gap-1 text-sm font-bold text-primary no-underline">Xem tất cả <span class="material-symbols-outlined text-[18px]" aria-hidden="true">chevron_right</span></router-link></div>
+      <div class="relative mb-6 text-center">
+        <h2 id="vendor-feed-title" class="text-2xl font-bold tracking-tight text-primary md:text-3xl">Tin tức mới nhất</h2>
+        <router-link to="/blog" class="mt-2 inline-flex min-h-11 shrink-0 items-center gap-1 text-sm font-bold text-primary no-underline sm:absolute sm:right-0 sm:top-1/2 sm:mt-0 sm:-translate-y-1/2">
+          Xem tất cả <span class="material-symbols-outlined text-[18px]" aria-hidden="true">chevron_right</span>
+        </router-link>
+      </div>
       <div v-if="loadingVendorFeed" class="grid gap-5 md:grid-cols-2 lg:grid-cols-3" role="status" aria-label="Đang tải bản tin"><div v-for="i in 3" :key="i" class="overflow-hidden rounded-2xl border border-outline-variant/30 bg-surface-container-lowest"><Skeleton height="180px" borderRadius="0" /><div class="space-y-3 p-5"><Skeleton height="16px" width="40%" /><Skeleton height="24px" /><Skeleton height="14px" /></div></div></div>
       <div v-else-if="vendorFeedError" class="ui-state-panel" role="alert"><p class="font-bold">Chưa thể tải tin tức</p><button type="button" class="ui-button ui-button-secondary mt-4" @click="fetchEditorialFeed">Thử lại</button></div>
       <div v-else-if="vendorArticles.length === 0" class="ui-state-panel"><p class="font-bold">Chưa có bản tin đã xuất bản</p></div>
-      <div v-else class="grid gap-5 md:grid-cols-2 lg:grid-cols-3"><article v-for="article in vendorArticles" :key="article.id" class="overflow-hidden rounded-2xl border border-outline-variant/30 bg-surface-container-lowest shadow-sm"><div class="flex aspect-[16/9] items-center justify-center bg-primary-container"><img v-if="article.cover_image" :src="getCoverUrl(article.cover_image)" :alt="article.title" class="h-full w-full object-cover" loading="lazy" /><span v-else class="material-symbols-outlined text-5xl text-on-primary-container" aria-hidden="true">auto_stories</span></div><div class="p-5"><div class="flex flex-wrap items-center gap-2 text-sm text-on-surface-variant"><span class="font-bold text-primary">{{ articlePublisher(article) }}</span><span aria-hidden="true">•</span><span>{{ article.category?.name || 'Bản tin' }}</span></div><h3 class="mt-3 text-xl font-bold leading-snug text-on-surface">{{ article.title }}</h3><p class="mt-3 line-clamp-3 text-sm leading-6 text-on-surface-variant">{{ article.excerpt }}</p><router-link :to="`/blog/${article.slug}`" class="mt-5 inline-flex min-h-11 items-center gap-1 font-bold text-primary no-underline">Đọc bài viết <span class="material-symbols-outlined text-[18px]" aria-hidden="true">arrow_forward</span></router-link></div></article></div>
+      <div v-else class="grid items-stretch gap-6 md:grid-cols-2 lg:grid-cols-3">
+        <article v-for="article in vendorArticles" :key="article.id" class="group flex flex-col overflow-hidden rounded-2xl border border-outline-variant/30 bg-surface-container-lowest shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-md">
+          <router-link :to="`/blog/${article.slug}`" class="flex min-h-56 max-h-[380px] items-center justify-center overflow-hidden bg-surface-container-low no-underline">
+            <img v-if="article.cover_image" :src="getCoverUrl(article.cover_image)" :alt="article.title" class="h-auto max-h-[380px] w-auto max-w-full object-contain transition-transform duration-300 group-hover:scale-105" loading="lazy" />
+            <div v-else class="flex h-full w-full items-center justify-center bg-surface-container-low">
+              <span class="material-symbols-outlined text-5xl text-on-surface-variant/40" aria-hidden="true">newspaper</span>
+            </div>
+          </router-link>
+          <div class="flex flex-1 flex-col p-5">
+            <div class="flex flex-wrap items-center gap-2 text-xs font-semibold text-on-surface-variant">
+              <span class="font-bold text-primary">{{ articlePublisher(article) }}</span>
+              <span aria-hidden="true">•</span>
+              <span>{{ article.category?.name || 'Bản tin' }}</span>
+            </div>
+            <h3 class="mt-2 text-lg font-bold leading-tight text-on-surface">
+              <router-link :to="`/blog/${article.slug}`" class="text-inherit no-underline hover:text-primary transition-colors line-clamp-2">
+                {{ article.title }}
+              </router-link>
+            </h3>
+            <p v-if="article.excerpt" class="mt-2 line-clamp-3 text-sm leading-relaxed text-on-surface-variant">{{ article.excerpt }}</p>
+            <div class="mt-auto pt-4">
+              <router-link :to="`/blog/${article.slug}`" class="inline-flex min-h-10 items-center gap-1 text-sm font-bold text-primary no-underline transition-colors hover:text-primary/80">
+                Đọc bài viết <span class="material-symbols-outlined text-[18px] transition-transform group-hover:translate-x-1" aria-hidden="true">arrow_forward</span>
+              </router-link>
+            </div>
+          </div>
+        </article>
+      </div>
     </section>
 
     <!-- ═══ TOP SELLING SECTION ═══ -->
@@ -612,15 +643,15 @@ const commerceGroups = [
     key: 'newest-ebook',
     title: 'Ebook mới nhất',
     subtitle: 'Phiên bản số vừa được phát hành.',
-    params: { type: 'ebook', per_page: 5 },
-    to: { name: 'catalog', query: { type: 'ebook' } },
+    params: { type: 'ebook', sort: 'newest', per_page: 5 },
+    to: { name: 'catalog', query: { type: 'ebook', sort: 'newest' } },
   },
   {
     key: 'newest-physical',
     title: 'Sách vật lý mới nhất',
     subtitle: 'Các ấn phẩm giấy mới lên kệ.',
-    params: { type: 'physical', per_page: 5 },
-    to: { name: 'catalog', query: { type: 'physical' } },
+    params: { type: 'physical', sort: 'newest', per_page: 5 },
+    to: { name: 'catalog', query: { type: 'physical', sort: 'newest' } },
   },
   {
     key: 'used-books',
@@ -723,39 +754,7 @@ const fetchCommerceGroup = async (group) => {
 }
 
 const fetchCommerceFeed = async () => {
-  commerceGroups.forEach((group) => {
-    commerceState.value[group.key].loading = true
-    commerceState.value[group.key].error = false
-  })
-
-  try {
-    const response = await apiClient.get('/api/books', {
-      params: { sort: 'popular', per_page: 60 },
-    })
-    const allBooks = readApiList(response.data)
-    const byNewest = (items) => [...items].sort((left, right) => (
-      new Date(right.published_at || right.created_at || 0) - new Date(left.published_at || left.created_at || 0)
-    ))
-    const ebooks = allBooks.filter((book) => book.type === 'ebook')
-    const physicalBooks = allBooks.filter((book) => book.type === 'physical')
-
-    commerceState.value['bestselling-ebook'].items = ebooks.slice(0, 5)
-    commerceState.value['bestselling-physical'].items = physicalBooks.slice(0, 5)
-    commerceState.value['newest-ebook'].items = byNewest(ebooks).slice(0, 5)
-    commerceState.value['newest-physical'].items = byNewest(physicalBooks).slice(0, 5)
-    commerceState.value['used-books'].items = physicalBooks.filter((book) => (
-      book.provenance === 'used_resale' || book.product_origin === 'used_resale'
-    )).slice(0, 5)
-  } catch {
-    commerceGroups.forEach((group) => {
-      commerceState.value[group.key].items = []
-      commerceState.value[group.key].error = true
-    })
-  } finally {
-    commerceGroups.forEach((group) => {
-      commerceState.value[group.key].loading = false
-    })
-  }
+  await Promise.all(commerceGroups.map((group) => fetchCommerceGroup(group)))
 }
 
 const fetchFlashSales = async () => {

@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\Admin\FinanceReportController;
 use App\Http\Controllers\Api\Admin\MembershipTierController;
 use App\Http\Controllers\Api\Admin\NotificationCampaignController;
 use App\Http\Controllers\Api\Admin\OrganizationReviewController;
+use App\Http\Controllers\Api\Admin\PaymentProviderSettingController;
 use App\Http\Controllers\Api\Admin\ReconciliationController;
 use App\Http\Controllers\Api\Admin\SystemConfigController;
 use App\Http\Controllers\Api\Admin\UserController;
@@ -30,6 +31,7 @@ use App\Http\Controllers\Api\InventoryAuditController;
 use App\Http\Controllers\Api\OrderController;
 use App\Http\Controllers\Api\OrganizationController;
 use App\Http\Controllers\Api\OrganizationPortalController;
+use App\Http\Controllers\Api\PaymentController;
 use App\Http\Controllers\Api\PhoneAuthController;
 use App\Http\Controllers\Api\PolicyController;
 use App\Http\Controllers\Api\ProfileController;
@@ -53,6 +55,7 @@ use App\Http\Controllers\Api\Vendor\WarehouseManagerController as VendorWarehous
 use App\Http\Controllers\Api\VendorFollowController;
 use App\Http\Controllers\Api\VendorOnboardingController;
 use App\Http\Controllers\Api\VnpayController;
+use App\Http\Controllers\Api\WalletController;
 use App\Http\Controllers\Api\WarehouseDocumentController;
 use App\Http\Controllers\Api\WarehouseManagerPortalController;
 use App\Http\Controllers\Api\WishlistController;
@@ -100,6 +103,7 @@ Route::post('/articles/{slug}/track', [ArticleController::class, 'track'])->midd
 Route::post('/article-submissions', [ArticleSubmissionController::class, 'store'])->middleware(['auth:sanctum', 'throttle:5,1']);
 Route::get('/organizations', [OrganizationController::class, 'index']);
 Route::get('/organizations/{slug}', [OrganizationController::class, 'show']);
+Route::get('/payment-providers', [PaymentController::class, 'providers']);
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Protected routes — Yêu cầu Sanctum token hợp lệ
@@ -132,6 +136,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/coupons/apply', [CouponController::class, 'apply']);
     Route::get('/my-orders', [OrderController::class, 'myOrders']);
     Route::get('/my-orders/{order}', [OrderController::class, 'myOrderDetail']);
+    Route::post('/my-orders/{order}/confirm-received', [OrderController::class, 'confirmReceived']);
     Route::post('/orders/{order}/cancel', [OrderController::class, 'cancel']);
     Route::get('/returns', [ReturnRequestController::class, 'customerIndex']);
     Route::post('/orders/{order}/returns', [ReturnRequestController::class, 'store']);
@@ -141,6 +146,12 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // VNPAY Create payment
     Route::post('/vnpay/create', [VnpayController::class, 'createPayment']);
+    Route::post('/payments/{provider}/attempts', [PaymentController::class, 'create'])->middleware('throttle:checkout');
+    Route::post('/payments/{provider}/attempts/{paymentTransaction}/complete', [PaymentController::class, 'complete'])->middleware('throttle:checkout');
+    Route::get('/payments/demo-wallet', [PaymentController::class, 'wallet']);
+    Route::get('/wallet', [WalletController::class, 'show']);
+    Route::put('/wallet/payout-account', [WalletController::class, 'savePayoutAccount'])->middleware(['verified-email', 'recent-auth']);
+    Route::post('/wallet/withdrawals', [WalletController::class, 'requestWithdrawal'])->middleware(['verified-email', 'recent-auth']);
 
     // Book Annotations
     Route::get('/annotations', [BookAnnotationController::class, 'index']);
@@ -268,6 +279,8 @@ Route::middleware(['auth:sanctum', 'role:vendor', 'active-vendor'])->prefix('ven
 
     // Quản lý tài chính / doanh thu (Finance)
     Route::get('finance', [FinanceController::class, 'index'])->name('finance.index');
+    Route::get('finance/revenue', [FinanceController::class, 'revenue'])->name('finance.revenue');
+    Route::get('finance/revenue/export', [FinanceController::class, 'exportRevenue'])->name('finance.revenue.export');
     Route::post('finance/payout', [FinanceController::class, 'requestPayout'])->middleware(['verified-email', 'recent-auth'])->name('finance.payout');
 
     // Phân tích độc giả / báo cáo (Analytics)
@@ -322,6 +335,8 @@ Route::middleware(['auth:sanctum', 'role:admin'])->prefix('admin')->name('admin.
     Route::get('fee-schedules', [CommerceFeeScheduleController::class, 'index'])->name('fee-schedules.index');
     Route::post('fee-schedules', [CommerceFeeScheduleController::class, 'store'])->name('fee-schedules.store');
     Route::post('fee-schedules/preview', [CommerceFeeScheduleController::class, 'preview'])->name('fee-schedules.preview');
+    Route::get('payment-providers', [PaymentProviderSettingController::class, 'index'])->name('payment-providers.index');
+    Route::put('payment-providers/{provider}', [PaymentProviderSettingController::class, 'update'])->name('payment-providers.update');
 
     Route::get('articles', [AdminArticleController::class, 'index'])->name('cms.articles.index');
     Route::post('articles', [AdminArticleController::class, 'store'])->name('cms.articles.store');
@@ -374,12 +389,15 @@ Route::middleware(['auth:sanctum', 'role:admin'])->prefix('admin')->name('admin.
 
     // Báo cáo tài chính
     Route::get('finance-report', [FinanceReportController::class, 'index'])->name('finance-report.index');
+    Route::post('finance-report/refresh', [FinanceReportController::class, 'refresh'])->middleware(['verified-email', 'recent-auth'])->name('finance-report.refresh');
+    Route::get('finance-report/export', [FinanceReportController::class, 'export'])->name('finance-report.export');
 
     // Đối soát doanh thu
     Route::get('reconciliation', [ReconciliationController::class, 'index'])->name('reconciliation.index');
     Route::patch('reconciliation/{id}/approve', [ReconciliationController::class, 'approve'])->middleware(['verified-email', 'recent-auth'])->name('reconciliation.approve');
     Route::patch('reconciliation/{id}/reject', [ReconciliationController::class, 'reject'])->middleware(['verified-email', 'recent-auth'])->name('reconciliation.reject');
     Route::patch('reconciliation/payouts/{payout}/transition', [ReconciliationController::class, 'transition'])->middleware(['verified-email', 'recent-auth'])->name('reconciliation.payouts.transition');
+    Route::patch('reconciliation/payout-accounts/{account}/review', [ReconciliationController::class, 'reviewPayoutAccount'])->middleware(['verified-email', 'recent-auth'])->name('reconciliation.payout-accounts.review');
     Route::get('returns', [ReturnRequestController::class, 'adminIndex'])->name('returns.index');
     Route::patch('returns/{returnRequest}/transition', [ReturnRequestController::class, 'transition'])->middleware(['verified-email', 'recent-auth'])->name('returns.transition');
     Route::post('returns/{returnRequest}/refund', [ReturnRequestController::class, 'processRefund'])->middleware(['verified-email', 'recent-auth'])->name('returns.refund');

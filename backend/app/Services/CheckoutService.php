@@ -243,7 +243,7 @@ class CheckoutService
         $paymentMethod = 'cod';
         if (isset($shippingData['payment_method'])) {
             $pm = strtolower($shippingData['payment_method']);
-            if ($pm === 'vnpay' || $pm === 'online') {
+            if (in_array($pm, ['vnpay', 'demo_wallet', 'online'], true)) {
                 $paymentMethod = 'online';
             }
         }

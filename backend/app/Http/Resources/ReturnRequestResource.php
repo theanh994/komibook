@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\Support\PublicMediaUrl;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -48,6 +49,7 @@ class ReturnRequestResource extends JsonResource
                     'id' => $item->orderItem->book->id,
                     'title' => $item->orderItem->book->title,
                     'type' => $item->orderItem->book->type,
+                    'cover_image' => PublicMediaUrl::storage($item->orderItem->book->cover_image),
                 ] : null,
             ])),
             'transitions' => $this->whenLoaded('transitions', fn () => $this->transitions->map(fn ($transition) => [

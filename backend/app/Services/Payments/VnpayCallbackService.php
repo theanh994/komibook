@@ -36,6 +36,19 @@ class VnpayCallbackService
             return ['RspCode' => '97', 'Message' => 'Invalid Checksum'];
         }
 
+        return $this->handleVerifiedResult($normalized);
+    }
+
+    /**
+     * Apply a provider result that has already been authenticated by either
+     * the callback signature or a signed server-to-server query response.
+     *
+     * @param array<string, mixed> $normalized
+     * @return array{RspCode: string, Message: string}
+     */
+    public function handleVerifiedResult(array $normalized): array
+    {
+
         $providerRef = $normalized['provider_reference'];
         $txn = PaymentTransaction::where('provider', 'vnpay')
             ->where('provider_reference', $providerRef)

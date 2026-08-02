@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use App\Models\Book;
+use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Validator;
 
@@ -19,7 +20,7 @@ class CheckoutRequest extends FormRequest
     /**
      * Get the validation rules that apply to the request.
      *
-     * @return array<string, \Illuminate\Contracts\Validation\ValidationRule|array<mixed>|string>
+     * @return array<string, ValidationRule|array<mixed>|string>
      */
     public function rules(): array
     {
@@ -29,7 +30,7 @@ class CheckoutRequest extends FormRequest
             'items.*.quantity' => ['required', 'integer', 'min:1'],
             'shipping_address' => ['nullable', 'string', 'max:255'],
             'phone' => ['nullable', 'string', 'max:20'],
-            'payment_method' => ['nullable', 'string', 'in:COD,VNPAY,cod,online'],
+            'payment_method' => ['nullable', 'string', 'in:COD,VNPAY,DEMO_WALLET,cod,online,vnpay,demo_wallet'],
             'coupon_code' => ['nullable', 'string', 'exists:coupons,code'],
             'ebook_terms_accepted' => ['nullable', 'boolean'],
         ];

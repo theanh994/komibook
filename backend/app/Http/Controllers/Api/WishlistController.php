@@ -27,7 +27,14 @@ class WishlistController extends Controller
     public function toggle(Request $request, $bookId)
     {
         $user = $request->user();
-        $book = Book::findOrFail($bookId);
+        $book = Book::find($bookId);
+
+        if (!$book) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Sách không tồn tại hoặc đã bị gỡ',
+            ], 404);
+        }
 
         $exists = $user->wishlistBooks()->where('book_id', $bookId)->exists();
 

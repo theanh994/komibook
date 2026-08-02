@@ -100,6 +100,31 @@ class OrderCompletionLedgerTest extends TestCase
         return $book;
     }
 
+    private function deliverAndConfirm(
+        Order $order,
+        Vendor $vendor,
+        string $carrier = 'GHTK',
+        string $trackingCode = 'TRK',
+        ?string $completionKey = null
+    ): Order {
+        if ($order->fresh()->shipping_status === 'delivering') {
+            $this->fulfillmentService->updateShippingStatus(
+                $order->id,
+                'awaiting_customer_confirmation',
+                $carrier,
+                $trackingCode,
+                'vendor',
+                $vendor->user_id
+            );
+        }
+
+        return $this->fulfillmentService->confirmReceivedByCustomer(
+            $order->id,
+            (int) $order->user_id,
+            $completionKey
+        );
+    }
+
     /**
      * 1. BOLA Protection: Single status update endpoint.
      */
@@ -130,6 +155,83 @@ class OrderCompletionLedgerTest extends TestCase
         $this->assertContains($response->status(), [404, 422]);
         $this->assertEquals($initialStatus, $orderB->fresh()->status);
         $this->assertEquals(0, OrderTransitionOperation::count());
+    }
+
+    public function test_vendor_handoff_response_keeps_order_details_and_assigns_demo_carrier(): void
+    {
+        Queue::fake();
+
+        $vendor = $this->createVendor();
+        $book = $this->createBook($vendor, 'physical', 100000, 10);
+        $order = $this->checkoutService->processCheckout(
+            [['book_id' => $book->id, 'quantity' => 1]],
+            ['shipping_address' => 'Demo Shipping St', 'phone' => '0901234567', 'payment_method' => 'cod'],
+            User::factory()->create()->id
+        )[0];
+        $order->forceFill(['status' => 'processing'])->save();
+
+        Sanctum::actingAs($vendor->user);
+
+        $response = $this->patchJson("/api/vendor/orders/{$order->id}/status", [
+            'status' => 'shipped',
+        ]);
+
+        $response->assertOk()
+            ->assertJsonPath('data.status', 'shipped')
+            ->assertJsonPath('data.shipping_carrier', 'KomiBook Express (mô phỏng)')
+            ->assertJsonPath('data.shipping_tracking_code', 'KBX-'.str_pad((string) $order->id, 8, '0', STR_PAD_LEFT))
+            ->assertJsonCount(1, 'data.items');
+    }
+
+    public function test_only_order_customer_can_confirm_receipt_and_complete_physical_order(): void
+    {
+        Queue::fake();
+
+        $customer = User::factory()->create();
+        $otherCustomer = User::factory()->create();
+        $vendor = $this->createVendor();
+        $book = $this->createBook($vendor, 'physical', 100000, 10);
+        $order = $this->checkoutService->processCheckout(
+            [['book_id' => $book->id, 'quantity' => 1]],
+            ['shipping_address' => 'Customer Confirm St', 'phone' => '0901234567', 'payment_method' => 'cod'],
+            $customer->id
+        )[0];
+        $order->forceFill(['status' => 'processing'])->save();
+
+        $this->fulfillmentService->updateOrderStatusByVendor($order->id, 'shipped', 'vendor', $vendor->user_id);
+        $this->fulfillmentService->updateShippingStatus($order->id, 'picked_up', null, null, 'vendor', $vendor->user_id);
+        $this->fulfillmentService->updateShippingStatus($order->id, 'delivering', null, null, 'vendor', $vendor->user_id);
+
+        Sanctum::actingAs($vendor->user);
+        $this->patchJson("/api/vendor/orders/{$order->id}/shipping", [
+            'shipping_status' => 'delivered',
+        ])->assertUnprocessable();
+        $this->assertSame('delivering', $order->fresh()->shipping_status);
+
+        $this->fulfillmentService->updateShippingStatus($order->id, 'awaiting_customer_confirmation', null, null, 'vendor', $vendor->user_id);
+
+        Sanctum::actingAs($otherCustomer);
+        $this->postJson("/api/my-orders/{$order->id}/confirm-received", [
+            'idempotency_key' => 'wrong-customer-confirm',
+        ])->assertForbidden();
+        $this->assertSame('shipped', $order->fresh()->status);
+
+        Sanctum::actingAs($customer);
+        $this->postJson("/api/my-orders/{$order->id}/confirm-received", [
+            'idempotency_key' => 'right-customer-confirm',
+        ])->assertOk()
+            ->assertJsonPath('data.status', 'completed')
+            ->assertJsonPath('data.shipping_status', 'delivered')
+            ->assertJsonPath('data.can_confirm_receipt', false);
+
+        $this->assertDatabaseHas('order_transition_operations', [
+            'order_id' => $order->id,
+            'operation_key' => 'right-customer-confirm',
+            'actor_type' => 'customer',
+            'actor_id' => $customer->id,
+            'from_state' => 'awaiting_customer_confirmation',
+            'to_state' => 'delivered',
+        ]);
     }
 
     /**
@@ -291,6 +393,8 @@ class OrderCompletionLedgerTest extends TestCase
         $this->fulfillmentService->updateOrderStatusByVendor($order->id, 'shipped', 'vendor', $vendor->user_id);
         $this->assertEquals('shipped', $order->fresh()->status);
         $this->assertEquals('pending_pickup', $order->fresh()->shipping_status);
+        $this->assertEquals('KomiBook Express (mô phỏng)', $order->fresh()->shipping_carrier);
+        $this->assertEquals('KBX-'.str_pad((string) $order->id, 8, '0', STR_PAD_LEFT), $order->fresh()->shipping_tracking_code);
 
         // Step 2: pending_pickup -> picked_up
         $this->fulfillmentService->updateShippingStatus($order->id, 'picked_up', 'GHTK', 'TRK1', 'vendor', $vendor->user_id);
@@ -300,8 +404,8 @@ class OrderCompletionLedgerTest extends TestCase
         $this->fulfillmentService->updateShippingStatus($order->id, 'delivering', 'GHTK', 'TRK1', 'vendor', $vendor->user_id);
         $this->assertEquals('delivering', $order->fresh()->shipping_status);
 
-        // Step 4: delivering -> delivered (Triggers Completion)
-        $this->fulfillmentService->updateShippingStatus($order->id, 'delivered', 'GHTK', 'TRK1', 'vendor', $vendor->user_id);
+        // Step 4: carrier marks delivered, then customer confirms receipt.
+        $this->deliverAndConfirm($order, $vendor, 'GHTK', 'TRK1');
 
         $order->refresh();
         $user->refresh();
@@ -344,10 +448,10 @@ class OrderCompletionLedgerTest extends TestCase
         $this->fulfillmentService->updateOrderStatusByVendor($order->id, 'shipped', 'vendor', $vendor->user_id);
 
         try {
-            $this->fulfillmentService->updateShippingStatus($order->id, 'delivered', 'GHTK', 'TRK', 'vendor', $vendor->user_id);
+            $this->deliverAndConfirm($order, $vendor, 'GHTK', 'TRK');
             $this->fail('Expected LogicException on direct jump to delivered');
         } catch (LogicException $e) {
-            $this->assertStringContainsString("Invalid shipping transition from 'pending_pickup' to 'delivered'", $e->getMessage());
+            $this->assertStringContainsString('Chỉ có thể xác nhận sau khi đơn vị vận chuyển đã giao hàng tới khách', $e->getMessage());
         }
 
         $this->assertEquals('pending_pickup', $order->fresh()->shipping_status);
@@ -450,7 +554,7 @@ class OrderCompletionLedgerTest extends TestCase
         $session->save();
 
         try {
-            $this->fulfillmentService->updateShippingStatus($order->id, 'delivered', 'GHTK', 'TRK', 'vendor', $vendor->user_id);
+            $this->deliverAndConfirm($order, $vendor, 'GHTK', 'TRK');
             $this->fail('Expected LogicException on mismatched checkout session customer');
         } catch (LogicException $e) {
             $this->assertStringContainsString('Inconsistent customer in snapshot', $e->getMessage());
@@ -487,7 +591,7 @@ class OrderCompletionLedgerTest extends TestCase
         $session->save();
 
         try {
-            $this->fulfillmentService->updateShippingStatus($order->id, 'delivered', 'GHTK', 'TRK', 'vendor', $vendor->user_id);
+            $this->deliverAndConfirm($order, $vendor, 'GHTK', 'TRK');
             $this->fail('Expected LogicException on USD checkout session');
         } catch (LogicException $e) {
             $this->assertStringContainsString('Only VND supported', $e->getMessage());
@@ -523,7 +627,7 @@ class OrderCompletionLedgerTest extends TestCase
         $order->save();
 
         try {
-            $this->fulfillmentService->updateShippingStatus($order->id, 'delivered', 'GHTK', 'TRK', 'vendor', $otherVendor->user_id);
+            $this->deliverAndConfirm($order, $otherVendor, 'GHTK', 'TRK');
             $this->fail('Expected LogicException on mismatched snapshot vendor_id');
         } catch (LogicException $e) {
             $this->assertStringContainsString('Inconsistent vendor in snapshot', $e->getMessage());
@@ -559,7 +663,7 @@ class OrderCompletionLedgerTest extends TestCase
         $snap->save();
 
         try {
-            $this->fulfillmentService->updateShippingStatus($order->id, 'delivered', 'GHTK', 'TRK', 'vendor', $vendor->user_id);
+            $this->deliverAndConfirm($order, $vendor, 'GHTK', 'TRK');
             $this->fail('Expected LogicException on invalid commission amount');
         } catch (LogicException $e) {
             $this->assertStringContainsString('Invalid snapshot commission', $e->getMessage());
@@ -595,7 +699,7 @@ class OrderCompletionLedgerTest extends TestCase
         $this->fulfillmentService->updateShippingStatus($order->id, 'picked_up', 'GHTK', 'TRK', 'vendor', $vendor->user_id);
         $this->fulfillmentService->updateShippingStatus($order->id, 'delivering', 'GHTK', 'TRK', 'vendor', $vendor->user_id);
 
-        $this->fulfillmentService->updateShippingStatus($order->id, 'delivered', 'GHTK', 'TRK', 'vendor', $vendor->user_id);
+        $this->deliverAndConfirm($order, $vendor, 'GHTK', 'TRK');
 
         $this->assertDatabaseHas('vendor_earning_ledgers', [
             'order_id' => $order->id,
@@ -706,10 +810,10 @@ class OrderCompletionLedgerTest extends TestCase
         OrderTransitionOperation::create([
             'order_id' => $order->id,
             'operation_key' => $opKey,
-            'actor_type' => 'vendor',
-            'actor_id' => $vendor->user_id,
+            'actor_type' => 'customer',
+            'actor_id' => $order->user_id,
             'transition_kind' => 'shipping',
-            'from_state' => 'delivering',
+            'from_state' => 'awaiting_customer_confirmation',
             'to_state' => 'delivered',
             'metadata' => [
                 'order_status' => 'completed',
@@ -725,7 +829,7 @@ class OrderCompletionLedgerTest extends TestCase
         ]);
 
         try {
-            $this->fulfillmentService->updateShippingStatus($order->id, 'delivered', 'GHTK', 'TRK', 'vendor', $vendor->user_id, $opKey);
+            $this->deliverAndConfirm($order, $vendor, 'GHTK', 'TRK', $opKey);
             $this->fail('Expected LogicException on corrupted ledger state completion');
         } catch (LogicException $e) {
             $this->assertStringContainsString('Corrupted vendor earning ledger state', $e->getMessage());
@@ -759,7 +863,7 @@ class OrderCompletionLedgerTest extends TestCase
         $this->fulfillmentService->updateShippingStatus($order->id, 'delivering', 'GHTK', 'TRK1', 'vendor', $vendor->user_id);
 
         // First call
-        $completed1 = $this->fulfillmentService->updateShippingStatus($order->id, 'delivered', 'GHTK', 'TRK1', 'vendor', $vendor->user_id, $opKey);
+        $completed1 = $this->deliverAndConfirm($order, $vendor, 'GHTK', 'TRK1', $opKey);
 
         $balance1 = $vendor->fresh()->balance;
         $points1 = $user->fresh()->points;
@@ -767,7 +871,7 @@ class OrderCompletionLedgerTest extends TestCase
         $pointLedgers1 = LoyaltyPointLedger::where('order_id', $order->id)->count();
 
         // Identical retry
-        $completed2 = $this->fulfillmentService->updateShippingStatus($order->id, 'delivered', 'GHTK', 'TRK1', 'vendor', $vendor->user_id, $opKey);
+        $completed2 = $this->deliverAndConfirm($order, $vendor, 'GHTK', 'TRK1', $opKey);
 
         $this->assertEquals($completed1->id, $completed2->id);
         $this->assertEquals($balance1, $vendor->fresh()->balance);
@@ -811,7 +915,7 @@ class OrderCompletionLedgerTest extends TestCase
         ");
 
         try {
-            $this->fulfillmentService->updateShippingStatus($order->id, 'delivered', 'GHTK', 'TRKR', 'vendor', $vendor->user_id);
+            $this->deliverAndConfirm($order, $vendor, 'GHTK', 'TRKR');
             $this->fail('Expected Exception on injected DB failure');
         } catch (\Throwable $e) {
             $this->assertStringContainsString('Simulated rollback injection', $e->getMessage());
@@ -820,7 +924,7 @@ class OrderCompletionLedgerTest extends TestCase
         $this->assertEquals('shipped', $order->fresh()->status);
         $this->assertEquals(0, LoyaltyPointLedger::count());
         $this->assertEquals(0, VendorEarningLedger::count());
-        $this->assertEquals(3, OrderTransitionOperation::count());
+        $this->assertEquals(4, OrderTransitionOperation::count());
         $this->assertEquals(0, $vendor->fresh()->balance);
     }
 
@@ -982,16 +1086,17 @@ class OrderCompletionLedgerTest extends TestCase
         $this->fulfillmentService->updateShippingStatus($order->id, 'picked_up', 'GHTK', 'TRK1', 'vendor', $vendor->user_id);
         $this->fulfillmentService->updateShippingStatus($order->id, 'delivering', 'GHTK', 'TRK1', 'vendor', $vendor->user_id);
 
-        $this->fulfillmentService->updateShippingStatus($order->id, 'delivered', 'GHTK', 'TRK1', 'vendor', $vendor->user_id, $opKey);
+        $this->deliverAndConfirm($order, $vendor, 'GHTK', 'TRK1', $opKey);
 
         $op = OrderTransitionOperation::where('operation_key', $opKey)->first();
         $this->assertNotNull($op);
         $this->assertEquals('GHTK', $op->metadata['shipping_carrier']);
         $this->assertEquals('TRK1', $op->metadata['shipping_tracking_code']);
 
-        // Retry same opKey with different carrier fails closed
+        // Retry same opKey after carrier metadata was changed fails closed.
+        $order->forceFill(['shipping_carrier' => 'ViettelPost'])->save();
         try {
-            $this->fulfillmentService->updateShippingStatus($order->id, 'delivered', 'ViettelPost', 'TRK1', 'vendor', $vendor->user_id, $opKey);
+            $this->fulfillmentService->confirmReceivedByCustomer($order->id, (int) $order->user_id, $opKey);
             $this->fail('Expected LogicException on retrying delivery completion with different carrier');
         } catch (LogicException $e) {
             $this->assertStringContainsString('Conflicting operation key', $e->getMessage());
@@ -999,7 +1104,7 @@ class OrderCompletionLedgerTest extends TestCase
     }
 
     /**
-     * 25. Idempotent retries for ALL FOUR shipping destinations: picked_up, delivering, failed, delivered.
+     * 25. Idempotent retries for shipping destinations and customer receipt confirmation.
      */
     public function test_idempotent_retries_for_all_four_shipping_destinations(): void
     {
@@ -1051,10 +1156,10 @@ class OrderCompletionLedgerTest extends TestCase
         $this->assertEquals('failed', $r3b->shipping_status);
         $this->assertEquals($opCount3, OrderTransitionOperation::where('order_id', $o2->id)->count());
 
-        // Destination 4: delivered
-        $r4a = $this->fulfillmentService->updateShippingStatus($o1->id, 'delivered', 'GHTK', 'T1', 'vendor', $vendor->user_id);
+        // Destination 4: carrier delivered to customer; Destination 5: customer confirmed receipt.
+        $r4a = $this->deliverAndConfirm($o1, $vendor, 'GHTK', 'T1');
         $opCount4 = OrderTransitionOperation::where('order_id', $o1->id)->count();
-        $r4b = $this->fulfillmentService->updateShippingStatus($o1->id, 'delivered', 'GHTK', 'T1', 'vendor', $vendor->user_id);
+        $r4b = $this->deliverAndConfirm($o1, $vendor, 'GHTK', 'T1');
         $this->assertEquals($r4a->id, $r4b->id);
         $this->assertEquals('completed', $r4b->status);
         $this->assertEquals($opCount4, OrderTransitionOperation::where('order_id', $o1->id)->count());
@@ -1121,7 +1226,7 @@ class OrderCompletionLedgerTest extends TestCase
         $this->fulfillmentService->updateOrderStatusByVendor($o1->id, 'shipped', 'vendor', $vendor->user_id);
         $this->fulfillmentService->updateShippingStatus($o1->id, 'picked_up', 'GHTK', 'T1', 'vendor', $vendor->user_id);
         $this->fulfillmentService->updateShippingStatus($o1->id, 'delivering', 'GHTK', 'T1', 'vendor', $vendor->user_id);
-        $this->fulfillmentService->updateShippingStatus($o1->id, 'delivered', 'GHTK', 'T1', 'vendor', $vendor->user_id, 'op-o1');
+        $this->deliverAndConfirm($o1, $vendor, 'GHTK', 'T1', 'op-o1');
 
         // Order 2
         $orders2 = $this->checkoutService->processCheckout(
@@ -1136,7 +1241,7 @@ class OrderCompletionLedgerTest extends TestCase
         $this->fulfillmentService->updateOrderStatusByVendor($o2->id, 'shipped', 'vendor', $vendor->user_id);
         $this->fulfillmentService->updateShippingStatus($o2->id, 'picked_up', 'GHTK', 'T2', 'vendor', $vendor->user_id);
         $this->fulfillmentService->updateShippingStatus($o2->id, 'delivering', 'GHTK', 'T2', 'vendor', $vendor->user_id);
-        $this->fulfillmentService->updateShippingStatus($o2->id, 'delivered', 'GHTK', 'T2', 'vendor', $vendor->user_id, 'op-o2');
+        $this->deliverAndConfirm($o2, $vendor, 'GHTK', 'T2', 'op-o2');
 
         $vendorBalanceCumulative = $vendor->fresh()->balance;
         $this->assertEquals(180000, $vendorBalanceCumulative);
@@ -1146,7 +1251,7 @@ class OrderCompletionLedgerTest extends TestCase
         $vendor->save();
 
         try {
-            $this->fulfillmentService->updateShippingStatus($o2->id, 'delivered', 'GHTK', 'T2', 'vendor', $vendor->user_id, 'op-o2');
+            $this->fulfillmentService->confirmReceivedByCustomer($o2->id, (int) $o2->user_id, 'op-o2');
             $this->fail('Expected LogicException on cumulative vendor balance corruption');
         } catch (LogicException $e) {
             $this->assertStringContainsString('Vendor balance projection is below cumulative durable ledger contribution', $e->getMessage());
@@ -1177,7 +1282,7 @@ class OrderCompletionLedgerTest extends TestCase
         $this->fulfillmentService->updateOrderStatusByVendor($o1->id, 'shipped', 'vendor', $vendor->user_id);
         $this->fulfillmentService->updateShippingStatus($o1->id, 'picked_up', 'GHTK', 'T1', 'vendor', $vendor->user_id);
         $this->fulfillmentService->updateShippingStatus($o1->id, 'delivering', 'GHTK', 'T1', 'vendor', $vendor->user_id);
-        $this->fulfillmentService->updateShippingStatus($o1->id, 'delivered', 'GHTK', 'T1', 'vendor', $vendor->user_id, 'op-p1');
+        $this->deliverAndConfirm($o1, $vendor, 'GHTK', 'T1', 'op-p1');
 
         // Order 2
         $orders2 = $this->checkoutService->processCheckout(
@@ -1192,7 +1297,7 @@ class OrderCompletionLedgerTest extends TestCase
         $this->fulfillmentService->updateOrderStatusByVendor($o2->id, 'shipped', 'vendor', $vendor->user_id);
         $this->fulfillmentService->updateShippingStatus($o2->id, 'picked_up', 'GHTK', 'T2', 'vendor', $vendor->user_id);
         $this->fulfillmentService->updateShippingStatus($o2->id, 'delivering', 'GHTK', 'T2', 'vendor', $vendor->user_id);
-        $this->fulfillmentService->updateShippingStatus($o2->id, 'delivered', 'GHTK', 'T2', 'vendor', $vendor->user_id, 'op-p2');
+        $this->deliverAndConfirm($o2, $vendor, 'GHTK', 'T2', 'op-p2');
 
         $userPointsCumulative = $user->fresh()->points;
         $this->assertEquals(20, $userPointsCumulative);
@@ -1202,7 +1307,7 @@ class OrderCompletionLedgerTest extends TestCase
         $user->save();
 
         try {
-            $this->fulfillmentService->updateShippingStatus($o2->id, 'delivered', 'GHTK', 'T2', 'vendor', $vendor->user_id, 'op-p2');
+            $this->fulfillmentService->confirmReceivedByCustomer($o2->id, (int) $o2->user_id, 'op-p2');
             $this->fail('Expected LogicException on cumulative user points corruption');
         } catch (LogicException $e) {
             $this->assertStringContainsString('User points projection is below cumulative durable ledger contribution', $e->getMessage());
@@ -1279,7 +1384,7 @@ class OrderCompletionLedgerTest extends TestCase
         $this->fulfillmentService->updateOrderStatusByVendor($order->id, 'shipped', 'vendor', $vendor->user_id);
         $this->fulfillmentService->updateShippingStatus($order->id, 'picked_up', 'GHTK', 'TRK1', 'vendor', $vendor->user_id);
         $this->fulfillmentService->updateShippingStatus($order->id, 'delivering', 'GHTK', 'TRK1', 'vendor', $vendor->user_id);
-        $this->fulfillmentService->updateShippingStatus($order->id, 'delivered', 'GHTK', 'TRK1', 'vendor', $vendor->user_id, $opKey);
+        $this->deliverAndConfirm($order, $vendor, 'GHTK', 'TRK1', $opKey);
 
         // Manually mutate metadata gross_amount integer 100000 to string "100000" in DB
         $op = OrderTransitionOperation::where('operation_key', $opKey)->first();
@@ -1289,7 +1394,7 @@ class OrderCompletionLedgerTest extends TestCase
         $op->save();
 
         try {
-            $this->fulfillmentService->updateShippingStatus($order->id, 'delivered', 'GHTK', 'TRK1', 'vendor', $vendor->user_id, $opKey);
+            $this->fulfillmentService->confirmReceivedByCustomer($order->id, (int) $order->user_id, $opKey);
             $this->fail('Expected LogicException when metadata integer type is mutated to string');
         } catch (LogicException $e) {
             $this->assertStringContainsString('Conflicting operation key', $e->getMessage());

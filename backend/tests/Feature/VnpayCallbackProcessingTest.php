@@ -21,6 +21,7 @@ use Exception;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Redis;
 use Tests\TestCase;
@@ -111,6 +112,7 @@ class VnpayCallbackProcessingTest extends TestCase
             'vnp_TxnRef' => 'REF-TEST',
             'vnp_Version' => '2.1.0',
             'vnp_ResponseCode' => '00',
+            'vnp_SecureHashType' => 'SHA512',
             'vnp_TransactionNo' => '14112233',
             'vnp_TransactionStatus' => '00',
             'vnp_PayDate' => '20260725193000',
@@ -121,7 +123,7 @@ class VnpayCallbackProcessingTest extends TestCase
 
         $vnpParams = [];
         foreach ($params as $k => $v) {
-            if (str_starts_with($k, 'vnp_') && $k !== 'vnp_SecureHash' && $k !== 'vnp_SecureHashType') {
+            if (str_starts_with($k, 'vnp_') && $k !== 'vnp_SecureHash') {
                 $vnpParams[$k] = $v;
             }
         }
@@ -725,7 +727,7 @@ class VnpayCallbackProcessingTest extends TestCase
 
         $this->assertIsArray($payload);
         $this->assertArrayNotHasKey('vnp_SecureHash', $payload);
-        $this->assertArrayNotHasKey('vnp_SecureHashType', $payload);
+        $this->assertSame('SHA512', $payload['vnp_SecureHashType']);
         $this->assertArrayNotHasKey('hash_secret', $payload);
     }
 
@@ -768,6 +770,103 @@ class VnpayCallbackProcessingTest extends TestCase
         $resPaidMismatch = $this->get('/api/vnpay/return?'.http_build_query($cbMismatch));
         $resPaidMismatch->assertRedirect('http://localhost:5173/orders?payment=invalid_transaction');
 
+        Queue::assertPushed(ProcessOrder::class, 1);
+    }
+
+    public function test_local_return_can_confirm_a_signed_callback_when_explicitly_enabled(): void
+    {
+        Queue::fake();
+
+        $user = User::factory()->create();
+        $vendor = $this->createVendor();
+        $book = $this->createBook($vendor, 100000);
+        $orders = (new CheckoutService)->processCheckout(
+            [['book_id' => $book->id, 'quantity' => 1]],
+            ['shipping_address' => 'Local Return St', 'phone' => '0900000000', 'payment_method' => 'online'],
+            $user->id
+        );
+        $attempt = (new VnpayPaymentService)->createPaymentAttempt($orders[0]->id, $user, '127.0.0.1');
+        $callback = $this->createSignedCallback([
+            'vnp_TxnRef' => $attempt['provider_reference'],
+            'vnp_Amount' => '10000000',
+            'vnp_TransactionNo' => 'LOCAL-RETURN-1',
+        ]);
+
+        $originalEnvironment = app()->environment();
+        app()->detectEnvironment(fn () => 'local');
+        config(['services.vnpay.confirm_on_return' => true]);
+
+        try {
+            $this->get('/api/vnpay/return?'.http_build_query($callback))
+                ->assertRedirect('http://localhost:5173/orders?payment=success');
+        } finally {
+            app()->detectEnvironment(fn () => $originalEnvironment);
+        }
+
+        $transaction = PaymentTransaction::where('provider_reference', $attempt['provider_reference'])->firstOrFail();
+        $this->assertSame(PaymentTransactionStatus::PAID, $transaction->status);
+        Queue::assertPushed(ProcessOrder::class, 1);
+    }
+
+    public function test_local_return_reconciles_with_signed_query_when_browser_callback_checksum_is_rejected(): void
+    {
+        Queue::fake();
+        config(['services.vnpay.refund_url' => 'https://sandbox.example/query']);
+
+        $user = User::factory()->create();
+        $vendor = $this->createVendor();
+        $book = $this->createBook($vendor, 100000);
+        $orders = (new CheckoutService)->processCheckout(
+            [['book_id' => $book->id, 'quantity' => 1]],
+            ['shipping_address' => 'Query Return St', 'phone' => '0900000000', 'payment_method' => 'online'],
+            $user->id
+        );
+        $attempt = (new VnpayPaymentService)->createPaymentAttempt($orders[0]->id, $user, '127.0.0.1');
+
+        Http::fake(function ($request) use ($attempt) {
+            $query = $request->data();
+            $body = [
+                'vnp_ResponseId' => 'QUERY-RESPONSE-1',
+                'vnp_Command' => 'querydr',
+                'vnp_ResponseCode' => '00',
+                'vnp_Message' => 'QueryDR success',
+                'vnp_TmnCode' => 'KOMITEST',
+                'vnp_TxnRef' => $attempt['provider_reference'],
+                'vnp_Amount' => '10000000',
+                'vnp_BankCode' => 'NCB',
+                'vnp_PayDate' => '20260803015108',
+                'vnp_TransactionNo' => 'QUERY-TXN-1',
+                'vnp_TransactionType' => '01',
+                'vnp_TransactionStatus' => '00',
+                'vnp_OrderInfo' => (string) ($query['vnp_OrderInfo'] ?? ''),
+                'vnp_PromotionCode' => '',
+                'vnp_PromotionAmount' => '',
+            ];
+            $body['vnp_SecureHash'] = hash_hmac('sha512', implode('|', array_values($body)), 'SECRETKEY1234567890ABCDEF123456');
+
+            return Http::response($body);
+        });
+
+        $invalidCallback = $this->createSignedCallback([
+            'vnp_TxnRef' => $attempt['provider_reference'],
+            'vnp_Amount' => '10000000',
+        ]);
+        $invalidCallback['vnp_SecureHash'] = 'invalid-browser-callback';
+
+        $originalEnvironment = app()->environment();
+        app()->detectEnvironment(fn () => 'local');
+        config(['services.vnpay.confirm_on_return' => true]);
+
+        try {
+            $this->get('/api/vnpay/return?'.http_build_query($invalidCallback))
+                ->assertRedirect('http://localhost:5173/orders?payment=success');
+        } finally {
+            app()->detectEnvironment(fn () => $originalEnvironment);
+        }
+
+        $transaction = PaymentTransaction::where('provider_reference', $attempt['provider_reference'])->firstOrFail();
+        $this->assertSame(PaymentTransactionStatus::PAID, $transaction->status);
+        $this->assertSame('QUERY-TXN-1', $transaction->provider_transaction_id);
         Queue::assertPushed(ProcessOrder::class, 1);
     }
 }

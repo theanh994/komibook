@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\PayoutRequest;
+use App\Models\WalletPayoutAccount;
 use App\Services\PayoutService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
@@ -17,6 +18,7 @@ class ReconciliationController extends Controller
     {
         $query = PayoutRequest::with([
             'vendor:id,shop_name,balance,total_withdrawn',
+            'user:id,name,email',
             'ledgerEntries:id,payout_request_id,entry_type,created_at',
             'latestTransition' => fn ($transition) => $transition->select([
                 'payout_transitions.id',
@@ -31,7 +33,11 @@ class ReconciliationController extends Controller
             $query->where('status', $request->status);
         }
         if ($request->filled('search')) {
-            $query->whereHas('vendor', fn ($vendor) => $vendor->where('shop_name', 'like', '%'.$request->search.'%'));
+            $search = $request->search;
+            $query->where(function (Builder $owner) use ($search) {
+                $owner->whereHas('vendor', fn ($vendor) => $vendor->where('shop_name', 'like', '%'.$search.'%'))
+                    ->orWhereHas('user', fn ($user) => $user->where('name', 'like', '%'.$search.'%')->orWhere('email', 'like', '%'.$search.'%'));
+            });
         }
         $items = $query->paginate($request->integer('per_page', 15));
         $items->getCollection()->transform(function (PayoutRequest $payout) {
@@ -61,6 +67,18 @@ class ReconciliationController extends Controller
                 'unreconciled' => $this->integrityMismatchQuery()->count(),
             ],
             'payout_requests' => $items->items(),
+            'payout_accounts' => WalletPayoutAccount::with('user:id,name,email')
+                ->whereIn('status', ['unverified', 'rejected'])->latest('updated_at')->limit(100)->get()
+                ->map(fn (WalletPayoutAccount $account) => [
+                    'id' => $account->id,
+                    'user' => $account->user,
+                    'bank_name' => $account->bank_name,
+                    'masked_account' => str_repeat('•', max(0, mb_strlen($account->account_number) - 4)).mb_substr($account->account_number, -4),
+                    'account_name' => $account->account_name,
+                    'status' => $account->status,
+                    'review_reason' => $account->review_reason,
+                    'updated_at' => $account->updated_at,
+                ]),
             'meta' => ['current_page' => $items->currentPage(), 'last_page' => $items->lastPage(), 'per_page' => $items->perPage(), 'total' => $items->total()],
         ]]);
     }
@@ -128,6 +146,26 @@ class ReconciliationController extends Controller
         } catch (LogicException $exception) {
             return response()->json(['status' => 'error', 'message' => $exception->getMessage()], 422);
         }
+    }
+
+    public function reviewPayoutAccount(Request $request, WalletPayoutAccount $account): JsonResponse
+    {
+        $validated = $request->validate([
+            'target' => 'required|in:verified,rejected',
+            'reason' => 'required|string|max:1000',
+        ]);
+        $account->update([
+            'status' => $validated['target'],
+            'verified_by' => $validated['target'] === 'verified' ? $request->user()->id : null,
+            'verified_at' => $validated['target'] === 'verified' ? now() : null,
+            'review_reason' => $validated['reason'],
+        ]);
+
+        return response()->json(['status' => 'success', 'data' => [
+            'id' => $account->id,
+            'status' => $account->status,
+            'review_reason' => $account->review_reason,
+        ]]);
     }
 
     public function approve(Request $request, int $id, PayoutService $payouts): JsonResponse

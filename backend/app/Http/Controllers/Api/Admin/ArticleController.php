@@ -60,7 +60,7 @@ class ArticleController extends Controller
 
     public function update(Request $request, Article $article)
     {
-        abort_unless(in_array($article->status, [ArticleStatus::Draft, ArticleStatus::ChangesRequested], true), 422);
+        abort_unless(in_array($article->status, [ArticleStatus::Draft, ArticleStatus::ChangesRequested, ArticleStatus::Published, ArticleStatus::Unpublished], true), 422);
         $validated = $request->validate($this->rules(false));
         DB::transaction(function () use ($request, $article, $validated) {
             $updates = collect($validated)->except(['category', 'tags', 'book_ids', 'cover_image'])->all();
@@ -120,7 +120,23 @@ class ArticleController extends Controller
     {
         $prefix = $required ? 'required' : 'sometimes|required';
 
-        return ['title' => "$prefix|string|max:255", 'excerpt' => 'nullable|string|max:1000', 'body' => "$prefix|string|max:200000", 'article_type' => 'nullable|in:news,review,book_introduction,event,vendor_announcement', 'vendor_id' => 'nullable|integer|exists:vendors,id', 'category' => 'nullable|string|max:100', 'tags' => 'nullable|array|max:20', 'tags.*' => 'string|max:50', 'book_ids' => 'nullable|array|max:20', 'book_ids.*' => 'integer|exists:books,id', 'cover_image' => 'nullable|image|max:10240', 'home_featured' => 'nullable|boolean', 'allow_comments' => 'nullable|boolean', 'seo_title' => 'nullable|string|max:255', 'seo_description' => 'nullable|string|max:320'];
+        return [
+            'title' => "$prefix|string|max:255",
+            'title_format' => 'nullable|array',
+            'title_format.font' => 'nullable|in:inter,literata,times-new-roman,arial,georgia,monospace',
+            'title_format.size' => 'nullable|in:28,32,40,48',
+            'title_format.align' => 'nullable|in:left,center,right,justify',
+            'title_format.weight' => 'nullable|in:normal,bold',
+            'title_format.style' => 'nullable|in:normal,italic',
+            'excerpt' => 'nullable|string|max:1000',
+            'excerpt_format' => 'nullable|array',
+            'excerpt_format.font' => 'nullable|in:inter,literata,times-new-roman,arial,georgia,monospace',
+            'excerpt_format.size' => 'nullable|in:14,16,18,20',
+            'excerpt_format.align' => 'nullable|in:left,center,right,justify',
+            'excerpt_format.weight' => 'nullable|in:normal,bold',
+            'excerpt_format.style' => 'nullable|in:normal,italic',
+            'body' => "$prefix|string|max:200000", 'article_type' => 'nullable|in:news,review,book_introduction,event,vendor_announcement', 'vendor_id' => 'nullable|integer|exists:vendors,id', 'category' => 'nullable|string|max:100', 'tags' => 'nullable|array|max:20', 'tags.*' => 'string|max:50', 'book_ids' => 'nullable|array|max:20', 'book_ids.*' => 'integer|exists:books,id', 'cover_image' => 'nullable|image|max:10240', 'home_featured' => 'nullable|boolean', 'allow_comments' => 'nullable|boolean', 'seo_title' => 'nullable|string|max:255', 'seo_description' => 'nullable|string|max:320',
+        ];
     }
 
     private function category(?string $name): ?ArticleCategory

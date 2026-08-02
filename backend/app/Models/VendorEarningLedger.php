@@ -18,6 +18,8 @@ class VendorEarningLedger extends Model
         'operation_key',
         'gross_amount',
         'commission_amount',
+        'tax_amount',
+        'vendor_tax_schedule_id',
         'net_amount',
         'currency',
     ];
@@ -25,6 +27,7 @@ class VendorEarningLedger extends Model
     protected $casts = [
         'gross_amount' => 'integer',
         'commission_amount' => 'integer',
+        'tax_amount' => 'integer',
         'net_amount' => 'integer',
     ];
 

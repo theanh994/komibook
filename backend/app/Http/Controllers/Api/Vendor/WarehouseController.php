@@ -95,7 +95,7 @@ class WarehouseController extends Controller
                 $mainLocation = 'Chưa phân bổ';
                 if ($stocks->isNotEmpty()) {
                     $firstStock = $stocks->first();
-                    $mainLocation = $firstStock->warehouse->name.' - '.($firstStock->shelf_location ?: 'Chưa rõ kệ');
+                    $mainLocation = $firstStock->warehouse->name;
                 }
 
                 // Đảm bảo trả về đủ breakdown cho tất cả các kho của Vendor này
@@ -104,7 +104,6 @@ class WarehouseController extends Controller
                     $breakdown[] = [
                         'warehouse_id' => $wh->id,
                         'warehouse_name' => $wh->name,
-                        'shelf_location' => $stockInWh ? $stockInWh->shelf_location : '-',
                         'quantity' => $stockInWh ? $stockInWh->quantity : 0,
                     ];
                 }
@@ -218,7 +217,6 @@ class WarehouseController extends Controller
             'source_warehouse_id' => 'required|exists:warehouses,id',
             'target_warehouse_id' => 'required_if:type,transfer|exists:warehouses,id',
             'quantity' => 'required|integer|min:1',
-            'shelf_location' => 'nullable|string',
         ]);
 
         $vendor = $request->user()->vendor;
@@ -248,9 +246,6 @@ class WarehouseController extends Controller
                 ]);
 
                 $stock->quantity = $request->quantity;
-                if ($request->filled('shelf_location')) {
-                    $stock->shelf_location = $request->shelf_location;
-                }
                 $stock->save();
             } else {
                 // Điều chuyển từ kho A sang kho B
@@ -274,9 +269,6 @@ class WarehouseController extends Controller
                     'book_id' => $book->id,
                 ]);
                 $targetStock->quantity += $request->quantity;
-                if ($request->filled('shelf_location')) {
-                    $targetStock->shelf_location = $request->shelf_location;
-                }
                 $targetStock->save();
             }
 

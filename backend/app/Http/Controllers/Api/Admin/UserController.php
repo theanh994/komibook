@@ -3,8 +3,10 @@
 namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\Order;
 use App\Models\User;
 use App\Models\Vendor;
+use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -108,29 +110,53 @@ class UserController extends Controller
      *
      * Xem chi tiết một user kèm các thống kê mua hàng / bán hàng.
      */
-    public function show(int $id): JsonResponse
+    public function show(Request $request, int $id): JsonResponse
     {
+        abort_if($request->user()->role !== 'admin', 403, 'Bạn không có quyền truy cập.');
+
         $user = User::with(['addresses' => function ($q) {
             $q->orderBy('is_default', 'desc');
-        }, 'membershipTier'])->findOrFail($id);
+        }, 'membershipTier', 'organizationMemberships.organization:id,display_name,legal_name,slug,status,data_mode',
+            'warehouseManagerAssignments.vendor:id,shop_name',
+            'warehouseManagerAssignments.warehouse:id,name',
+            'usedBookSellerProfile.catalogVendor:id,shop_name',
+        ])->findOrFail($id);
 
         $data = $user->toArray();
 
-        // Lấy thêm số lượng đơn hàng và tổng chi tiêu
         $orderStats = DB::table('orders')
             ->where('user_id', $user->id)
-            ->where('status', 'completed')
-            ->selectRaw('COUNT(id) as total_orders, SUM(total_amount) as total_spent')
+            ->selectRaw("COUNT(id) as total_orders, SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed_orders, SUM(CASE WHEN status = 'completed' THEN total_amount ELSE 0 END) as total_spent")
             ->first();
 
-        $data['total_orders'] = $orderStats->total_orders ?? 0;
-        $data['total_spent'] = $orderStats->total_spent ?? 0;
+        $data['total_orders'] = (int) ($orderStats->total_orders ?? 0);
+        $data['completed_orders'] = (int) ($orderStats->completed_orders ?? 0);
+        $data['total_spent'] = (int) ($orderStats->total_spent ?? 0);
+        $data['purchased_books_count'] = DB::table('order_items')
+            ->join('orders', 'orders.id', '=', 'order_items.order_id')
+            ->where('orders.user_id', $user->id)
+            ->where('orders.status', 'completed')
+            ->distinct()
+            ->count('order_items.book_id');
+        $data['reviews_count'] = DB::table('reviews')->where('user_id', $user->id)->count();
+        $data['wishlist_count'] = DB::table('wishlists')->where('user_id', $user->id)->count();
+        $lastActivity = DB::table('sessions')->where('user_id', $user->id)->max('last_activity');
+        $data['last_login_at'] = $lastActivity
+            ? Carbon::createFromTimestamp((int) $lastActivity)->toIso8601String()
+            : null;
+        $data['orders'] = Order::withoutGlobalScopes()
+            ->where('user_id', $user->id)
+            ->with('vendor:id,shop_name')
+            ->latest('id')
+            ->limit(10)
+            ->get(['id', 'order_code', 'vendor_id', 'total_amount', 'status', 'payment_status', 'payment_method', 'created_at']);
 
-        if ($user->role === 'vendor') {
-            $vendor = Vendor::withoutGlobalScopes()->where('user_id', $user->id)->first();
-            if ($vendor) {
-                $data['vendor_info'] = $vendor;
-            }
+        $vendor = Vendor::withoutGlobalScopes()
+            ->with(['primaryWarehouse:id,name,address', 'primaryOrganization:id,display_name,legal_name,slug,status,data_mode'])
+            ->where('user_id', $user->id)
+            ->first();
+        if ($vendor) {
+            $data['vendor_info'] = $vendor;
         }
 
         return response()->json([

@@ -202,40 +202,40 @@
 
               <!-- Price & CTA Bar -->
               <div class="bg-surface-container-low/50 rounded-2xl p-6 border border-outline-variant/10 mb-6">
-                 <div class="flex flex-col sm:flex-row items-center justify-between gap-6">
-                    <div class="text-center sm:text-left">
+                 <div class="flex flex-col lg:flex-row items-center justify-between gap-6">
+                    <div class="text-center sm:text-left shrink-0">
                        <p class="mb-1 text-xs font-bold uppercase tracking-widest text-primary">Giá bán niêm yết</p>
                        <div class="flex items-center gap-3">
-                          <span class="text-3xl font-bold text-primary tracking-tight">{{ formatCurrency(book.sale_price || book.price) }}</span>
+                          <span class="text-3xl font-bold text-red-600 dark:text-red-400 tracking-tight">{{ formatCurrency(book.sale_price || book.price) }}</span>
                           <span v-if="book.sale_price && book.price > book.sale_price" class="text-lg text-outline/50 line-through font-bold">{{ formatCurrency(book.price) }}</span>
                        </div>
                     </div>
 
-                    <div class="flex flex-wrap gap-3 w-full sm:w-auto justify-center">
+                    <div class="flex items-center gap-2.5 sm:gap-3 w-full sm:w-auto justify-center sm:justify-end flex-nowrap overflow-x-auto py-1">
                        <template v-if="book.type === 'ebook' && ownershipData.owned">
-                          <button @click="goToReader" class="bg-on-surface text-surface px-8 py-3.5 rounded-xl font-bold text-xs uppercase tracking-wider shadow-lg hover:opacity-90 active:scale-95 transition-all flex items-center gap-2 cursor-pointer border-none">
+                          <button @click="goToReader" class="h-12 bg-on-surface text-surface px-6 rounded-xl font-bold text-xs uppercase tracking-wider shadow-lg hover:opacity-90 active:scale-95 transition-all flex items-center justify-center gap-2 whitespace-nowrap cursor-pointer border-none">
                             <span class="material-symbols-outlined text-[20px]">auto_stories</span>
                             Đọc Sách Ngay
                           </button>
                        </template>
                        <template v-else-if="book.type !== 'ebook' && (Number(book.stock) <= 0 || (book.status && book.status !== 'published'))">
-                          <div class="px-6 py-3.5 rounded-xl bg-surface-container-high text-outline font-bold text-xs uppercase tracking-wider flex items-center gap-2 cursor-not-allowed border border-outline-variant/30">
+                          <div class="h-12 px-5 rounded-xl bg-surface-container-high text-outline font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 whitespace-nowrap cursor-not-allowed border border-outline-variant/30">
                             <span class="material-symbols-outlined text-[20px]">remove_shopping_cart</span>
                             Sách đã hết hàng (Tạm ngừng bán)
                           </div>
-                          <button @click="toggleWishlist" class="w-12 h-12 rounded-xl border border-outline-variant/30 flex items-center justify-center hover:bg-surface-container-high transition-all shadow-sm cursor-pointer" :aria-label="wishlistStore.isFavorite(book?.id) ? 'Bỏ khỏi yêu thích' : 'Thêm vào yêu thích'">
+                          <button @click="toggleWishlist" class="h-12 w-12 shrink-0 rounded-xl border border-outline-variant/30 flex items-center justify-center hover:bg-surface-container-high transition-all shadow-sm cursor-pointer" :aria-label="wishlistStore.isFavorite(book?.id) ? 'Bỏ khỏi yêu thích' : 'Thêm vào yêu thích'">
                             <span class="material-symbols-outlined text-[22px]" :class="wishlistStore.isFavorite(book?.id) ? 'text-error fill-1' : 'text-outline'">favorite</span>
                           </button>
                        </template>
                        <template v-else>
-                          <button @click="addToCart" class="px-6 py-3.5 rounded-xl border-2 border-primary text-primary font-bold text-xs uppercase tracking-wider hover:bg-primary/5 transition-all flex items-center gap-2 cursor-pointer">
+                          <button @click="addToCart" class="h-12 px-4 sm:px-5 rounded-xl border-2 border-primary text-primary font-bold text-xs uppercase tracking-wider hover:bg-primary/5 transition-all flex items-center justify-center gap-2 whitespace-nowrap cursor-pointer">
                             <span class="material-symbols-outlined text-[20px]">shopping_bag</span>
                             Thêm vào giỏ
                           </button>
-                          <button @click="buyNow" class="bg-primary text-on-primary px-8 py-3.5 rounded-xl font-bold text-xs uppercase tracking-wider shadow-md shadow-primary/20 hover:scale-105 active:scale-95 transition-all cursor-pointer border-none">
+                          <button @click="buyNow" class="h-12 bg-primary text-on-primary px-6 sm:px-8 rounded-xl font-bold text-xs uppercase tracking-wider shadow-md shadow-primary/20 hover:scale-105 active:scale-95 transition-all whitespace-nowrap cursor-pointer border-none flex items-center justify-center">
                             Mua ngay
                           </button>
-                          <button @click="toggleWishlist" class="w-12 h-12 rounded-xl border border-outline-variant/30 flex items-center justify-center hover:bg-surface-container-high transition-all shadow-sm cursor-pointer" :aria-label="wishlistStore.isFavorite(book?.id) ? 'Bỏ khỏi yêu thích' : 'Thêm vào yêu thích'">
+                          <button @click="toggleWishlist" class="h-12 w-12 shrink-0 rounded-xl border border-outline-variant/30 flex items-center justify-center hover:bg-surface-container-high transition-all shadow-sm cursor-pointer" :aria-label="wishlistStore.isFavorite(book?.id) ? 'Bỏ khỏi yêu thích' : 'Thêm vào yêu thích'">
                             <span class="material-symbols-outlined text-[22px]" :class="wishlistStore.isFavorite(book?.id) ? 'text-error fill-1' : 'text-outline'">favorite</span>
                           </button>
                        </template>

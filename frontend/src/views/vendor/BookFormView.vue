@@ -151,13 +151,15 @@
                 <InputNumber v-model="bookForm.sale_price" :min="0" :step="1000" class="w-full !h-11" placeholder="Tự tính theo % giảm" />
               </div>
               <div class="w-full">
-                <label class="block text-[11px] font-bold uppercase tracking-wider text-outline mb-1.5">{{ isEditMode ? 'Tồn kho hiện tại' : 'Số lượng nhập ban đầu' }} <span class="text-error">*</span></label>
+                <div class="mb-1.5 flex min-h-5 items-center gap-1.5">
+                  <label class="block text-[11px] font-bold uppercase tracking-wider text-outline">{{ isEditMode ? 'Tồn kho hiện tại' : 'Số lượng nhập ban đầu' }} <span class="text-error">*</span></label>
+                  <InfoTip v-if="!isEditMode && bookForm.type !== 'ebook'" text="Số lượng này được đưa vào phiếu nhập nháp. Tồn kho chỉ tăng sau khi phiếu được ghi sổ." label="Cách cập nhật tồn kho ban đầu" />
+                </div>
                 <div v-if="bookForm.type === 'ebook'" class="h-11 bg-surface-container-low rounded-xl flex items-center px-4 font-bold text-xs text-emerald-600 border border-emerald-600/20 w-full">
                   <span class="material-symbols-outlined text-base mr-1.5">all_inclusive</span>
                   Vô hạn (Digital)
                 </div>
                 <InputNumber v-else v-model="bookForm.stock" :min="0" class="w-full !h-11" />
-                <InfoTip v-if="!isEditMode && bookForm.type !== 'ebook'" class="mt-1" text="Số lượng này được đưa vào phiếu nhập nháp. Tồn kho chỉ tăng sau khi phiếu được ghi sổ." label="Cách cập nhật tồn kho ban đầu" />
               </div>
             </div>
           </div>
@@ -497,14 +499,10 @@
                 <RouterLink to="/vendor/organizations" class="ml-1 font-bold underline">Quản lý tổ chức</RouterLink>
               </div>
 
-              <div v-if="bookForm.type === 'physical'" class="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div v-if="bookForm.type === 'physical'">
                 <div>
-                  <div class="mb-1.5 flex items-center justify-between gap-2"><label for="external-printer" class="block text-[11px] font-bold uppercase tracking-wider text-outline">Đơn vị in ngoài hệ thống</label><InfoTip text="Thông tin này chỉ được lưu làm tham chiếu trên phiếu, không tạo quan hệ pháp lý trong hệ thống." label="Ý nghĩa đơn vị in ngoài hệ thống" /></div>
+                  <div class="mb-1.5 flex items-center gap-1.5"><label for="external-printer" class="block text-[11px] font-bold uppercase tracking-wider text-outline">Đơn vị in ngoài hệ thống</label><InfoTip text="Thông tin này chỉ được lưu làm tham chiếu trên phiếu, không tạo quan hệ pháp lý trong hệ thống." label="Ý nghĩa đơn vị in ngoài hệ thống" /></div>
                   <InputText id="external-printer" v-model="operationsForm.external_counterparty_name" placeholder="Tên đơn vị in hoặc nguồn nhập" class="w-full !h-11 !p-3 !rounded-xl !bg-surface-container-low !border-none text-sm" />
-                </div>
-                <div>
-                  <label for="initial-shelf" class="block text-[11px] font-bold uppercase tracking-wider text-outline mb-1.5">Vị trí kệ dự kiến</label>
-                  <InputText id="initial-shelf" v-model="operationsForm.initial_shelf_location" placeholder="Ví dụ: Kệ A-01" class="w-full !h-11 !p-3 !rounded-xl !bg-surface-container-low !border-none text-sm" />
                 </div>
               </div>
 
@@ -584,7 +582,6 @@ const operationsForm = ref({
   supplier_relationship_id: null,
   responsible_organization_relationship_id: null,
   external_counterparty_name: '',
-  initial_shelf_location: '',
 })
 
 const primaryWarehouse = computed(() => createScope.value.primary_warehouse || null)

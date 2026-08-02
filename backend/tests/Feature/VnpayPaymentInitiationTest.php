@@ -580,6 +580,7 @@ class VnpayPaymentInitiationTest extends TestCase
      */
     public function test_stored_request_payload_does_not_contain_secure_hash_or_secret(): void
     {
+        config(['services.vnpay.return_url' => 'https://komibook.id.vn/api/vnpay/return']);
         $user = User::factory()->create();
         $vendor = $this->createVendor();
         $book = $this->createBook($vendor, 100000);
@@ -601,6 +602,9 @@ class VnpayPaymentInitiationTest extends TestCase
         $this->assertArrayNotHasKey('vnp_SecureHash', $payload);
         $this->assertArrayNotHasKey('vnp_SecureHashType', $payload);
         $this->assertArrayNotHasKey('hash_secret', $payload);
+        $this->assertSame('https://komibook.id.vn/api/vnpay/return', $payload['vnp_ReturnUrl']);
+        $this->assertArrayHasKey('vnp_ExpireDate', $payload);
+        $this->assertMatchesRegularExpression('/^[A-Za-z0-9]{1,100}$/', $txn->provider_reference);
     }
 
     /**

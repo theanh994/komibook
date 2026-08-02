@@ -105,7 +105,6 @@ class BookResource extends JsonResource
                     'warehouse_id' => $stock->warehouse_id,
                     'warehouse_name' => $stock->warehouse?->name,
                     'quantity' => $stock->quantity,
-                    'shelf_location' => $stock->shelf_location,
                 ])->values();
             }),
             'categories' => $this->relationLoaded('categories') && $this->categories->isNotEmpty() ? $this->categories->map(function ($cat) {

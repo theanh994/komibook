@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import apiClient from '@/services/axios'
 
@@ -8,251 +8,164 @@ const router = useRouter()
 const userId = computed(() => route.params.id)
 const loading = ref(true)
 const error = ref(null)
-
 const user = ref(null)
 
-const membershipStats = computed(() => {
-  if (!user.value) return { tier: '—', totalOrders: 0, totalSpent: 0, totalBooks: '—', reviews: '—' }
-  return {
-    tier: user.value.membership_tier?.name || 'Chưa xếp hạng',
-    totalOrders: user.value.total_orders || 0,
-    totalSpent: user.value.total_spent || 0,
-    totalBooks: '—',
-    reviews: '—',
-  }
-})
-
-const recentOrders = ref([])
-const readingHistory = ref([])
+const recentOrders = computed(() => user.value?.orders || [])
+const organizationMemberships = computed(() => user.value?.organization_memberships || [])
+const warehouseAssignments = computed(() => user.value?.warehouse_manager_assignments || [])
 
 const getInitials = (name) => {
   if (!name) return '??'
-  const parts = name.split(' ')
-  return (parts[0]?.[0] || '') + (parts[parts.length - 1]?.[0] || '')
+  const parts = name.trim().split(/\s+/)
+  return `${parts[0]?.[0] || ''}${parts.at(-1)?.[0] || ''}`.toUpperCase()
 }
 
-const formatVND = (val) => new Intl.NumberFormat('vi-VN').format(val || 0) + ' ₫'
+const formatVND = (value) => new Intl.NumberFormat('vi-VN', {
+  style: 'currency',
+  currency: 'VND',
+  maximumFractionDigits: 0,
+}).format(Number(value) || 0)
 
-const formatDate = (iso) => {
-  if (!iso) return '—'
-  return new Date(iso).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' })
+const formatDate = (value, includeTime = false) => {
+  if (!value) return 'Chưa có dữ liệu'
+  return new Intl.DateTimeFormat('vi-VN', includeTime
+    ? { dateStyle: 'short', timeStyle: 'short' }
+    : { day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(value))
 }
 
-const getStatusStyle = (s) => s === 'completed' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
-const getStatusLabel = (s) => s === 'completed' ? 'Hoàn thành' : 'Chờ xử lý'
+const roleLabel = (role) => ({ admin: 'Quản trị viên', vendor: 'Nhà bán', customer: 'Khách hàng' })[role] || role || 'Chưa xác định'
+const genderLabel = (gender) => ({ male: 'Nam', female: 'Nữ', other: 'Khác' })[gender] || gender || 'Chưa khai báo'
+const statusLabel = (status) => ({
+  pending: 'Chờ xử lý', processing: 'Đang xử lý', shipped: 'Đang giao', completed: 'Hoàn thành', cancelled: 'Đã hủy',
+})[status] || status || 'Chưa xác định'
+const statusClass = (status) => status === 'completed'
+  ? 'bg-emerald-100 text-emerald-800'
+  : status === 'cancelled'
+    ? 'bg-red-100 text-red-800'
+    : 'bg-amber-100 text-amber-900'
+const capabilityLabel = (capability) => ({
+  view_inventory: 'Xem tồn kho',
+  manage_inventory: 'Quản lý tồn kho',
+  create_documents: 'Tạo phiếu kho',
+  approve_documents: 'Duyệt phiếu kho',
+  post_documents: 'Ghi sổ phiếu kho',
+})[capability] || capability
 
 const fetchUser = async () => {
   loading.value = true
   error.value = null
   try {
-    const res = await apiClient.get(`/api/admin/users/${userId.value || route.params.id}`)
-    if (res.data?.data) {
-      user.value = res.data.data
-      recentOrders.value = res.data.data.orders || []
-    } else if (res.data) {
-      user.value = res.data
-    } else {
-      user.value = null
-    }
-  } catch (err) {
-    console.error('Không tải được thông tin người dùng', err)
+    const response = await apiClient.get(`/api/admin/users/${userId.value}`)
+    user.value = response.data?.data || null
+  } catch (exception) {
     user.value = null
-    error.value = err.response?.data?.message || 'Không thể kết nối API thông tin người dùng.'
+    error.value = exception.response?.data?.message || 'Không thể kết nối API thông tin người dùng.'
   } finally {
     loading.value = false
   }
+}
+
+const openPrintSheet = () => {
+  const href = router.resolve({ name: 'admin-user-print', params: { id: userId.value } }).href
+  globalThis.open(href, '_blank', 'noopener,noreferrer')
 }
 
 onMounted(fetchUser)
 </script>
 
 <template>
-  <div class="pb-xxl w-full pt-6">
-    <!-- Breadcrumb + Actions -->
-    <div class="flex flex-col gap-md sm:flex-row sm:items-center sm:justify-between mb-xl animate-fade-in">
-      <div class="flex items-center gap-sm text-on-surface-variant font-body-md text-body-md min-w-0">
-        <button type="button" @click="router.push({ name: 'admin-users' })" class="min-h-11 hover:text-primary transition-colors flex items-center gap-1">
-          <span class="material-symbols-outlined text-[18px]">arrow_back</span>
-          Quản lý Users
+  <main id="main-content" class="w-full space-y-6 pb-10 pt-6" tabindex="-1">
+    <header class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div class="min-w-0">
+        <button type="button" class="mb-2 inline-flex min-h-11 items-center gap-1 text-sm font-bold text-primary" @click="router.push({ name: 'admin-users' })">
+          <span class="material-symbols-outlined text-[18px]" aria-hidden="true">arrow_back</span>
+          Quản lý người dùng
         </button>
-        <span class="material-symbols-outlined text-[16px]">chevron_right</span>
-        <span class="text-on-surface font-medium">{{ user?.name || 'Chi tiết người dùng' }}</span>
+        <h1 class="truncate text-3xl font-bold text-on-surface">{{ user?.name || 'Chi tiết người dùng' }}</h1>
+        <p class="mt-1 text-sm text-on-surface-variant">Hồ sơ, hoạt động mua hàng và các quyền vận hành đang liên kết.</p>
       </div>
-      <div v-if="user" class="grid grid-cols-1 gap-sm sm:flex sm:items-center">
-        <button type="button" class="min-h-11 px-4 py-2 border border-red-300 text-red-600 rounded-lg font-label-md text-label-md hover:bg-red-50 transition-colors flex items-center justify-center gap-sm">
-          <span class="material-symbols-outlined text-[18px]">block</span> Tạm khóa
-        </button>
-        <button type="button" class="min-h-11 px-4 py-2 bg-primary text-on-primary rounded-lg font-label-md text-label-md hover:bg-primary-container transition-colors flex items-center justify-center gap-sm">
-          <span class="material-symbols-outlined text-[18px]">mail</span> Gửi thông báo
-        </button>
-      </div>
-    </div>
+      <button v-if="user" type="button" class="ui-btn ui-btn-primary min-h-11 shrink-0" @click="openPrintSheet">
+        <span class="material-symbols-outlined text-[19px]" aria-hidden="true">print</span>
+        Xuất phiếu thông tin
+      </button>
+    </header>
 
-    <!-- Loading State -->
-    <div v-if="loading" role="status" aria-live="polite" class="p-12 sm:p-24 flex justify-center items-center flex-col gap-3">
-      <i class="pi pi-spin pi-spinner text-4xl text-indigo-600"></i>
-      <span class="text-sm text-slate-500">Đang tải thông tin người dùng...</span>
-    </div>
+    <section v-if="loading" class="flex min-h-64 items-center justify-center rounded-xl bg-surface-container-lowest" role="status">
+      <i class="pi pi-spin pi-spinner text-4xl text-primary" aria-hidden="true"></i><span class="sr-only">Đang tải hồ sơ</span>
+    </section>
+    <section v-else-if="error" class="rounded-xl border border-error/30 bg-error-container p-8 text-center text-on-error-container" role="alert">
+      <h2 class="text-xl font-bold">Không thể tải hồ sơ người dùng</h2>
+      <p class="mt-2">{{ error }}</p>
+      <button type="button" class="ui-btn ui-btn-primary mt-4 min-h-11" @click="fetchUser">Thử lại</button>
+    </section>
 
-    <!-- Error State -->
-    <div v-else-if="error" role="alert" class="bg-rose-50 border border-rose-200 rounded-2xl p-6 sm:p-8 text-center space-y-4 my-6">
-      <i class="pi pi-exclamation-triangle text-4xl text-rose-500"></i>
-      <h1 class="text-xl font-bold text-rose-800">Không thể tải hồ sơ người dùng</h1>
-      <p class="text-sm text-rose-600 max-w-md mx-auto">{{ error }}</p>
-      <div class="flex justify-center gap-3 pt-2">
-        <button type="button" @click="router.push({ name: 'admin-users' })" class="min-h-11 px-4 py-2 border border-slate-300 text-slate-700 rounded-lg font-bold text-xs hover:bg-slate-100">
-          Quay lại danh sách
-        </button>
-        <button type="button" @click="fetchUser" class="min-h-11 px-4 py-2 bg-rose-600 text-white rounded-lg font-bold text-xs hover:bg-rose-700 flex items-center gap-1">
-          <i class="pi pi-refresh"></i> Thử lại
-        </button>
-      </div>
-    </div>
-
-    <!-- Main Grid -->
-    <div v-else-if="user" class="grid grid-cols-1 lg:grid-cols-12 gap-lg animate-slide-up">
-      <!-- Left: Profile Card -->
-      <div class="lg:col-span-4 space-y-lg">
-        <div class="bg-surface-container-lowest rounded-xl shadow-soft border border-outline-variant/30 overflow-hidden">
-          <div class="h-24 bg-gradient-to-r from-primary to-primary-container relative"></div>
-          <div class="px-lg pb-lg -mt-12 text-center">
-            <div class="mx-auto w-20 h-20 rounded-full bg-surface-container-lowest border-4 border-surface flex items-center justify-center text-primary font-headline-lg text-[28px] shadow-md">
-              {{ getInitials(user.name) }}
-            </div>
-            <h2 class="mt-md font-headline-md text-headline-md text-on-surface font-bold">{{ user.name }}</h2>
-            <p class="font-body-md text-body-md text-on-surface-variant">{{ user.email }}</p>
-            <div class="mt-md flex justify-center gap-xs flex-wrap">
-              <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-primary-container text-on-primary-container border border-primary/20">
-                Hạng: {{ membershipStats.tier }}
-              </span>
-              <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-tertiary-container text-on-tertiary-container border border-tertiary/20">
-                Tích lũy: {{ user.points || 0 }} Điểm
-              </span>
-            </div>
-          </div>
-          <div class="border-t border-outline-variant/30 px-lg py-md space-y-md">
-            <div class="flex items-center gap-sm">
-              <span class="material-symbols-outlined text-on-surface-variant text-[18px]">phone</span>
-              <span class="font-body-md text-body-md text-on-surface">{{ user.phone || '—' }}</span>
-            </div>
-            <div class="flex items-center gap-sm">
-              <span class="material-symbols-outlined text-on-surface-variant text-[18px]">calendar_month</span>
-              <span class="font-body-md text-body-md text-on-surface">Tham gia: {{ formatDate(user.created_at) }}</span>
-            </div>
-            <div class="flex items-center gap-sm">
-              <span class="material-symbols-outlined text-on-surface-variant text-[18px]">schedule</span>
-              <span class="font-body-md text-body-md text-on-surface">Đăng nhập lần cuối: {{ formatDate(user.last_login) }}</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Reading History -->
-        <div class="bg-surface-container-lowest rounded-xl shadow-soft border border-outline-variant/30 overflow-hidden">
-          <div class="px-lg py-md border-b border-outline-variant/30 bg-surface">
-            <h3 class="font-headline-md text-headline-md text-on-surface flex items-center gap-sm">
-              <span class="material-symbols-outlined text-primary text-[20px]">auto_stories</span>
-              Đang đọc
-            </h3>
-          </div>
-          <div class="divide-y divide-outline-variant/20">
-            <div v-for="item in readingHistory" :key="item.book" class="px-lg py-md">
-              <div class="flex justify-between items-start mb-2">
-                <span class="font-label-md text-label-md text-on-surface">{{ item.book }}</span>
-                <span class="text-[12px] text-on-surface-variant">{{ item.lastRead }}</span>
-              </div>
-              <div class="flex items-center gap-sm">
-                <div class="flex-1 bg-surface-container-high rounded-full h-2 overflow-hidden">
-                  <div class="h-full rounded-full transition-all" :class="item.progress === 100 ? 'bg-green-500' : 'bg-primary'" :style="{ width: item.progress + '%' }"></div>
-                </div>
-                <span class="text-[12px] font-medium" :class="item.progress === 100 ? 'text-green-600' : 'text-primary'">{{ item.progress }}%</span>
+    <template v-else-if="user">
+      <div class="grid gap-6 xl:grid-cols-[minmax(280px,360px)_1fr]">
+        <aside class="space-y-6">
+          <section class="overflow-hidden rounded-xl border border-outline-variant/40 bg-surface-container-lowest">
+            <div class="h-20 bg-primary"></div>
+            <div class="-mt-10 px-6 pb-6 text-center">
+              <div class="mx-auto grid h-20 w-20 place-items-center rounded-full border-4 border-surface bg-primary-container text-2xl font-black text-on-primary-container shadow-sm">{{ getInitials(user.name) }}</div>
+              <h2 class="mt-3 text-xl font-bold">{{ user.name }}</h2>
+              <p class="mt-1 break-all text-sm text-on-surface-variant">{{ user.email || 'Chưa có email' }}</p>
+              <div class="mt-4 flex flex-wrap justify-center gap-2">
+                <span class="rounded-full bg-primary/10 px-3 py-1 text-xs font-bold text-primary">{{ roleLabel(user.role) }}</span>
+                <span class="rounded-full px-3 py-1 text-xs font-bold" :class="user.email_verified_at ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-900'">{{ user.email_verified_at ? 'Email đã xác minh' : 'Email chưa xác minh' }}</span>
               </div>
             </div>
-            <div v-if="readingHistory.length === 0" class="px-lg py-xl text-center text-on-surface-variant text-xs">
-              Chưa có dữ liệu theo dõi đọc sách
+            <dl class="grid gap-4 border-t border-outline-variant/30 px-6 py-5 text-sm">
+              <div><dt class="text-xs font-bold uppercase tracking-wider text-outline">Số điện thoại</dt><dd class="mt-1 font-medium">{{ user.phone || 'Chưa khai báo' }}</dd></div>
+              <div class="grid grid-cols-2 gap-4"><div><dt class="text-xs font-bold uppercase tracking-wider text-outline">Giới tính</dt><dd class="mt-1 font-medium">{{ genderLabel(user.gender) }}</dd></div><div><dt class="text-xs font-bold uppercase tracking-wider text-outline">Ngày sinh</dt><dd class="mt-1 font-medium">{{ formatDate(user.birthday) }}</dd></div></div>
+              <div><dt class="text-xs font-bold uppercase tracking-wider text-outline">Ngày tham gia</dt><dd class="mt-1 font-medium">{{ formatDate(user.created_at, true) }}</dd></div>
+              <div><dt class="text-xs font-bold uppercase tracking-wider text-outline">Hoạt động gần nhất</dt><dd class="mt-1 font-medium">{{ formatDate(user.last_login_at, true) }}</dd></div>
+            </dl>
+          </section>
+
+          <section class="rounded-xl border border-outline-variant/40 bg-surface-container-lowest p-5">
+            <h2 class="text-lg font-bold">Sổ địa chỉ</h2>
+            <div v-if="user.addresses?.length" class="mt-4 space-y-3">
+              <article v-for="address in user.addresses" :key="address.id" class="rounded-lg bg-surface-container p-3 text-sm">
+                <div class="flex items-center justify-between gap-2"><strong>{{ address.receiver_name }}</strong><span v-if="address.is_default" class="text-xs font-bold text-primary">Mặc định</span></div>
+                <p class="mt-1 text-on-surface-variant">{{ address.phone }}</p><p class="mt-1">{{ address.address }}</p>
+              </article>
             </div>
-          </div>
+            <p v-else class="mt-3 text-sm text-on-surface-variant">Chưa lưu địa chỉ nhận hàng.</p>
+          </section>
+        </aside>
+
+        <div class="space-y-6">
+          <section class="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <article class="rounded-xl border border-outline-variant/40 bg-surface-container-lowest p-4"><p class="text-sm text-on-surface-variant">Tổng đơn hàng</p><strong class="mt-2 block text-2xl">{{ user.total_orders || 0 }}</strong></article>
+            <article class="rounded-xl border border-outline-variant/40 bg-surface-container-lowest p-4"><p class="text-sm text-on-surface-variant">Tổng chi tiêu</p><strong class="mt-2 block text-xl">{{ formatVND(user.total_spent) }}</strong></article>
+            <article class="rounded-xl border border-outline-variant/40 bg-surface-container-lowest p-4"><p class="text-sm text-on-surface-variant">Sách đã mua</p><strong class="mt-2 block text-2xl">{{ user.purchased_books_count || 0 }}</strong></article>
+            <article class="rounded-xl border border-outline-variant/40 bg-surface-container-lowest p-4"><p class="text-sm text-on-surface-variant">Đánh giá / Yêu thích</p><strong class="mt-2 block text-2xl">{{ user.reviews_count || 0 }} / {{ user.wishlist_count || 0 }}</strong></article>
+          </section>
+
+          <section class="rounded-xl border border-outline-variant/40 bg-surface-container-lowest p-5">
+            <h2 class="text-lg font-bold">Vai trò và đơn vị liên kết</h2>
+            <div class="mt-4 grid gap-4 lg:grid-cols-2">
+              <article v-if="user.vendor_info" class="rounded-xl bg-surface-container p-4 text-sm">
+                <p class="text-xs font-bold uppercase tracking-wider text-primary">Hồ sơ nhà bán</p><h3 class="mt-2 text-base font-bold">{{ user.vendor_info.shop_name }}</h3>
+                <dl class="mt-3 grid gap-2"><div><dt class="inline text-on-surface-variant">Trạng thái: </dt><dd class="inline font-semibold">{{ user.vendor_info.status }}</dd></div><div><dt class="inline text-on-surface-variant">Kho tổng: </dt><dd class="inline font-semibold">{{ user.vendor_info.primary_warehouse?.name || 'Chưa đăng ký' }}</dd></div><div><dt class="inline text-on-surface-variant">Tổ chức chính: </dt><dd class="inline font-semibold">{{ user.vendor_info.primary_organization?.display_name || user.vendor_info.primary_organization?.legal_name || 'Chưa liên kết' }}</dd></div></dl>
+              </article>
+              <article v-for="membership in organizationMemberships" :key="`org-${membership.id}`" class="rounded-xl bg-surface-container p-4 text-sm">
+                <p class="text-xs font-bold uppercase tracking-wider text-primary">Thành viên tổ chức</p><h3 class="mt-2 text-base font-bold">{{ membership.organization?.display_name || membership.organization?.legal_name }}</h3><p class="mt-2 text-on-surface-variant">Vai trò: <strong class="text-on-surface">{{ membership.role }}</strong> · {{ membership.status }}</p>
+              </article>
+              <article v-for="assignment in warehouseAssignments" :key="`warehouse-${assignment.id}`" class="rounded-xl bg-surface-container p-4 text-sm">
+                <p class="text-xs font-bold uppercase tracking-wider text-primary">Nhân sự kho</p><h3 class="mt-2 text-base font-bold">{{ assignment.warehouse?.name }}</h3><p class="mt-1 text-on-surface-variant">{{ assignment.vendor?.shop_name }} · {{ assignment.status }}</p><div class="mt-3 flex flex-wrap gap-2"><span v-for="capability in assignment.capabilities || []" :key="capability" class="rounded-full bg-surface-container-high px-2.5 py-1 text-xs font-medium">{{ capabilityLabel(capability) }}</span></div>
+              </article>
+              <article v-if="!user.vendor_info && !organizationMemberships.length && !warehouseAssignments.length" class="rounded-xl bg-surface-container p-4 text-sm text-on-surface-variant lg:col-span-2">Tài khoản chưa liên kết hồ sơ nhà bán, tổ chức hoặc nhiệm vụ kho.</article>
+            </div>
+          </section>
+
+          <section class="overflow-hidden rounded-xl border border-outline-variant/40 bg-surface-container-lowest">
+            <div class="border-b border-outline-variant/30 px-5 py-4"><h2 class="text-lg font-bold">Đơn hàng gần đây</h2></div>
+            <div class="overflow-x-auto" role="region" aria-label="Đơn hàng gần đây" tabindex="0">
+              <table class="w-full min-w-[680px] text-left text-sm"><thead class="bg-surface-container text-on-surface-variant"><tr><th class="px-5 py-3">Mã đơn</th><th class="px-5 py-3">Gian hàng</th><th class="px-5 py-3">Ngày đặt</th><th class="px-5 py-3 text-right">Tổng tiền</th><th class="px-5 py-3">Trạng thái</th></tr></thead><tbody class="divide-y divide-outline-variant/30"><tr v-for="order in recentOrders" :key="order.id"><td class="px-5 py-3 font-bold text-primary">{{ order.order_code }}</td><td class="px-5 py-3">{{ order.vendor?.shop_name || '—' }}</td><td class="px-5 py-3">{{ formatDate(order.created_at) }}</td><td class="px-5 py-3 text-right font-semibold">{{ formatVND(order.total_amount) }}</td><td class="px-5 py-3"><span class="rounded-full px-2.5 py-1 text-xs font-bold" :class="statusClass(order.status)">{{ statusLabel(order.status) }}</span></td></tr><tr v-if="!recentOrders.length"><td colspan="5" class="px-5 py-10 text-center text-on-surface-variant">Chưa có đơn hàng.</td></tr></tbody></table>
+            </div>
+          </section>
         </div>
       </div>
-
-      <!-- Right: Stats + Orders -->
-      <div class="lg:col-span-8 space-y-lg">
-        <!-- Stats Grid -->
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-md">
-          <div class="bg-surface-container-lowest rounded-xl p-md text-center shadow-soft border border-outline-variant/30">
-            <span class="material-symbols-outlined text-primary text-[28px]">shopping_bag</span>
-            <p class="font-headline-md text-headline-md font-bold text-on-surface mt-1">{{ membershipStats.totalOrders }}</p>
-            <p class="font-body-md text-[13px] text-on-surface-variant">Đơn hàng</p>
-          </div>
-          <div class="bg-surface-container-lowest rounded-xl p-md text-center shadow-soft border border-outline-variant/30">
-            <span class="material-symbols-outlined text-primary text-[28px]">payments</span>
-            <p class="font-headline-md text-headline-md font-bold text-on-surface mt-1">{{ formatVND(membershipStats.totalSpent) }}</p>
-            <p class="font-body-md text-[13px] text-on-surface-variant">Chi tiêu</p>
-          </div>
-          <div class="bg-surface-container-lowest rounded-xl p-md text-center shadow-soft border border-outline-variant/30">
-            <span class="material-symbols-outlined text-primary text-[28px]">menu_book</span>
-            <p class="font-headline-md text-headline-md font-bold text-on-surface mt-1">{{ membershipStats.totalBooks }}</p>
-            <p class="font-body-md text-[13px] text-on-surface-variant">Sách đã đọc</p>
-          </div>
-          <div class="bg-surface-container-lowest rounded-xl p-md text-center shadow-soft border border-outline-variant/30">
-            <span class="material-symbols-outlined text-primary text-[28px]">reviews</span>
-            <p class="font-headline-md text-headline-md font-bold text-on-surface mt-1">{{ membershipStats.reviews }}</p>
-            <p class="font-body-md text-[13px] text-on-surface-variant">Đánh giá</p>
-          </div>
-        </div>
-
-        <!-- Recent Orders -->
-        <div class="bg-surface-container-lowest rounded-xl shadow-soft border border-outline-variant/30 overflow-hidden">
-          <div class="px-lg py-md border-b border-outline-variant/30 bg-surface flex items-center justify-between">
-            <h3 class="font-headline-md text-headline-md text-on-surface flex items-center gap-sm">
-              <span class="material-symbols-outlined text-primary text-[20px]">receipt_long</span>
-              Lịch sử đơn hàng
-            </h3>
-          </div>
-          <div class="overflow-x-auto" role="region" aria-label="Lịch sử đơn hàng của người dùng" tabindex="0">
-            <table class="w-full text-left border-collapse">
-              <thead>
-                <tr class="bg-surface-container-low text-on-surface-variant font-label-md text-[13px]">
-                  <th class="py-3 px-lg font-semibold">Mã ĐH</th>
-                  <th class="py-3 px-lg font-semibold">Ngày đặt</th>
-                  <th class="py-3 px-lg font-semibold">Sản phẩm</th>
-                  <th class="py-3 px-lg font-semibold text-right">Thành tiền</th>
-                  <th class="py-3 px-lg font-semibold">Trạng thái</th>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-outline-variant/20">
-                <tr v-for="order in recentOrders" :key="order.id" class="hover:bg-surface-variant/30 transition-colors">
-                  <td class="py-3 px-lg font-medium text-primary text-sm">#{{ order.id }}</td>
-                  <td class="py-3 px-lg text-sm text-on-surface-variant">{{ formatDate(order.created_at || order.date) }}</td>
-                  <td class="py-3 px-lg text-sm text-on-surface">{{ order.book || order.order_code || '—' }}</td>
-                  <td class="py-3 px-lg text-sm text-right font-medium text-on-surface">{{ formatVND(order.grand_total || order.amount) }}</td>
-                  <td class="py-3 px-lg">
-                    <span :class="getStatusStyle(order.status)" class="inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium">{{ getStatusLabel(order.status) }}</span>
-                  </td>
-                </tr>
-                <tr v-if="recentOrders.length === 0">
-                  <td colspan="5" class="py-xl px-lg text-center text-on-surface-variant text-xs">Không có đơn hàng nào.</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
+    </template>
+  </main>
 </template>
-
-<style scoped>
-.shadow-soft { box-shadow: 0 4px 12px rgba(26, 58, 90, 0.04); }
-.animate-fade-in { animation: fadeIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
-.animate-slide-up { opacity: 0; transform: translateY(15px); animation: slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
-@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-@keyframes slideUp { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
-@media (prefers-reduced-motion: reduce) {
-  .animate-fade-in,
-  .animate-slide-up {
-    animation: none;
-    opacity: 1;
-    transform: none;
-  }
-}
-</style>
