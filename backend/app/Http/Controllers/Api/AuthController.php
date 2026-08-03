@@ -315,6 +315,37 @@ class AuthController extends Controller
     // ─── Google Login ─────────────────────────────────────────────────────────
 
     /**
+     * Trả về duy nhất cấu hình công khai cần để khởi tạo SDK đăng nhập xã hội.
+     * App secret của Facebook tuyệt đối không được gửi xuống trình duyệt.
+     */
+    public function socialLoginConfig(): JsonResponse
+    {
+        $googleClientId = trim((string) config('services.google.client_id'));
+        $facebookAppId = trim((string) config('services.facebook.app_id'));
+        $facebookAppSecret = trim((string) config('services.facebook.app_secret'));
+        $facebookGraphVersion = trim((string) config('services.facebook.graph_version'));
+
+        $googleEnabled = $googleClientId !== '';
+        $facebookEnabled = $facebookAppId !== ''
+            && $facebookAppSecret !== ''
+            && $facebookGraphVersion !== '';
+
+        return response()->json([
+            'data' => [
+                'google' => [
+                    'enabled' => $googleEnabled,
+                    'client_id' => $googleEnabled ? $googleClientId : null,
+                ],
+                'facebook' => [
+                    'enabled' => $facebookEnabled,
+                    'app_id' => $facebookEnabled ? $facebookAppId : null,
+                    'graph_version' => $facebookEnabled ? $facebookGraphVersion : null,
+                ],
+            ],
+        ]);
+    }
+
+    /**
      * Đăng nhập hoặc đăng ký bằng tài khoản Google (Dùng Verifier Abstraction & Registration Challenge).
      */
     public function googleLogin(Request $request, GoogleTokenVerifierInterface $verifier): JsonResponse

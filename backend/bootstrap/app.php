@@ -5,6 +5,7 @@ use App\Http\Middleware\EnsureRecentAuthentication;
 use App\Http\Middleware\EnsureRole;
 use App\Http\Middleware\EnsureVerifiedEmail;
 use App\Http\Middleware\SecurityHeadersMiddleware;
+use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -39,6 +40,14 @@ return Application::configure(basePath: dirname(__DIR__))
         });
     })
     ->withExceptions(function (Exceptions $exceptions) {
+        $exceptions->render(function (QueryException $exception, Request $request) {
+            if ($request->is('api/chat/*')) {
+                return response()->json([
+                    'message' => 'Khu vực hỗ trợ đang được cập nhật. Vui lòng thử lại sau ít phút.',
+                ], 503);
+            }
+        });
+
         $exceptions->shouldRenderJsonWhen(function (Request $request, Throwable $e) {
             if ($request->is('api/*')) {
                 return true;

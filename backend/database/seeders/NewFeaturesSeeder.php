@@ -126,13 +126,5 @@ class NewFeaturesSeeder extends Seeder
             'status' => 'published',
         ]);
 
-        HelpArticle::create([
-            'category_name' => 'Đối tác & Nhà bán',
-            'title' => 'Phí dịch vụ và đối soát dành cho Nhà bán',
-            'content' => "KomiBook áp dụng biểu phí theo từng loại sản phẩm và hợp đồng với Nhà bán.\nDoanh thu được đối soát theo chu kỳ đã công bố, dựa trên đơn hàng hoàn tất, phí hiệu lực và các khoản điều chỉnh hợp lệ.",
-            'views_count' => 512,
-            'helpful_count' => 48,
-            'status' => 'published',
-        ]);
     }
 }

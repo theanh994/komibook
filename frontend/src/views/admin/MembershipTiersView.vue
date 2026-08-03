@@ -106,7 +106,7 @@ onMounted(() => {
         <p class="text-slate-500 text-sm mt-1">Quản lý tích điểm khách hàng thân thiết, ưu đãi chiết khấu và lợi ích VIP.</p>
       </div>
       <div class="flex gap-2">
-        <Button label="Thêm hạng mới" icon="pi pi-plus" class="min-h-11 p-button-primary bg-indigo-600 hover:bg-indigo-700 text-white font-bold" @click="openCreateTier" />
+        <Button label="Thêm hạng mới" icon="pi pi-plus" class="min-h-11 border-brand-green-strong bg-brand-green-strong text-white hover:bg-commerce font-bold" @click="openCreateTier" />
       </div>
     </div>
 
@@ -124,7 +124,7 @@ onMounted(() => {
       </div>
 
       <div v-if="loading" role="status" aria-live="polite" class="flex justify-center p-12">
-        <i class="pi pi-spin pi-spinner text-3xl text-indigo-600"></i>
+        <i class="pi pi-spin pi-spinner text-3xl text-brand-green-strong"></i>
       </div>
 
       <div v-else-if="!error" class="overflow-x-auto" role="region" aria-label="Danh sách hạng thành viên" tabindex="0">
@@ -141,7 +141,7 @@ onMounted(() => {
           <tbody class="divide-y divide-slate-150">
             <tr v-for="tier in tiers" :key="tier.id" class="hover:bg-slate-50/30">
               <td class="p-4 font-bold text-slate-800">
-                <span class="inline-flex items-center gap-1.5 px-3 py-1 bg-indigo-50 text-indigo-700 rounded-full font-semibold">
+                <span class="ui-badge-commerce inline-flex items-center gap-1.5 rounded-full px-3 py-1 font-semibold">
                   <i class="pi pi-star-fill text-xs"></i> {{ tier.name }}
                 </span>
               </td>
@@ -183,14 +183,15 @@ onMounted(() => {
         </div>
 
         <div class="flex flex-col gap-1.5">
-          <label for="membership-benefits" class="text-xs font-bold text-slate-500">Quyền lợi và Lợi ích nổi bật</label>
-          <InputText id="membership-benefits" v-model="selectedTier.benefits" placeholder="Nhập các quyền lợi, cách nhau bằng dấu phẩy..." class="w-full min-h-11 text-sm" />
+          <label for="membership-benefits" class="text-sm font-bold text-slate-700">Mô tả chương trình</label>
+          <InputText id="membership-benefits" v-model="selectedTier.benefits" aria-describedby="membership-benefits-help" placeholder="Ví dụ: Quà tặng theo chương trình đã công bố" class="w-full min-h-11 text-base" />
+          <p id="membership-benefits-help" class="text-sm leading-5 text-slate-600">Đây là nội dung mô tả. Chỉ chiết khấu và tích điểm có dấu xác minh ở trang khách hàng mới được xem là quyền lợi tự động đang hoạt động.</p>
         </div>
       </div>
       
       <template #footer>
         <Button label="Hủy" class="p-button-text p-button-sm text-xs" @click="showEditDialog = false" />
-        <Button label="Lưu thiết lập" class="p-button-primary bg-indigo-600 text-white p-button-sm text-xs font-bold" @click="saveTier" />
+        <Button label="Lưu thiết lập" class="min-h-11 border-brand-green-strong bg-brand-green-strong text-white font-bold" @click="saveTier" />
       </template>
     </Dialog>
   </div>

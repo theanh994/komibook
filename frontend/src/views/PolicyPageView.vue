@@ -41,7 +41,7 @@ const pages = {
     ],
     links: [
       ['Điều khoản sử dụng', '/terms'],
-      ['Liên hệ hỗ trợ', '/contact'],
+      ['Trung tâm trợ giúp', '/help-center'],
     ],
   },
   ebooks: {
@@ -74,7 +74,7 @@ const pages = {
     ],
     links: [
       ['Bản quyền và hàng giả', '/policies/copyright'],
-      ['Gửi yêu cầu hỗ trợ', '/support'],
+      ['Mở hướng dẫn hỗ trợ', '/help-center'],
     ],
   },
   copyright: {
@@ -90,7 +90,7 @@ const pages = {
       ['Xử lý thận trọng', 'KomiBook có thể hạn chế hiển thị trong thời gian xem xét nhưng không tự nhận là cơ quan phân xử quyền sở hữu trí tuệ.'],
     ],
     links: [
-      ['Liên hệ hỗ trợ', '/contact'],
+      ['Trung tâm trợ giúp', '/help-center'],
       ['Chính sách sách cũ', '/policies/used-books'],
     ],
   },

@@ -17,7 +17,6 @@ import UserDetailView from '../views/admin/UserDetailView.vue'
 import NotificationAnalyticsView from '../views/admin/NotificationAnalyticsView.vue'
 import HelpDeskView from '../views/admin/HelpDeskView.vue'
 import TicketDetailView from '../views/admin/TicketDetailView.vue'
-import CustomerSupportView from '../views/CustomerSupportView.vue'
 import VendorApprovalsView from '../views/admin/VendorApprovalsView.vue'
 import MembershipTiersView from '../views/admin/MembershipTiersView.vue'
 
@@ -59,18 +58,13 @@ describe('Phase 3 Operational Truth Behavioral Tests', () => {
     expect(setupState.error.value).toContain('Không thể kết nối API thông tin người dùng.')
   })
 
-  it('HelpDeskView and CustomerSupportView do not generate fallback tickets on API rejection', async () => {
+  it('the legacy staff ticket desk does not generate fallback tickets on API rejection', async () => {
     vi.spyOn(apiClient, 'get').mockRejectedValue(new Error('API rejection'))
 
     const { setupState: helpState } = mountAndCapture(HelpDeskView)
     try { await helpState.fetchTickets() } catch (err) { expect(err).toBeDefined() }
     expect(helpState.tickets.value).toEqual([])
     expect(helpState.error.value).toContain('Không thể kết nối API danh sách ticket.')
-
-    const { setupState: custState } = mountAndCapture(CustomerSupportView)
-    try { await custState.fetchTickets() } catch (err) { expect(err).toBeDefined() }
-    expect(custState.tickets.value).toEqual([])
-    expect(custState.error.value).toContain('Không thể kết nối API danh sách yêu cầu.')
   })
 
   it('TicketDetailView sets error state and clears messages on API rejection', async () => {

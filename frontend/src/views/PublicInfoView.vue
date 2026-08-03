@@ -29,32 +29,6 @@ const pages = {
     note: 'KomiBook đang tiếp tục hoàn thiện sản phẩm. Những tính năng chưa khả dụng sẽ được ghi rõ thay vì tạo thao tác không có hiệu lực.',
     cta: { label: 'Khám phá sách', to: '/catalog', icon: 'arrow_forward' },
   },
-  contact: {
-    eyebrow: 'Liên hệ',
-    title: 'Tìm đúng kênh hỗ trợ cho vấn đề của bạn',
-    intro: 'KomiBook không công bố hotline hoặc địa chỉ email hỗ trợ khi các kênh đó chưa được cấu hình chính thức.',
-    sections: [
-      {
-        icon: 'help_center',
-        title: 'Tra cứu trước tại Trung tâm trợ giúp',
-        body: 'Các hướng dẫn phổ biến về tài khoản, mua sách, ebook, đơn hàng và trả hàng được tập trung tại Trung tâm trợ giúp.',
-        link: { label: 'Mở Trung tâm trợ giúp', to: '/help-center' },
-      },
-      {
-        icon: 'support_agent',
-        title: 'Gửi yêu cầu hỗ trợ',
-        body: 'Người dùng đã đăng nhập có thể tạo ticket, theo dõi trạng thái và trao đổi trong cùng một luồng hỗ trợ.',
-        link: { label: 'Đi tới trang hỗ trợ', to: '/support' },
-      },
-      {
-        icon: 'description',
-        title: 'Chuẩn bị thông tin cần thiết',
-        body: 'Hãy cung cấp mã đơn hàng hoặc mã ticket liên quan và mô tả vấn đề. Không gửi mật khẩu, mã OTP hoặc thông tin thanh toán nhạy cảm.',
-      },
-    ],
-    note: 'Thời gian phản hồi phụ thuộc loại yêu cầu và trạng thái vận hành; KomiBook không hiển thị cam kết thời gian khi chưa có cấu hình chính thức.',
-    cta: { label: 'Xem câu hỏi thường gặp', to: '/faq', icon: 'quiz' },
-  },
   faq: {
     eyebrow: 'Câu hỏi thường gặp',
     title: 'Những điều cần biết trước khi mua, đọc hoặc xuất bản',
@@ -86,7 +60,7 @@ const pages = {
         body: 'Đơn vị kinh doanh đăng ký Nhà bán và khai báo chuỗi cung ứng. Cá nhân bán lại sách đã qua sử dụng có thể dùng khu vực Người bán sách cũ.',
       },
     ],
-    note: 'Nếu tình huống của bạn không nằm trong danh sách, hãy tra cứu Trung tâm trợ giúp hoặc gửi ticket sau khi đăng nhập.',
+    note: 'Nếu tình huống của bạn không nằm trong danh sách, hãy tra cứu Trung tâm trợ giúp hoặc mở Hộp thư hỗ trợ để trò chuyện với AI và nhân viên.',
     cta: { label: 'Mở Trung tâm trợ giúp', to: '/help-center', icon: 'help' },
   },
 }
@@ -128,7 +102,11 @@ const page = computed(() => pages[route.meta.pageKey] || pages.about)
       {{ page.note }}
     </aside>
 
-    <div class="mt-8">
+    <div class="mt-8 flex flex-wrap gap-3">
+      <button v-if="isContactPage" type="button" class="ui-btn ui-btn-commerce" @click="chatStore.openChat()">
+        <span class="material-symbols-outlined" aria-hidden="true">forum</span>
+        Mở trợ lý và hỗ trợ trực tiếp
+      </button>
       <RouterLink
         :to="page.cta.to"
         class="inline-flex min-h-12 items-center gap-2 rounded-xl bg-primary px-5 py-3 font-bold text-on-primary shadow-sm transition hover:bg-primary/90"

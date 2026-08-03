@@ -7,6 +7,7 @@ import apiClient from '@/services/axios'
 import { useAuthStore } from '@/stores/auth'
 import { useCartStore } from '@/stores/cart'
 import { useWishlistStore } from '@/stores/wishlist'
+import { useChatStore } from '@/stores/chatStore'
 
 const route = useRoute()
 const router = useRouter()
@@ -14,6 +15,12 @@ const toast = useToast()
 const authStore = useAuthStore()
 const cartStore = useCartStore()
 const wishlistStore = useWishlistStore()
+const chatStore = useChatStore()
+
+const contactVendor = () => {
+  if (!vendor.value) return
+  chatStore.openChatWithVendor(vendor.value.id, vendor.value.shop_name || 'Gian hàng')
+}
 
 const loading = ref(true)
 const error = ref('')
@@ -146,18 +153,29 @@ watch(() => route.params.slug, () => loadStorefront())
                 <span><strong class="text-on-surface">{{ pagination.total }}</strong> sách đang bán</span>
               </div>
             </div>
-            <button
-              v-if="canFollow"
-              type="button"
-              class="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl px-5 font-bold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
-              :class="following ? 'border border-primary bg-primary-container text-on-primary-container' : 'bg-primary text-on-primary hover:bg-primary-container hover:text-on-primary-container'"
-              :disabled="followLoading || !followAvailable"
-              :aria-pressed="following"
-              @click="toggleFollow"
-            >
-              <span class="material-symbols-outlined" aria-hidden="true">{{ following ? 'notifications_active' : 'add_alert' }}</span>
-              {{ following ? 'Đang theo dõi' : 'Theo dõi gian hàng' }}
-            </button>
+            <div class="flex flex-wrap gap-2">
+              <button
+                v-if="canFollow"
+                type="button"
+                class="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl px-5 font-bold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
+                :class="following ? 'border border-primary bg-primary-container text-on-primary-container' : 'bg-primary text-on-primary hover:bg-primary-container hover:text-on-primary-container'"
+                :disabled="followLoading || !followAvailable"
+                :aria-pressed="following"
+                @click="toggleFollow"
+              >
+                <span class="material-symbols-outlined" aria-hidden="true">{{ following ? 'notifications_active' : 'add_alert' }}</span>
+                {{ following ? 'Đang theo dõi' : 'Theo dõi gian hàng' }}
+              </button>
+              <button
+                v-if="authStore.isAuthenticated"
+                type="button"
+                class="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl border border-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 px-5 font-bold text-emerald-700 dark:text-emerald-300 hover:bg-emerald-600 hover:text-white transition-colors cursor-pointer"
+                @click="contactVendor"
+              >
+                <span class="material-symbols-outlined text-lg" aria-hidden="true">chat</span>
+                Nhắn tin cho Shop
+              </button>
+            </div>
           </div>
         </section>
 

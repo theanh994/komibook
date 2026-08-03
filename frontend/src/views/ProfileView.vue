@@ -32,6 +32,7 @@
             <button              v-for="tab in tabs"              :key="tab.id"
               type="button"
               role="tab"
+              :id="`profile-tab-${tab.id}`"
               :aria-selected="activeTab === tab.id"
               :aria-controls="`profile-panel-${tab.id}`"
               @click="switchTab(tab.id)"
@@ -159,50 +160,74 @@
             </div>
 
             <!-- TAB 2: HẠNG VIP & QUYỀN LỢI -->
-            <div v-if="activeTab === 'membership'" id="profile-panel-membership" role="tabpanel" class="animate-fade-in space-y-lg">
-              <div class="p-6 rounded-3xl text-white relative overflow-hidden shadow-xl"
-                :class="authStore.user?.membership_tier ? 'bg-gradient-to-br from-amber-500 via-yellow-600 to-amber-700' : 'bg-gradient-to-br from-slate-600 to-slate-800'"
-              >
-                <div class="absolute -right-10 -bottom-10 w-40 h-40 bg-white/10 rounded-full blur-2xl"></div>
-                <div class="absolute right-10 top-10 w-24 h-24 bg-white/10 rounded-full blur-xl"></div>
-
-                <div class="flex justify-between items-start relative z-10">
-                  <div>
-                    <span class="text-xs uppercase tracking-widest font-black opacity-80">Thẻ Thành Viên</span>
-                    <h2 class="text-2xl font-black mt-1">{{ authStore.user?.membership_tier?.name || 'Khách hàng Thân thiết' }}</h2>
-                  </div>
-                </div>
-
-                <div class="mt-8 flex justify-between items-end relative z-10">
-                  <div>
-                    <span class="text-[11px] uppercase tracking-wider opacity-70">Điểm tích lũy</span>
-                    <div class="text-xl font-bold mt-0.5">{{ authStore.user?.points || 0 }} <span class="text-xs opacity-80">KomiPoints</span></div>
-                  </div>
-                  <div class="text-right">
-                    <span class="text-[11px] uppercase tracking-wider opacity-70">Ưu đãi giảm giá</span>
-                    <div class="text-xl font-black mt-0.5">{{ authStore.user?.membership_tier?.discount_percent || 0 }}%</div>
-                  </div>
-                </div>
+            <div v-if="activeTab === 'membership'" id="profile-panel-membership" role="tabpanel" class="animate-fade-in space-y-6" aria-labelledby="profile-tab-membership">
+              <div v-if="membershipLoading" class="ui-panel grid min-h-48 place-items-center" role="status" aria-live="polite">
+                <div class="flex items-center gap-3 text-on-surface-variant"><i class="pi pi-spin pi-spinner text-xl text-primary" aria-hidden="true"></i><span>Đang tải hạng thành viên thực tế…</span></div>
               </div>
 
-              <!-- VIP Benefits List -->
-              <div class="bg-surface-container-low p-6 rounded-2xl border border-outline-variant/20 space-y-4">
-                <h3 class="font-bold text-on-surface">Quyền lợi đặc quyền của bạn</h3>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <h4 class="text-sm font-bold text-on-surface">Chiết khấu trực tiếp</h4>
-                    <p class="text-xs text-on-surface-variant">Giảm giá {{ authStore.user?.membership_tier?.discount_percent || 0 }}% trực tiếp trên mỗi hóa đơn khi thanh toán.</p>
-                  </div>
-                  <div>
-                    <h4 class="text-sm font-bold text-on-surface">Tích lũy điểm tự động</h4>
-                    <p class="text-xs text-on-surface-variant">Nhận 1 điểm tích lũy cho mỗi 10.000 VNĐ chi tiêu khi đơn hàng giao thành công.</p>
-                  </div>
-                </div>
-
-                <div v-if="authStore.user?.membership_tier?.benefits" class="p-4 bg-primary/5 rounded-xl border border-primary/10 mt-2">
-                  <p class="text-xs text-primary font-bold">Lợi ích bổ sung: {{ authStore.user?.membership_tier?.benefits }}</p>
-                </div>
+              <div v-else-if="membershipError" class="ui-alert ui-alert-error" role="alert">
+                <p class="font-bold">Không thể tải hạng thành viên</p>
+                <p class="mt-1 text-sm">{{ membershipError }}</p>
+                <button type="button" class="ui-btn ui-btn-secondary mt-3" @click="fetchMembership">Thử lại</button>
               </div>
+
+              <template v-else-if="membership">
+                <section class="relative overflow-hidden rounded-2xl bg-gradient-to-br from-brand-green-strong to-commerce p-6 text-white shadow-lg" aria-labelledby="current-membership-title">
+                  <div class="relative z-10 grid gap-6 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+                    <div>
+                      <p class="text-sm font-semibold text-white/85">Hạng thành viên hiện tại</p>
+                      <h2 id="current-membership-title" class="mt-1 text-3xl font-black">{{ currentMembershipTier?.name || 'Chưa xếp hạng' }}</h2>
+                      <p class="mt-4 text-base"><strong class="text-2xl tabular-nums">{{ membership.points.toLocaleString('vi-VN') }}</strong> KomiPoints</p>
+                    </div>
+                    <div class="rounded-xl border border-white/30 bg-white/10 px-4 py-3 sm:text-right">
+                      <p class="text-sm text-white/85">Giảm tại checkout</p>
+                      <p class="text-3xl font-black tabular-nums">{{ currentMembershipTier?.discount_percent || 0 }}%</p>
+                    </div>
+                  </div>
+                </section>
+
+                <section class="ui-panel" aria-labelledby="membership-progress-title">
+                  <div class="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <h3 id="membership-progress-title" class="text-lg font-bold text-on-surface">Tiến độ lên hạng</h3>
+                      <p class="mt-1 text-sm text-on-surface-variant">{{ nextMembershipTier ? `Còn ${membership.points_to_next_tier.toLocaleString('vi-VN')} điểm để đạt ${nextMembershipTier.name}.` : 'Bạn đang ở hạng cao nhất hiện có.' }}</p>
+                    </div>
+                    <span class="ui-badge-commerce rounded-full px-3 py-1 text-sm font-bold">{{ membership.progress_percent }}%</span>
+                  </div>
+                  <div class="mt-4 h-3 overflow-hidden rounded-full bg-surface-container-high" role="progressbar" :aria-valuenow="membership.progress_percent" aria-valuemin="0" aria-valuemax="100" :aria-label="`Tiến độ lên hạng ${membership.progress_percent}%`">
+                    <div class="h-full rounded-full bg-brand-green-strong transition-[width] duration-300" :style="{ width: `${membership.progress_percent}%` }"></div>
+                  </div>
+                  <div class="mt-4 flex gap-3 rounded-xl border border-outline-variant/40 bg-surface-container-low p-4">
+                    <span class="material-symbols-outlined text-primary" aria-hidden="true">verified</span>
+                    <div><p class="font-bold text-on-surface">{{ membership.earning_rule.label }}</p><p class="mt-1 text-sm text-on-surface-variant">{{ membership.earning_rule.description }}</p></div>
+                  </div>
+                </section>
+
+                <section aria-labelledby="membership-tiers-title">
+                  <div class="mb-4">
+                    <h3 id="membership-tiers-title" class="text-xl font-bold text-on-surface">Các mức hạng và quyền lợi đang hoạt động</h3>
+                    <p class="mt-1 text-sm text-on-surface-variant">Dữ liệu được lấy trực tiếp từ cấu hình hạng của KomiBook. Quyền lợi có dấu xác minh là quyền lợi đã có logic thực thi.</p>
+                  </div>
+                  <div class="grid gap-4 lg:grid-cols-3">
+                    <article v-for="tier in membership.tiers" :key="tier.id" class="ui-panel relative" :class="tier.id === membership.current_tier_id ? 'border-brand-green-strong ring-2 ring-brand-green/20' : ''">
+                      <span v-if="tier.id === membership.current_tier_id" class="ui-badge-commerce inline-flex rounded-full px-3 py-1 text-sm font-bold"><span class="material-symbols-outlined mr-1 text-base" aria-hidden="true">check_circle</span>Hạng của bạn</span>
+                      <h4 class="mt-3 text-xl font-black text-on-surface">{{ tier.name }}</h4>
+                      <p class="mt-1 text-sm text-on-surface-variant">Từ <strong class="tabular-nums text-on-surface">{{ tier.min_points.toLocaleString('vi-VN') }}</strong> điểm</p>
+                      <ul class="mt-4 space-y-3">
+                        <li v-for="benefit in tier.operational_benefits" :key="benefit.code" class="flex gap-2">
+                          <span class="material-symbols-outlined mt-0.5 text-brand-green-strong" aria-hidden="true">verified</span>
+                          <div><p class="font-bold text-on-surface">{{ benefit.label }}</p><p class="mt-1 text-sm leading-6 text-on-surface-variant">{{ benefit.description }}</p></div>
+                        </li>
+                      </ul>
+                      <div v-if="tier.program_description" class="mt-4 rounded-xl border border-secondary/20 bg-secondary-fixed/45 p-3">
+                        <p class="flex items-center gap-2 text-sm font-bold text-on-secondary-fixed-variant"><span class="material-symbols-outlined text-lg" aria-hidden="true">info</span>Mô tả chương trình</p>
+                        <p class="mt-1 text-sm leading-6 text-on-surface-variant">{{ tier.program_description }}</p>
+                        <p class="mt-2 text-sm font-semibold text-secondary">Các nội dung ngoài danh sách có dấu xác minh chưa được coi là quyền lợi tự động.</p>
+                      </div>
+                    </article>
+                  </div>
+                </section>
+              </template>
             </div>
 
             <!-- TAB 3: KHU VỰC 4 - QUẢN LÝ SỔ ĐỊA CHỈ -->
@@ -437,6 +462,9 @@ const toast = useToast()
 const confirm = useConfirm()
 
 const activeTab = ref('general')
+const membership = ref(null)
+const membershipLoading = ref(false)
+const membershipError = ref('')
 const tabs = [
   { id: 'general', label: 'Thông tin chung & Sở thích' },
   { id: 'membership', label: 'Hạng VIP & Quyền lợi' },
@@ -453,6 +481,23 @@ const roleLabel = computed(() => {
   if (authStore.isVendor) return 'Vendor'
   return 'Độc Giả'
 })
+
+const currentMembershipTier = computed(() => membership.value?.tiers?.find(tier => tier.id === membership.value.current_tier_id) || null)
+const nextMembershipTier = computed(() => membership.value?.tiers?.find(tier => tier.id === membership.value.next_tier_id) || null)
+
+const fetchMembership = async () => {
+  membershipLoading.value = true
+  membershipError.value = ''
+  try {
+    const response = await apiClient.get('/api/profile/membership')
+    membership.value = response.data?.data || null
+  } catch (error) {
+    membership.value = null
+    membershipError.value = error.response?.data?.message || 'Vui lòng thử lại sau.'
+  } finally {
+    membershipLoading.value = false
+  }
+}
 
 // Forms
 const loadingInfo = ref(false)
@@ -491,6 +536,7 @@ const resetPasswordForm = () => {
 
 const switchTab = (tabId) => {
   activeTab.value = tabId
+  if (tabId === 'membership' && !membership.value) fetchMembership()
   if (tabId === 'security') {
     resetPasswordForm()
     fetchSessions()

@@ -3,6 +3,7 @@ import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { RouterView, useRoute } from 'vue-router'
 import AppHeader from '@/components/layout/AppHeader.vue'
 import AppFooter from '@/components/layout/AppFooter.vue'
+import ChatWidget from '@/components/chat/ChatWidget.vue'
 import Toast from 'primevue/toast'
 import ConfirmDialog from 'primevue/confirmdialog'
 
@@ -36,6 +37,7 @@ watch(
     })
   },
 )
+
 </script>
 
 <template>
@@ -62,6 +64,9 @@ watch(
     <div v-else class="flex-grow">
       <RouterView />
     </div>
+
+    <!-- Chatbot AI Floating Widget -->
+    <ChatWidget v-if="!$route.meta.hideHeader" />
 
     <!-- Footer Toàn cục (ẩn ở Admin/Vendor Dashboard & Reader) -->
     <AppFooter v-if="!$route.meta.hideHeader" />

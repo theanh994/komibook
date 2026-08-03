@@ -13,21 +13,21 @@ class HelpCenterController extends Controller
      */
     public function index(Request $request)
     {
-        $query = HelpArticle::where('status', 'published');
+        $query = HelpArticle::publicKnowledge();
 
         if ($request->has('category')) {
             $query->where('category_name', $request->category);
         }
 
         if ($request->has('search')) {
-            $query->where('title', 'like', '%' . $request->search . '%');
+            $query->where('title', 'like', '%'.$request->search.'%');
         }
 
         $articles = $query->orderBy('views_count', 'desc')->get();
 
         return response()->json([
             'status' => 'success',
-            'data' => $articles
+            'data' => $articles,
         ]);
     }
 
@@ -36,12 +36,12 @@ class HelpCenterController extends Controller
      */
     public function show($id)
     {
-        $article = HelpArticle::where('status', 'published')->findOrFail($id);
+        $article = HelpArticle::publicKnowledge()->findOrFail($id);
         $article->increment('views_count');
 
         return response()->json([
             'status' => 'success',
-            'data' => $article
+            'data' => $article,
         ]);
     }
 
@@ -50,12 +50,12 @@ class HelpCenterController extends Controller
      */
     public function helpful($id)
     {
-        $article = HelpArticle::where('status', 'published')->findOrFail($id);
+        $article = HelpArticle::publicKnowledge()->findOrFail($id);
         $article->increment('helpful_count');
 
         return response()->json([
             'status' => 'success',
-            'message' => 'Cảm ơn phản hồi của bạn!'
+            'message' => 'Cảm ơn phản hồi của bạn!',
         ]);
     }
 
@@ -68,7 +68,7 @@ class HelpCenterController extends Controller
 
         return response()->json([
             'status' => 'success',
-            'data' => $articles
+            'data' => $articles,
         ]);
     }
 
@@ -94,7 +94,7 @@ class HelpCenterController extends Controller
         return response()->json([
             'status' => 'success',
             'message' => 'Đã tạo bài viết trợ giúp mới.',
-            'data' => $article
+            'data' => $article,
         ], 201);
     }
 
@@ -121,7 +121,7 @@ class HelpCenterController extends Controller
         return response()->json([
             'status' => 'success',
             'message' => 'Cập nhật bài viết thành công.',
-            'data' => $article
+            'data' => $article,
         ]);
     }
 
@@ -135,7 +135,7 @@ class HelpCenterController extends Controller
 
         return response()->json([
             'status' => 'success',
-            'message' => 'Đã xóa bài viết trợ giúp thành công.'
+            'message' => 'Đã xóa bài viết trợ giúp thành công.',
         ]);
     }
 }

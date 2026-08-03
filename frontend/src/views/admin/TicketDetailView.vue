@@ -140,7 +140,7 @@ const goBack = () => {
   if (isAdminRoute.value) {
     router.push({ name: 'admin-support-tickets' })
   } else {
-    router.push({ name: 'customer-support' })
+    router.push({ name: 'help-center' })
   }
 }
 

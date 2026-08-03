@@ -28,6 +28,41 @@ class SecurityHardeningTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_social_login_config_exposes_only_public_sdk_values(): void
+    {
+        Config::set('services.google.client_id', 'google-public-client-id');
+        Config::set('services.facebook.app_id', 'facebook-public-app-id');
+        Config::set('services.facebook.app_secret', 'facebook-private-secret');
+        Config::set('services.facebook.graph_version', 'v-test');
+
+        $response = $this->getJson('/api/auth/social-login-config');
+
+        $response->assertOk()
+            ->assertJsonPath('data.google.enabled', true)
+            ->assertJsonPath('data.google.client_id', 'google-public-client-id')
+            ->assertJsonPath('data.facebook.enabled', true)
+            ->assertJsonPath('data.facebook.app_id', 'facebook-public-app-id')
+            ->assertJsonPath('data.facebook.graph_version', 'v-test')
+            ->assertJsonMissing(['app_secret', 'facebook-private-secret']);
+    }
+
+    public function test_social_login_config_disables_incomplete_providers(): void
+    {
+        Config::set('services.google.client_id', '');
+        Config::set('services.facebook.app_id', 'facebook-public-app-id');
+        Config::set('services.facebook.app_secret', '');
+        Config::set('services.facebook.graph_version', 'v-test');
+
+        $response = $this->getJson('/api/auth/social-login-config');
+
+        $response->assertOk()
+            ->assertJsonPath('data.google.enabled', false)
+            ->assertJsonPath('data.google.client_id', null)
+            ->assertJsonPath('data.facebook.enabled', false)
+            ->assertJsonPath('data.facebook.app_id', null)
+            ->assertJsonPath('data.facebook.graph_version', null);
+    }
+
     /**
      * AUTH-02: Test login tạo cookie session, /api/auth/me dùng cookie session không cần Bearer token.
      * Login, Register, Google login response không chứa access_token hay token_type.

@@ -156,6 +156,40 @@
                 <p class="text-xs font-bold uppercase tracking-wider text-outline">{{ stat.label }}</p>
               </div>
             </div>
+
+            <section class="mt-6 rounded-2xl border border-outline-variant/30 bg-surface-container-low p-5" aria-labelledby="commercial-parties-title">
+              <div class="flex flex-col gap-3">
+                <div>
+                  <p class="text-xs font-bold uppercase tracking-wider text-primary">Nguồn sách đã khai báo</p>
+                  <h2 id="commercial-parties-title" class="mt-1 text-lg font-bold text-on-surface">Thông tin xuất bản và cung ứng</h2>
+                </div>
+                <div v-if="book.vendor" class="flex flex-wrap gap-2">
+                  <router-link v-if="book.vendor.slug" :to="{ name: 'vendor-storefront', params: { slug: book.vendor.slug } }" class="inline-flex min-h-11 items-center gap-2 rounded-xl border border-primary px-4 text-sm font-bold text-primary no-underline transition-colors hover:bg-primary hover:text-on-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
+                    <span class="material-symbols-outlined text-lg" aria-hidden="true">storefront</span>
+                    Xem gian hàng {{ book.vendor.name }}
+                  </router-link>
+                  <button type="button" class="inline-flex min-h-11 items-center gap-2 rounded-xl border border-outline-variant bg-surface-container-lowest px-4 text-sm font-bold text-on-surface" :disabled="followLoading || (authStore.isAuthenticated && !followAvailable)" @click="toggleVendorFollow">
+                    <span class="material-symbols-outlined text-lg" aria-hidden="true">{{ followingVendor ? 'notifications_active' : 'add_alert' }}</span>
+                    {{ followingVendor ? 'Đang theo dõi' : 'Theo dõi gian hàng' }}
+                  </button>
+                  <button v-if="authStore.isAuthenticated" type="button" class="inline-flex min-h-11 items-center gap-2 rounded-xl border border-emerald-600 bg-emerald-50 px-4 text-sm font-bold text-emerald-700 transition-colors hover:bg-emerald-600 hover:text-white dark:bg-emerald-950/40 dark:text-emerald-300 cursor-pointer" @click="contactVendor">
+                    <span class="material-symbols-outlined text-lg" aria-hidden="true">chat</span>
+                    Nhắn tin cho Shop
+                  </button>
+                </div>
+              </div>
+              <div v-if="book.commercial_parties && Object.keys(book.commercial_parties).length" class="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                <div v-for="(party, role) in book.commercial_parties" :key="role" class="min-h-24 rounded-xl border border-outline-variant/40 bg-surface-container-lowest p-4 transition-shadow duration-200 hover:shadow-md">
+                  <div class="flex items-start gap-1.5">
+                    <p class="text-xs font-semibold uppercase tracking-wider text-on-surface-variant">{{ role === 'publisher' ? 'Nhà xuất bản' : role === 'supplier' ? 'Nhà cung cấp' : 'Đơn vị chịu trách nhiệm được khai báo' }}</p>
+                    <InfoTip v-if="party.is_demo" text="Dữ liệu mô phỏng phục vụ trình diễn, không phải xác minh quan hệ pháp lý." :label="`Giải thích dữ liệu mô phỏng của ${party.display_name}`" />
+                  </div>
+                  <router-link :to="{ name: 'organization-public', params: { slug: party.slug } }" class="mt-2 block font-bold text-on-surface no-underline hover:text-primary focus-visible:rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-fixed-dim">{{ party.display_name }}</router-link>
+                  <span v-if="!party.is_demo" class="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-primary"><span class="material-symbols-outlined text-sm" aria-hidden="true">verified</span>Đã xác minh</span>
+                </div>
+              </div>
+              <p v-else class="mt-4 rounded-xl bg-surface-container p-4 text-sm text-on-surface-variant">Sách chưa được gắn Nhà xuất bản, Nhà cung cấp và đơn vị chịu trách nhiệm.</p>
+            </section>
           </div>
 
           <!-- ─── RIGHT COLUMN: DETAILS & SPECIFICATIONS (7 cols) ─── -->
@@ -253,36 +287,6 @@
                    <p class="text-sm font-bold text-on-surface tracking-tight">{{ meta.value }}</p>
                 </div>
               </div>
-
-              <section class="mb-6 rounded-2xl border border-outline-variant/30 bg-surface-container-low p-5" aria-labelledby="commercial-parties-title">
-                <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <p class="text-xs font-bold uppercase tracking-wider text-primary">Nguồn sách đã khai báo</p>
-                    <h2 id="commercial-parties-title" class="mt-1 text-lg font-bold text-on-surface">Thông tin xuất bản và cung ứng</h2>
-                  </div>
-                  <div v-if="book.vendor" class="flex flex-wrap gap-2">
-                    <router-link v-if="book.vendor.slug" :to="{ name: 'vendor-storefront', params: { slug: book.vendor.slug } }" class="inline-flex min-h-11 items-center gap-2 rounded-xl border border-primary px-4 text-sm font-bold text-primary no-underline transition-colors hover:bg-primary hover:text-on-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
-                      <span class="material-symbols-outlined text-lg" aria-hidden="true">storefront</span>
-                      Xem gian hàng {{ book.vendor.name }}
-                    </router-link>
-                    <button type="button" class="inline-flex min-h-11 items-center gap-2 rounded-xl border border-outline-variant bg-surface-container-lowest px-4 text-sm font-bold text-on-surface" :disabled="followLoading || (authStore.isAuthenticated && !followAvailable)" @click="toggleVendorFollow">
-                      <span class="material-symbols-outlined text-lg" aria-hidden="true">{{ followingVendor ? 'notifications_active' : 'add_alert' }}</span>
-                      {{ followingVendor ? 'Đang theo dõi' : 'Theo dõi gian hàng' }}
-                    </button>
-                  </div>
-                </div>
-                <div v-if="book.commercial_parties && Object.keys(book.commercial_parties).length" class="mt-5 grid gap-3 md:grid-cols-3">
-                  <div v-for="(party, role) in book.commercial_parties" :key="role" class="min-h-24 rounded-xl border border-outline-variant/40 bg-surface-container-lowest p-4 transition-shadow duration-200 hover:shadow-md">
-                    <div class="flex items-start gap-1.5">
-                      <p class="text-xs font-semibold uppercase tracking-wider text-on-surface-variant">{{ role === 'publisher' ? 'Nhà xuất bản' : role === 'supplier' ? 'Nhà cung cấp' : 'Đơn vị chịu trách nhiệm được khai báo' }}</p>
-                      <InfoTip v-if="party.is_demo" text="Dữ liệu mô phỏng phục vụ trình diễn, không phải xác minh quan hệ pháp lý." :label="`Giải thích dữ liệu mô phỏng của ${party.display_name}`" />
-                    </div>
-                    <router-link :to="{ name: 'organization-public', params: { slug: party.slug } }" class="mt-2 block font-bold text-on-surface no-underline hover:text-primary focus-visible:rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-fixed-dim">{{ party.display_name }}</router-link>
-                    <span v-if="!party.is_demo" class="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-primary"><span class="material-symbols-outlined text-sm" aria-hidden="true">verified</span>Đã xác minh</span>
-                  </div>
-                </div>
-                <p v-else-if="!book.commercial_parties || !Object.keys(book.commercial_parties).length" class="mt-4 rounded-xl bg-surface-container p-4 text-sm text-on-surface-variant">Sách chưa được gắn Nhà xuất bản, Nhà cung cấp và đơn vị chịu trách nhiệm.</p>
-              </section>
 
               <!-- Compact Description -->
               <div class="w-full max-w-full overflow-hidden">
@@ -553,6 +557,7 @@ import apiClient from '@/services/axios'
 import { useAuthStore } from '@/stores/auth'
 import { useCartStore } from '@/stores/cart'
 import { useWishlistStore } from '@/stores/wishlist'
+import { useChatStore } from '@/stores/chatStore'
 import InfoTip from '@/components/InfoTip.vue'
 import SeriesOrbitCarousel from '@/components/SeriesOrbitCarousel.vue'
 
@@ -562,6 +567,15 @@ const toast = useToast()
 const authStore = useAuthStore()
 const cartStore = useCartStore()
 const wishlistStore = useWishlistStore()
+const chatStore = useChatStore()
+
+const contactVendor = () => {
+  if (!book.value?.vendor) return
+  chatStore.openChatWithVendor(book.value.vendor.id, book.value.vendor.name || 'Gian hàng', {
+    id: book.value.id,
+    title: book.value.title,
+  })
+}
 
 const book = ref(null)
 const followingVendor = ref(false)

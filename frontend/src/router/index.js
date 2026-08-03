@@ -173,8 +173,7 @@ const router = createRouter({
     {
       path: '/contact',
       name: 'contact',
-      component: () => import('@/views/PublicInfoView.vue'),
-      meta: { requiresAuth: false, pageKey: 'contact', title: 'Liên hệ' }
+      redirect: '/help-center'
     },
     {
       path: '/faq',
@@ -215,8 +214,7 @@ const router = createRouter({
     {
       path: '/support',
       name: 'customer-support',
-      component: () => import('@/views/CustomerSupportView.vue'),
-      meta: { requiresAuth: true }
+      redirect: '/help-center'
     },
     {
       path: '/support/tickets/:id',
@@ -423,6 +421,12 @@ const router = createRouter({
           meta: { requiresAuth: true, role: 'admin', hideHeader: true, title: 'Review tiềm năng' }
         },
         {
+          path: 'support',
+          name: 'admin-support',
+          component: () => import('@/views/vendor/CustomerSupportView.vue'),
+          meta: { requiresAuth: true, role: 'admin', hideHeader: true, title: 'Hỗ trợ khách hàng (Live Chat)' }
+        },
+        {
           path: 'support/tickets',
           name: 'admin-support-tickets',
           component: () => import('@/views/admin/HelpDeskView.vue'),
@@ -610,6 +614,12 @@ const router = createRouter({
           name: 'vendor-inventory-transfers-print',
           component: () => import('@/views/vendor/StockTransferPrintView.vue'),
           meta: { requiresAuth: true, role: 'vendor', hideHeader: true, title: 'In phiếu chuyển kho' }
+        },
+        {
+          path: 'support',
+          name: 'vendor-support',
+          component: () => import('@/views/vendor/CustomerSupportView.vue'),
+          meta: { requiresAuth: true, role: 'vendor', hideHeader: true, title: 'Hỗ trợ khách hàng' }
         },
       ]
     },

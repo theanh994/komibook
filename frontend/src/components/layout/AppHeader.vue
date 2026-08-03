@@ -339,6 +339,7 @@
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { useChatStore } from '@/stores/chatStore'
 import { useCartStore } from '@/stores/cart'
 import Menu from 'primevue/menu'
 import apiClient from '@/services/axios'
@@ -346,6 +347,7 @@ import apiClient from '@/services/axios'
 const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
+const chatStore = useChatStore()
 const cartStore = useCartStore()
 const logoExists = ref(false)
 const mobileMenuOpen = ref(false)
@@ -463,11 +465,13 @@ const userMenuItems = computed(() => {
     }
   }
 
-  items.push({
-    label: 'Liên hệ hỗ trợ',
-    icon: 'pi pi-question-circle',
-    command: () => router.push('/support')
-  })
+  if (authStore.isAuthenticated) {
+    items.push({
+      label: 'Hộp thư hỗ trợ',
+      icon: 'pi pi-comments',
+      command: () => chatStore.openConversationList()
+    })
+  }
   items.push({
     label: 'Trung tâm trợ giúp',
     icon: 'pi pi-info-circle',

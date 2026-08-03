@@ -169,14 +169,15 @@
       v-model:visible="quickViewVisible" 
       :modal="true" 
       :show-header="false"
-      class="!max-w-4xl !w-[95vw] !rounded-xl !border-2 !border-[#00b14f] !bg-white !shadow-2xl overflow-hidden relative"
+      class="!max-w-4xl !w-[95vw] !rounded-xl !border-2 !border-brand-green !bg-white !shadow-2xl overflow-hidden relative"
       contentClass="!p-0"
     >
       <div v-if="quickViewBook" class="flex flex-col md:flex-row min-h-[500px]">
         <!-- Close Button -->
         <button 
           @click="quickViewVisible = false"
-          class="absolute top-3 right-3 w-8 h-8 rounded-full border border-outline-variant/60 bg-white flex items-center justify-center cursor-pointer hover:border-[#00b14f] hover:scale-105 active:scale-95 transition-all z-50 text-xl font-bold text-gray-500"
+          class="absolute top-3 right-3 flex h-11 w-11 items-center justify-center rounded-full border border-outline-variant/60 bg-white text-xl font-bold text-gray-500 transition-[border-color,color,background-color] duration-200 hover:border-brand-green hover:text-brand-green-strong focus-visible:outline-none z-50 cursor-pointer"
+          aria-label="Đóng xem nhanh"
           type="button"
         >
           <span class="material-symbols-outlined text-[20px] text-gray-700">close</span>
@@ -217,7 +218,7 @@
 
             <!-- Price -->
             <div class="flex items-center gap-3 mb-5">
-              <span class="text-2xl font-extrabold text-[#00b14f]">{{ formatCurrency(quickViewBook.sale_price || quickViewBook.price) }}</span>
+              <span class="text-2xl font-extrabold text-brand-green-strong">{{ formatCurrency(quickViewBook.sale_price || quickViewBook.price) }}</span>
               <span v-if="quickViewBook.sale_price && quickViewBook.price > quickViewBook.sale_price" class="text-sm text-outline line-through">{{ formatCurrency(quickViewBook.price) }}</span>
             </div>
 
@@ -266,7 +267,7 @@
               <button 
                 type="button"
                 @click="goToDetail(quickViewBook.slug); quickViewVisible = false"
-                class="flex-grow h-10 bg-[#00b14f] text-white rounded-xl font-bold text-xs uppercase tracking-wider hover:bg-[#009e46] transition-all cursor-pointer border-none shadow-sm flex items-center justify-center"
+                class="flex min-h-11 flex-grow items-center justify-center rounded-xl border border-brand-green-strong bg-brand-green-strong px-4 text-sm font-bold text-white shadow-sm transition-colors duration-200 hover:bg-commerce cursor-pointer"
               >
                 Xem thêm
               </button>
@@ -275,7 +276,7 @@
               <button 
                 type="button"
                 @click="quickViewAddToCart"
-                class="flex-grow h-10 bg-[#00b14f] text-white rounded-xl font-bold text-xs uppercase tracking-wider hover:bg-[#009e46] transition-all cursor-pointer border-none shadow-sm flex items-center justify-center"
+                class="flex min-h-11 flex-grow items-center justify-center rounded-xl border border-brand-green-strong bg-brand-green-strong px-4 text-sm font-bold text-white shadow-sm transition-colors duration-200 hover:bg-commerce cursor-pointer"
               >
                 Thêm vào giỏ
               </button>

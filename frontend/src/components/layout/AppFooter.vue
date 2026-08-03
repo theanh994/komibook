@@ -38,7 +38,7 @@
         <div class="flex flex-col gap-2">
           <h3 class="mb-1 text-sm font-bold text-on-surface">Hỗ trợ</h3>
           <RouterLink class="inline-flex min-h-11 items-center text-sm text-on-surface-variant transition-colors hover:text-primary no-underline" to="/help-center">Trung tâm trợ giúp</RouterLink>
-          <RouterLink class="inline-flex min-h-11 items-center text-sm text-on-surface-variant transition-colors hover:text-primary no-underline" to="/contact">Liên hệ</RouterLink>
+          <button v-if="authStore.isAuthenticated" type="button" class="inline-flex min-h-11 cursor-pointer items-center border-0 bg-transparent p-0 text-left text-sm text-on-surface-variant transition-colors hover:text-primary" @click="chatStore.openConversationList()">Trò chuyện hỗ trợ</button>
           <RouterLink class="inline-flex min-h-11 items-center text-sm text-on-surface-variant transition-colors hover:text-primary no-underline" to="/faq">Câu hỏi thường gặp</RouterLink>
         </div>
 
@@ -70,6 +70,10 @@
 
 <script setup>
 import { computed } from 'vue'
+import { useChatStore } from '@/stores/chatStore'
+import { useAuthStore } from '@/stores/auth'
 
 const currentYear = computed(() => new Date().getFullYear())
+const chatStore = useChatStore()
+const authStore = useAuthStore()
 </script>

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { createSSRApp } from 'vue'
 import { renderToString } from 'vue/server-renderer'
+import { createPinia } from 'pinia'
 
 import AppFooter from '../components/layout/AppFooter.vue'
 import BlogView from '../views/BlogView.vue'
@@ -12,6 +13,7 @@ const RouterLinkStub = {
 
 async function render(Component) {
   const app = createSSRApp(Component)
+  app.use(createPinia())
   app.component('RouterLink', RouterLinkStub)
   return renderToString(app)
 }
@@ -33,6 +35,7 @@ describe('Phase 3C.3 unbacked public content closure', () => {
     expect(html).toContain('Tính năng đăng ký nhận tin chưa khả dụng')
     expect(html).toContain('disabled')
     expect(html).toContain('data-route="/help-center"')
+    expect(html).not.toContain('Trò chuyện hỗ trợ')
     expect(html).not.toContain('href="#"')
     expect(html).not.toContain('<form')
   })

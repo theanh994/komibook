@@ -38,7 +38,11 @@
   --color-surface-container-high: #e2e7ff;
   --color-surface-container-highest: #dae2fd;
   --color-surface-tint: #436082;
-  --color-commerce: #15803d;
+  --color-brand-green: #00b14f;
+  --color-brand-green-strong: #007a37;
+  --color-brand-green-container: #d8f5e3;
+  --color-on-brand-green-container: #064e2b;
+  --color-commerce: #007a37;
   --color-on-commerce: #ffffff;
   --color-warning: #a16207;
   --color-focus-ring: #2563eb;
@@ -199,6 +203,18 @@
     border: 1px solid var(--color-commerce);
     background: var(--color-commerce);
     color: var(--color-on-commerce);
+  }
+
+  .ui-badge-commerce {
+    border: 1px solid color-mix(in srgb, var(--color-brand-green) 45%, white);
+    background: var(--color-brand-green-container);
+    color: var(--color-on-brand-green-container);
+  }
+
+  .ui-badge-danger {
+    border: 1px solid color-mix(in srgb, var(--color-secondary) 35%, white);
+    background: var(--color-secondary-fixed);
+    color: var(--color-on-secondary-fixed-variant);
   }
 
   .ui-btn-secondary {

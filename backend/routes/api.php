@@ -22,12 +22,14 @@ use App\Http\Controllers\Api\BookController;
 use App\Http\Controllers\Api\BookPublishingController;
 use App\Http\Controllers\Api\CategoryController;
 use App\Http\Controllers\Api\ChapterController;
+use App\Http\Controllers\Api\ChatController;
 use App\Http\Controllers\Api\CheckoutController;
 use App\Http\Controllers\Api\CouponController;
 use App\Http\Controllers\Api\DrmController;
 use App\Http\Controllers\Api\EmailRegistrationOtpController;
 use App\Http\Controllers\Api\HelpCenterController;
 use App\Http\Controllers\Api\InventoryAuditController;
+use App\Http\Controllers\Api\MembershipController;
 use App\Http\Controllers\Api\OrderController;
 use App\Http\Controllers\Api\OrganizationController;
 use App\Http\Controllers\Api\OrganizationPortalController;
@@ -66,6 +68,7 @@ use Illuminate\Support\Facades\Route;
 // ═══════════════════════════════════════════════════════════════════════════════
 
 Route::prefix('auth')->name('auth.')->group(function () {
+    Route::get('/social-login-config', [AuthController::class, 'socialLoginConfig'])->name('social-login-config');
     Route::post('/register', [AuthController::class, 'register'])->name('register');
     Route::post('/login', [AuthController::class, 'login'])->name('login')->middleware('throttle:login');
     Route::post('/google-login', [AuthController::class, 'googleLogin'])->name('google-login');
@@ -126,6 +129,7 @@ Route::middleware('auth:sanctum')->prefix('profile')->name('profile.')->group(fu
     Route::put('/addresses/{id}', [ProfileController::class, 'updateAddress'])->name('updateAddress');
     Route::delete('/addresses/{id}', [ProfileController::class, 'deleteAddress'])->name('deleteAddress');
     Route::patch('/addresses/{id}/default', [ProfileController::class, 'setDefaultAddress'])->name('setDefaultAddress');
+    Route::get('/membership', [MembershipController::class, 'overview'])->name('membership.overview');
 });
 
 Route::middleware('auth:sanctum')->group(function () {
@@ -204,7 +208,6 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Tickets yêu cầu hỗ trợ (Khách hàng)
     Route::get('/support/tickets', [SupportTicketController::class, 'index']);
-    Route::post('/support/tickets', [SupportTicketController::class, 'store']);
     Route::get('/support/tickets/{id}', [SupportTicketController::class, 'show']);
     Route::post('/support/tickets/{id}/message', [SupportTicketController::class, 'reply']);
     Route::get('/support/tickets/{ticket}/messages/{message}/attachment', [SupportTicketController::class, 'downloadAttachment']);
@@ -443,6 +446,38 @@ Route::get('/ebooks/{filename}/stream', [OrderController::class, 'streamEbook'])
 
 Route::get('/vnpay/return', [VnpayController::class, 'vnpayReturn'])->name('vnpay.return');
 Route::get('/vnpay/ipn', [VnpayController::class, 'vnpayIpn'])->name('vnpay.ipn');
+
+// ============================================================
+// CHATBOT AI & LIVE CHAT ENDPOINTS
+// ============================================================
+Route::prefix('chat')->group(function () {
+    Route::middleware('auth:sanctum')->group(function () {
+        Route::get('/conversations', [ChatController::class, 'conversations'])->middleware('throttle:60,1');
+        Route::post('/sessions', [ChatController::class, 'createSession'])->middleware('throttle:30,1');
+        Route::get('/sessions/{session}', [ChatController::class, 'showSession'])->middleware('throttle:120,1');
+        Route::post('/sessions/{session}/messages', [ChatController::class, 'sendMessage'])->middleware('throttle:20,1');
+        Route::get('/sessions/{session}/messages/{message}/attachment', [ChatController::class, 'attachment'])->middleware('throttle:120,1');
+        Route::post('/sessions/{session}/messages/{message}/feedback', [ChatController::class, 'submitFeedback'])->middleware('throttle:20,1');
+        Route::post('/sessions/{session}/request-human', [ChatController::class, 'requestHuman'])->middleware('throttle:10,1');
+        Route::post('/sessions/{session}/resume-ai', [ChatController::class, 'resumeAi'])->middleware('throttle:10,1');
+    });
+
+    Route::middleware(['auth:sanctum', 'role:admin'])->prefix('admin')->group(function () {
+        Route::get('/sessions', [ChatController::class, 'staffSessions']);
+        Route::get('/sessions/{session}', [ChatController::class, 'staffShow']);
+        Route::post('/sessions/{session}/takeover', [ChatController::class, 'takeover']);
+        Route::post('/sessions/{session}/reply', [ChatController::class, 'staffReply'])->middleware('throttle:60,1');
+        Route::post('/sessions/{session}/close', [ChatController::class, 'close']);
+    });
+
+    Route::middleware(['auth:sanctum', 'role:vendor', 'active-vendor'])->prefix('vendor')->group(function () {
+        Route::get('/sessions', [ChatController::class, 'staffSessions']);
+        Route::get('/sessions/{session}', [ChatController::class, 'staffShow']);
+        Route::post('/sessions/{session}/takeover', [ChatController::class, 'takeover']);
+        Route::post('/sessions/{session}/reply', [ChatController::class, 'staffReply'])->middleware('throttle:60,1');
+        Route::post('/sessions/{session}/close', [ChatController::class, 'close']);
+    });
+});
 
 // Catch-all route cho API trả về JSON 404
 Route::fallback(function () {

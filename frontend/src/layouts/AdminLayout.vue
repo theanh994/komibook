@@ -64,6 +64,11 @@ const vendorMenuItems = [
     route: '/vendor/organizations',
   },
   {
+    label: 'Hỗ trợ khách hàng',
+    icon: 'pi pi-comments',
+    route: '/vendor/support',
+  },
+  {
     label: 'Quản lý Đơn hàng',
     icon: 'pi pi-shopping-bag',
     route: '/vendor/orders',
@@ -153,6 +158,11 @@ const adminMenuItems = [
     label: 'Quản lý rút tiền',
     icon: 'pi pi-check-square',
     route: '/admin/reconciliation',
+  },
+  {
+    label: 'Hỗ trợ khách hàng',
+    icon: 'pi pi-comments',
+    route: '/admin/support',
   },
   {
     label: 'Chiến dịch thông báo',
@@ -536,6 +546,12 @@ onUnmounted(() => {
 <style scoped>
 /* ═══ LAYOUT GRID ═══ */
 .admin-layout {
+  --color-primary: #007a37;
+  --color-on-primary: #ffffff;
+  --color-primary-container: #d8f5e3;
+  --color-on-primary-container: #064e2b;
+  --color-commerce: #007a37;
+  --color-secondary: #ba0035;
   display: flex;
   min-height: 100vh;
   background: var(--color-background);
@@ -647,7 +663,7 @@ onUnmounted(() => {
 }
 
 .brand-accent {
-  color: #818cf8;
+  color: var(--color-brand-green);
 }
 
 .brand-sub {
@@ -732,7 +748,7 @@ onUnmounted(() => {
   transform: translateY(-50%);
   width: 3px;
   height: 0;
-  background: #818cf8;
+  background: var(--color-brand-green);
   border-radius: 0 4px 4px 0;
   transition: height 0.2s ease;
 }
@@ -958,7 +974,7 @@ onUnmounted(() => {
 }
 
 .user-avatar {
-  background: linear-gradient(135deg, #6366f1, #818cf8) !important;
+  background: linear-gradient(135deg, var(--color-brand-green-strong), var(--color-brand-green)) !important;
   color: white !important;
   width: 34px !important;
   height: 34px !important;

@@ -54,4 +54,12 @@ return [
         'provider' => env('SMS_PROVIDER'),
     ],
 
+    'gemini' => [
+        'enabled' => env('GEMINI_ENABLED', (bool) env('GEMINI_API_KEY')),
+        'api_key' => env('GEMINI_API_KEY'),
+        'model' => env('GEMINI_MODEL', 'gemini-3.5-flash-lite'),
+        'fallback_model' => env('GEMINI_FALLBACK_MODEL', 'gemini-3.1-flash-lite'),
+        'timeout' => env('GEMINI_TIMEOUT', 12),
+    ],
+
 ];
