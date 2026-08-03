@@ -12,7 +12,7 @@
       <div
         v-if="config.google.enabled"
         ref="googleButtonContainer"
-        class="flex min-h-11 w-full items-center justify-center overflow-hidden rounded-xl"
+        class="mx-auto flex min-h-11 w-full max-w-[400px] items-center justify-center overflow-hidden rounded-full"
         :class="{ 'pointer-events-none opacity-50': disabled }"
         :aria-disabled="disabled"
       />
@@ -28,7 +28,7 @@
 
       <button
         type="button"
-        class="flex min-h-11 w-full items-center justify-center gap-3 rounded-xl border border-outline-variant/60 bg-surface px-6 text-sm font-semibold text-on-surface shadow-sm transition-all duration-200 hover:bg-surface-container-low focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-50"
+        class="mx-auto flex h-10 min-h-10 w-full max-w-[400px] items-center justify-center gap-3 rounded-full border border-[#dadce0] bg-white px-3 [font-family:'Google_Sans',Arial,sans-serif] text-sm font-medium text-[#3c4043] transition-colors duration-200 hover:bg-[#f8faff] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-50"
         :disabled="disabled || !config.facebook.enabled"
         :title="config.facebook.enabled ? 'Tiếp tục với Facebook' : 'Facebook Login chưa được cấu hình'"
         @click="startFacebookLogin"
@@ -120,7 +120,7 @@ const renderGoogleButton = async () => {
       type: 'standard',
       theme: 'outline',
       size: 'large',
-      shape: 'rectangular',
+      shape: 'pill',
       text: 'continue_with',
       logo_alignment: 'left',
       width: Math.min(400, Math.max(240, googleButtonContainer.value.clientWidth || 400)),

@@ -42,6 +42,8 @@ describe('Phase 3 Facebook authentication replacement', () => {
     expect(sdkSource).toContain('authResponse?.accessToken')
     expect(socialButtonsSource).toContain("apiClient.get('/api/auth/social-login-config')")
     expect(socialButtonsSource).toContain('google.accounts.id.renderButton')
+    expect(socialButtonsSource).toContain("shape: 'pill'")
+    expect(socialButtonsSource).toContain('max-w-[400px]')
     expect(socialButtonsSource).not.toContain('VITE_GOOGLE_CLIENT_ID')
     expect(socialButtonsSource).not.toContain('FACEBOOK_APP_SECRET')
   })
