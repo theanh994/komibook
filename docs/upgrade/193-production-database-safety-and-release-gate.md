@@ -71,14 +71,15 @@ Nếu gate trả khác 0, không sửa Caddyfile, không reload FrankenPHP và k
 1. Dựng candidate từ clean commit trong `C:\komibook_releases\<FULL_SHA>`.
 2. Gắn shared `.env` và shared storage.
 3. Chạy `optimize:clear` sau khi `.env` đã được gắn.
-4. Chỉ chạy `migrate --force`; không dùng các biến thể fresh/refresh/reset/rollback.
-5. Tạo lại config cache bằng credential runtime.
-6. Chạy `Publish-KomiBookFrontendAssets.ps1` để đưa bundle vào namespace `/assets/r<SHA-8>/`; không xóa asset của release cũ.
-7. Chạy `Test-KomiBookReleaseReadiness.ps1`; gate phải xác minh toàn bộ asset được `index.html` tham chiếu đã tồn tại trong shared storage.
-8. Tạo backup production mới và ghi SHA-256.
-9. Validate Caddy candidate, cutover và reload dịch vụ.
-10. Smoke-test `/`, `/login`, `/api/books`, đăng nhập → `/api/auth/me`, ảnh bìa và dashboard theo vai trò. Bắt buộc tải trang bằng trình duyệt và kiểm tra console, không chỉ kiểm tra HTTP của HTML.
-11. Nếu bất kỳ gate nào thất bại, giữ release cũ; không cố cutover.
+4. Chạy `Test-KomiBookMigrationProvenance.ps1` trước migration; cả bốn migration đã ghi nhận trên production phải tồn tại đúng SHA-256 và được ledger báo `Ran`.
+5. Chỉ chạy `migrate --force`; không dùng các biến thể fresh/refresh/reset/rollback.
+6. Tạo lại config cache bằng credential runtime.
+7. Chạy `Publish-KomiBookFrontendAssets.ps1` để đưa toàn bộ index, lazy JS/CSS và public asset vào namespace bất biến `/assets/r<SHA-8>/`; không ghi đè hoặc xóa asset của release cũ.
+8. Chạy `Test-KomiBookReleaseReadiness.ps1`; gate phải xác minh toàn bộ asset được `index.html` tham chiếu đã tồn tại trong shared storage.
+9. Tạo backup production mới và ghi SHA-256.
+10. Validate Caddy candidate, cutover và reload dịch vụ.
+11. Smoke-test `/`, `/login`, `/api/books`, đăng nhập → `/api/auth/me`, ảnh bìa và dashboard theo vai trò. Bắt buộc tải trang bằng trình duyệt và kiểm tra console, không chỉ kiểm tra HTTP của HTML.
+12. Nếu bất kỳ gate nào thất bại, giữ release cũ; không cố cutover.
 
 Không được gắn cache `immutable` cho phản hồi asset 404. Asset chỉ được cache dài hạn khi matcher `file` xác nhận file tồn tại; phản hồi thiếu file phải dùng `no-store`.
 

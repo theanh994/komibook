@@ -32,47 +32,99 @@ if (-not (Test-Path -LiteralPath $sourceAssets -PathType Container) -or -not (Te
     throw 'Production frontend bundle is incomplete.'
 }
 
-if (-not (Test-Path -LiteralPath $targetAssets)) {
-    New-Item -ItemType Directory -Path $targetAssets | Out-Null
+if (Test-Path -LiteralPath $targetAssets) {
+    throw "Release asset namespace already exists and must remain immutable: $targetAssets"
 }
 
-Copy-Item -Path (Join-Path $sourceAssets '*') -Destination $targetAssets -Recurse -Force
+$assetPrefix = "/assets/$namespace/"
+$versionedAssetPattern = '/assets/r[0-9a-f]{8}/'
+$textArtifacts = @(
+    Get-Item -LiteralPath $index
+    Get-ChildItem -LiteralPath $sourceAssets -Recurse -File |
+        Where-Object { $_.Extension -in @('.js', '.css', '.html', '.json') }
+)
+
+foreach ($artifact in $textArtifacts) {
+    $content = [IO.File]::ReadAllText($artifact.FullName)
+    $foreignNamespaces = @(
+        [regex]::Matches($content, $versionedAssetPattern) |
+            ForEach-Object { $_.Value } |
+            Where-Object { $_ -ne $assetPrefix } |
+            Select-Object -Unique
+    )
+
+    if ($foreignNamespaces.Count -gt 0) {
+        throw "Frontend artifact already references a different release namespace: $($foreignNamespaces -join ', ')"
+    }
+
+    $content = [regex]::Replace(
+        $content,
+        '/assets/(?!r[0-9a-f]{8}/)',
+        [System.Text.RegularExpressions.MatchEvaluator] { param($match) $assetPrefix }
+    )
+    $content = $content.Replace('/favicon.ico', $assetPrefix + 'favicon.ico')
+    [IO.File]::WriteAllText($artifact.FullName, $content, [Text.UTF8Encoding]::new($false))
+}
 
 $html = [IO.File]::ReadAllText($index)
-$assetPrefix = "/assets/$namespace/"
 if (-not $html.Contains($assetPrefix)) {
-    if ($html -match '/assets/r[0-9a-f]{7,40}/') {
-        throw "Production index already uses a different release asset namespace."
-    }
-
-    if (-not $html.Contains('/assets/')) {
-        throw 'Production index does not contain asset references.'
-    }
-
-    $backup = Join-Path $dist "index.pre-$namespace.bak"
-    if (-not (Test-Path -LiteralPath $backup)) {
-        Copy-Item -LiteralPath $index -Destination $backup
-    }
-
-    $html = $html.Replace('/assets/', $assetPrefix)
-    [IO.File]::WriteAllText($index, $html, [Text.UTF8Encoding]::new($false))
+    throw 'Production index does not contain versioned asset references after rewriting.'
 }
 
-$references = [regex]::Matches($html, [regex]::Escape($assetPrefix) + '[^"''<> ]+') |
-    ForEach-Object { $_.Value } |
-    Select-Object -Unique
+$stagingAssets = Join-Path $sharedAssetsPath ".$namespace.staging-$PID-$([guid]::NewGuid().ToString('N'))"
+$published = $false
 
-if ($references.Count -eq 0) {
-    throw 'No versioned frontend asset references were found.'
-}
+New-Item -ItemType Directory -Path $stagingAssets | Out-Null
 
-$missing = @($references | Where-Object {
-    $relativePath = $_.Substring($assetPrefix.Length)
-    -not (Test-Path -LiteralPath (Join-Path $targetAssets $relativePath) -PathType Leaf)
-})
+try {
+    Copy-Item -Path (Join-Path $sourceAssets '*') -Destination $stagingAssets -Recurse
 
-if ($missing.Count -gt 0) {
-    throw "Versioned frontend assets are missing: $($missing -join ', ')"
+    $rootPublicFiles = @(
+        Get-ChildItem -LiteralPath $dist -File |
+            Where-Object {
+                $_.Name -ne 'index.html' -and
+                $_.Name -notlike 'index.pre-*.bak'
+            }
+    )
+
+    foreach ($publicFile in $rootPublicFiles) {
+        $destination = Join-Path $stagingAssets $publicFile.Name
+        if (Test-Path -LiteralPath $destination) {
+            throw "Duplicate root public asset in release namespace: $($publicFile.Name)"
+        }
+
+        Copy-Item -LiteralPath $publicFile.FullName -Destination $destination
+    }
+
+    $references = @(
+        $textArtifacts |
+            ForEach-Object {
+                $artifactContent = [IO.File]::ReadAllText($_.FullName)
+                [regex]::Matches($artifactContent, [regex]::Escape($assetPrefix) + '[^"''<> )`,;]+') |
+                    ForEach-Object { $_.Value }
+            } |
+            Select-Object -Unique
+    )
+
+    if ($references.Count -eq 0) {
+        throw 'No versioned frontend asset references were found.'
+    }
+
+    $missing = @($references | Where-Object {
+        $relativePath = $_.Substring($assetPrefix.Length)
+        -not (Test-Path -LiteralPath (Join-Path $stagingAssets $relativePath) -PathType Leaf)
+    })
+
+    if ($missing.Count -gt 0) {
+        throw "Versioned frontend assets are missing: $($missing -join ', ')"
+    }
+
+    Move-Item -LiteralPath $stagingAssets -Destination $targetAssets
+    $published = $true
+} finally {
+    if (-not $published -and (Test-Path -LiteralPath $stagingAssets)) {
+        Remove-Item -LiteralPath $stagingAssets -Recurse -Force
+    }
 }
 
 Write-Output "KOMIBOOK_FRONTEND_ASSETS=PASS"
