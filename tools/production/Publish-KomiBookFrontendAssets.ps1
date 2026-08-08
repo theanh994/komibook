@@ -111,7 +111,7 @@ try {
     }
 
     $missing = @($references | Where-Object {
-        $relativePath = $_.Substring($assetPrefix.Length)
+        $relativePath = $_.Substring($assetPrefix.Length) -replace '[?#].*$', ''
         -not (Test-Path -LiteralPath (Join-Path $stagingAssets $relativePath) -PathType Leaf)
     })
 
