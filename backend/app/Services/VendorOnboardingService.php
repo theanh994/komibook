@@ -63,6 +63,7 @@ class VendorOnboardingService
                 $updates['payout_bank_status'] = $locked->is_demo ? 'demo_disabled' : 'verified';
                 $updates['payout_bank_verified_at'] = $locked->is_demo ? null : now();
                 $updates['payout_bank_verified_by'] = $locked->is_demo ? null : $actor->id;
+
             }
             if ($target === VendorOnboardingStatus::Resubmitted) {
                 $updates['application_version'] = $locked->application_version + 1;

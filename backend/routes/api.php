@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\AccountSessionController;
+use App\Http\Controllers\Api\Admin\AdminUsedBookController;
 use App\Http\Controllers\Api\Admin\ArticleController as AdminArticleController;
 use App\Http\Controllers\Api\Admin\BookPublishingController as AdminBookPublishingController;
 use App\Http\Controllers\Api\Admin\CommerceFeeScheduleController;
@@ -183,6 +184,12 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::patch('/used-book-seller/listings/{listing}/inventory', [UsedBookSellerController::class, 'updateInventory']);
     Route::get('/used-book-seller/fulfillment-address', [UsedBookSellerController::class, 'showAddress']);
     Route::put('/used-book-seller/fulfillment-address', [UsedBookSellerController::class, 'upsertAddress']);
+    Route::get('/used-book-seller/orders', [UsedBookSellerController::class, 'orders']);
+    Route::get('/used-book-seller/orders/{order}', [UsedBookSellerController::class, 'showOrder']);
+    Route::post('/used-book-seller/orders/{order}/ship', [UsedBookSellerController::class, 'shipOrder']);
+    Route::post('/used-book-seller/orders/{order}/advance-shipping', [UsedBookSellerController::class, 'advanceShippingStep']);
+    Route::post('/used-book-seller/orders/{order}/confirm-delivered', [UsedBookSellerController::class, 'confirmDelivered']);
+    Route::get('/used-book-seller/wallet', [UsedBookSellerController::class, 'walletSummary']);
     Route::post('/used-books/disputes', [UsedBookDisputeController::class, 'store']);
     Route::post('/vendor-onboarding/register', [VendorOnboardingController::class, 'register']);
     Route::patch('/vendor-onboarding/draft', [VendorOnboardingController::class, 'saveDraft']);
@@ -417,10 +424,15 @@ Route::middleware(['auth:sanctum', 'role:admin'])->prefix('admin')->name('admin.
     Route::patch('used-books/disputes/{dispute}/resolve', [UsedBookDisputeController::class, 'resolve'])->name('used-books.disputes.resolve');
     Route::patch('approvals/partners/{type}/{id}/reject', [VendorApprovalController::class, 'reject'])->name('approvals.partners.reject');
     Route::get('organization-reviews', [OrganizationReviewController::class, 'index'])->name('organization-reviews.index');
-    Route::patch('organizations/{organization}/transition', [OrganizationReviewController::class, 'transitionOrganization'])->name('organizations.transition');
-    Route::patch('organization-relationships/{relationship}/transition', [OrganizationReviewController::class, 'transitionRelationship'])->name('organization-relationships.transition');
-    Route::patch('distribution-agreements/{agreement}/transition', [OrganizationReviewController::class, 'transitionDistributionAgreement'])->name('distribution-agreements.transition');
+    Route::patch('organizations/{organization}/transition', [OrganizationReviewController::class, 'transitionOrganization'])->middleware(['verified-email', 'recent-auth'])->name('organizations.transition');
+    Route::patch('organization-relationships/{relationship}/transition', [OrganizationReviewController::class, 'transitionRelationship'])->middleware(['verified-email', 'recent-auth'])->name('organization-relationships.transition');
+    Route::patch('distribution-agreements/{agreement}/transition', [OrganizationReviewController::class, 'transitionDistributionAgreement'])->middleware(['verified-email', 'recent-auth'])->name('distribution-agreements.transition');
     Route::patch('books/{book}/publishing-transition', [AdminBookPublishingController::class, 'transition'])->name('books.publishing.transition');
+
+    // Kiểm duyệt Sách Cũ (Admin)
+    Route::get('used-book-listings', [AdminUsedBookController::class, 'index'])->name('admin.used-books.index');
+    Route::patch('used-book-listings/{listing}/approve', [AdminUsedBookController::class, 'approve'])->name('admin.used-books.approve');
+    Route::patch('used-book-listings/{listing}/reject', [AdminUsedBookController::class, 'reject'])->name('admin.used-books.reject');
 
     // Quản lý Tickets hội thoại (Admin)
     Route::get('support/tickets', [SupportTicketController::class, 'adminIndex'])->name('support.tickets.adminIndex');

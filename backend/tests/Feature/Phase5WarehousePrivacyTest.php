@@ -58,6 +58,8 @@ class Phase5WarehousePrivacyTest extends TestCase
             ->assertJsonPath('data.status', 'verified')
             ->assertJsonMissing(['address_line' => '12 Đường Riêng']);
 
+        $baselineWarehouseCount = Warehouse::withoutGlobalScopes()->where('vendor_id', $vendor->id)->count();
+
         $this->actingAs($seller)
             ->postJson('/api/vendor/warehouses', [
                 'name' => 'Kho Nhà bán 1',
@@ -78,10 +80,10 @@ class Phase5WarehousePrivacyTest extends TestCase
             ])
             ->assertCreated();
 
-        $warehouses = Warehouse::withoutGlobalScopes()->where('vendor_id', $vendor->id)->orderBy('id')->get();
-        $this->assertCount(2, $warehouses);
-        $this->assertSame('Địa chỉ kho độc lập 1', $warehouses[0]->address);
-        $this->assertSame('Địa chỉ kho độc lập 2', $warehouses[1]->address);
+        $addresses = Warehouse::withoutGlobalScopes()->where('vendor_id', $vendor->id)->pluck('address')->all();
+        $this->assertCount($baselineWarehouseCount + 2, $addresses);
+        $this->assertContains('Địa chỉ kho độc lập 1', $addresses);
+        $this->assertContains('Địa chỉ kho độc lập 2', $addresses);
     }
 
     public function test_sensitive_address_fields_are_hidden_from_default_model_serialization(): void

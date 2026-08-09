@@ -55,4 +55,38 @@ class Phase8MigrationReversibilityTest extends TestCase
         $this->assertTrue(Schema::hasColumn('vendors', 'payout_bank_verified_at'));
         $this->assertTrue(Schema::hasColumn('vendors', 'payout_bank_verified_by'));
     }
+
+    public function test_batch_3b_review_event_and_fingerprint_migrations_can_roll_back_and_reapply_on_sqlite(): void
+    {
+        $reviewEventsMigration = require database_path('migrations/2026_08_09_000000_create_organization_review_events.php');
+        $fingerprintsMigration = require database_path('migrations/2026_08_09_000001_add_authority_review_fingerprints.php');
+        $fingerprintColumns = [
+            ['organizations', 'authority_fingerprint'],
+            ['vendor_organization_relationships', 'authority_fingerprint'],
+            ['organization_distribution_agreements', 'authority_fingerprint'],
+            ['organization_relationship_events', 'reviewed_fingerprint'],
+            ['organization_distribution_agreement_events', 'reviewed_fingerprint'],
+        ];
+
+        $this->assertTrue(Schema::hasTable('organization_review_events'));
+        foreach ($fingerprintColumns as [$table, $column]) {
+            $this->assertTrue(Schema::hasColumn($table, $column));
+        }
+
+        $fingerprintsMigration->down();
+        $reviewEventsMigration->down();
+
+        $this->assertFalse(Schema::hasTable('organization_review_events'));
+        foreach ($fingerprintColumns as [$table, $column]) {
+            $this->assertFalse(Schema::hasColumn($table, $column));
+        }
+
+        $reviewEventsMigration->up();
+        $fingerprintsMigration->up();
+
+        $this->assertTrue(Schema::hasTable('organization_review_events'));
+        foreach ($fingerprintColumns as [$table, $column]) {
+            $this->assertTrue(Schema::hasColumn($table, $column));
+        }
+    }
 }

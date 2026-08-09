@@ -209,8 +209,49 @@ class Book extends Model
     {
         return $this->hasMany(BookCommercialParty::class)
             ->where('active_slot', 'active')
-            ->where('status', 'verified')
-            ->whereNull('ended_at');
+            ->whereNull('ended_at')
+            ->where(function ($parties): void {
+                $parties->where(function ($live): void {
+                    $live->where('status', 'verified')
+                        ->whereNotNull('verified_at')
+                        ->whereNotNull('verified_by')
+                        ->whereHas('relationship', function ($relationship): void {
+                            $relationship->where('status', 'verified')
+                                ->where('is_demo', false)
+                                ->where('evidence_mode', 'real_document')
+                                ->whereNotNull('evidence_document')
+                                ->whereNull('demo_reference')
+                                ->whereNotNull('submitted_at')
+                                ->whereNotNull('verified_at')
+                                ->whereNotNull('reviewed_by')
+                                ->whereNotNull('last_review_reason')
+                                ->whereNotNull('authority_fingerprint')
+                                ->whereNull('revoked_at')
+                                ->where(fn ($window) => $window->whereNull('effective_from')->orWhereDate('effective_from', '<=', today()))
+                                ->where(fn ($window) => $window->whereNull('effective_until')->orWhereDate('effective_until', '>=', today()))
+                                ->whereHas('latestEvent', fn ($event) => $event->where('to_status', 'verified')->whereColumn('actor_id', 'vendor_organization_relationships.reviewed_by')->whereColumn('reason', 'vendor_organization_relationships.last_review_reason')->whereColumn('reviewed_fingerprint', 'vendor_organization_relationships.authority_fingerprint')->whereHas('actor', fn ($actor) => $actor->where('role', 'admin')))
+                                ->whereHas('organization', function ($organization): void {
+                                    $organization->where('status', 'verified')->where('data_mode', '!=', 'demo')
+                                        ->whereNotNull('verification_document')->whereNotNull('submitted_at')->whereNotNull('verified_at')->whereNotNull('verified_by')->whereNotNull('last_review_reason')->whereNotNull('authority_fingerprint')->whereNull('suspended_at')->whereNull('archived_at')
+                                        ->whereHas('latestReviewEvent', fn ($event) => $event->where('to_status', 'verified')->whereColumn('actor_id', 'organizations.verified_by')->whereColumn('reason', 'organizations.last_review_reason')->whereColumn('reviewed_fingerprint', 'organizations.authority_fingerprint')->whereHas('actor', fn ($actor) => $actor->where('role', 'admin')));
+                                });
+                        });
+                })->orWhere(function ($demo): void {
+                    $demo->where('status', 'demo_accepted')->whereNull('verified_at')->whereNull('verified_by')
+                        ->whereHas('relationship', function ($relationship): void {
+                            $relationship->where('status', 'demo_accepted')->where('is_demo', true)->where('evidence_mode', 'demo_statement')
+                                ->whereNull('evidence_document')->whereNotNull('demo_reference')->whereNull('verified_at')->whereNotNull('reviewed_by')->whereNotNull('last_review_reason')->whereNull('revoked_at')
+                                ->whereNotNull('authority_fingerprint')
+                                ->where(fn ($window) => $window->whereNull('effective_from')->orWhereDate('effective_from', '<=', today()))
+                                ->where(fn ($window) => $window->whereNull('effective_until')->orWhereDate('effective_until', '>=', today()))
+                                ->whereHas('latestEvent', fn ($event) => $event->where('to_status', 'demo_accepted')->whereColumn('actor_id', 'vendor_organization_relationships.reviewed_by')->whereColumn('reason', 'vendor_organization_relationships.last_review_reason')->whereColumn('reviewed_fingerprint', 'vendor_organization_relationships.authority_fingerprint')->whereHas('actor', fn ($actor) => $actor->where('role', 'admin')))
+                                ->whereHas('organization', function ($organization): void {
+                                    $organization->where('status', 'demo_accepted')->where('data_mode', 'demo')->whereNull('verification_document')->whereNull('verified_at')->whereNotNull('verified_by')->whereNotNull('last_review_reason')->whereNotNull('authority_fingerprint')->whereNull('suspended_at')->whereNull('archived_at')
+                                        ->whereHas('latestReviewEvent', fn ($event) => $event->where('to_status', 'demo_accepted')->whereColumn('actor_id', 'organizations.verified_by')->whereColumn('reason', 'organizations.last_review_reason')->whereColumn('reviewed_fingerprint', 'organizations.authority_fingerprint')->whereHas('actor', fn ($actor) => $actor->where('role', 'admin')));
+                                });
+                        });
+                });
+            });
     }
 
     // ─── Helper Methods ───────────────────────────────────────────────────────
@@ -258,6 +299,66 @@ class Book extends Model
     public function scopePurchasable(Builder $query): Builder
     {
         return $query->sellable()->browseVisible();
+    }
+
+    /**
+     * Scope tìm kiếm thông minh đa từ khóa (Smart Multi-token Search).
+     * Hỗ trợ tìm kiếm từ khóa rút gọn, ngắt quãng (vd: "komi tập 1" -> "Komi - Nữ thần giao tiếp - Tập 1")
+     * và tự động loại bỏ các ký tự phân cách như "-", ":", "()".
+     */
+    public function scopeSmartSearch(Builder $query, string $search): Builder
+    {
+        $search = trim($search);
+        if ($search === '') {
+            return $query;
+        }
+
+        // 1. Chuẩn hóa chuỗi tìm kiếm (xóa ký tự đặc biệt, thay bằng khoảng trắng)
+        $normalized = preg_replace('/[^\p{L}\p{N}\s]+/u', ' ', $search);
+        $normalized = preg_replace('/\s+/', ' ', trim($normalized));
+
+        // 2. Tách từ khóa thành các token
+        $tokens = array_values(array_filter(explode(' ', $normalized), fn ($t) => mb_strlen($t) > 0));
+
+        // 3. Chuỗi dính liền (compact search string, xóa toàn bộ khoảng trắng và ký tự đặc biệt)
+        $compactSearch = preg_replace('/[^\p{L}\p{N}]+/u', '', mb_strtolower($search));
+
+        return $query->where(function (Builder $q) use ($search, $tokens, $compactSearch) {
+            // Mệnh đề 1: Khớp nguyên văn cụm từ (cho tìm kiếm chính xác, tác giả, ISBN)
+            $q->where('books.title', 'LIKE', "%{$search}%")
+                ->orWhere('books.author', 'LIKE', "%{$search}%")
+                ->orWhere('books.isbn', 'LIKE', "%{$search}%");
+
+            // Mệnh đề 2: Tách từ khóa (Multi-token match: Tất cả các token đều phải xuất hiện trong tiêu đề/tác giả/ISBN/Series)
+            if (! empty($tokens)) {
+                $q->orWhere(function (Builder $tokenQ) use ($tokens) {
+                    foreach ($tokens as $token) {
+                        $tokenQ->where(function (Builder $subQ) use ($token) {
+                            $subQ->where('books.title', 'LIKE', "%{$token}%")
+                                ->orWhere('books.author', 'LIKE', "%{$token}%")
+                                ->orWhere('books.isbn', 'LIKE', "%{$token}%")
+                                ->orWhereHas('series', function (Builder $seriesQ) use ($token) {
+                                    $seriesQ->where('series.title', 'LIKE', "%{$token}%");
+                                });
+                        });
+                    }
+                });
+            }
+
+            // Mệnh đề 3: Tìm kiếm từ khóa dính liền (Compact Search cho "eightysix" -> "Eighty Six", "onepiece" -> "One Piece")
+            if (mb_strlen($compactSearch) >= 2) {
+                $q->orWhereRaw("LOWER(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(books.title, ' ', ''), '-', ''), ':', ''), '.', ''), '_', '')) LIKE ?", ["%{$compactSearch}%"])
+                    ->orWhereRaw("LOWER(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(books.author, ' ', ''), '-', ''), ':', ''), '.', ''), '_', '')) LIKE ?", ["%{$compactSearch}%"])
+                    ->orWhereHas('series', function (Builder $seriesQ) use ($compactSearch) {
+                        $seriesQ->whereRaw("LOWER(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(series.title, ' ', ''), '-', ''), ':', ''), '.', ''), '_', '')) LIKE ?", ["%{$compactSearch}%"]);
+                    });
+            }
+
+            // Mệnh đề 4: Xử lý tìm kiếm sách "tái bản"
+            if (str_contains(mb_strtolower($search), 'tái bản')) {
+                $q->orWhere('books.print_edition', '>', 1);
+            }
+        });
     }
 
     public function isEbook(): bool

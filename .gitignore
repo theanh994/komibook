@@ -72,3 +72,8 @@ desktop.ini
 Tai_lieu/
 Giao_dien_Website/
 
+# Codex-local orchestration configuration
+/.codex/
+
+# Local review and rendering artifacts
+/tmp/

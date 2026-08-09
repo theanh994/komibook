@@ -93,8 +93,9 @@ class BookController extends Controller
             ->sellable()
             ->with(['vendor', 'category', 'categories', 'series', 'latestEbookVersion']); // Eager loading
 
-        // Sản phẩm hết hàng chỉ xuất hiện khi người mua chủ động tìm kiếm hoặc mở URL trực tiếp.
-        if (! $request->filled('search')) {
+        // Chỉ hiển thị sản phẩm còn hàng (hoặc ebook) trên catalog và ô tìm kiếm
+        $search = trim((string) $request->input('search', ''));
+        if ($search === '') {
             $query->browseVisible();
         }
 
@@ -108,17 +109,9 @@ class BookController extends Controller
             });
         }
 
-        // 2b. Tìm kiếm theo từ khoá (title hoặc author)
-        if ($request->filled('search')) {
-            $search = $request->search;
-            $query->where(function ($q) use ($search) {
-                $q->where('books.title', 'LIKE', "%{$search}%")
-                    ->orWhere('books.author', 'LIKE', "%{$search}%")
-                    ->orWhere('books.isbn', 'LIKE', "%{$search}%");
-                if (str_contains(mb_strtolower($search), 'tái bản')) {
-                    $q->orWhere('books.print_edition', '>', 1);
-                }
-            });
+        // 2b. Tìm kiếm theo từ khoá thông minh (Smart Multi-token Search)
+        if ($search !== '') {
+            $query->smartSearch($search);
         }
 
         // 2c. Lọc theo khoảng giá

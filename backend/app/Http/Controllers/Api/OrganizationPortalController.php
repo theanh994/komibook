@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Book;
 use App\Models\Organization;
 use App\Models\OrganizationDistributionAgreement;
 use App\Models\OrganizationDistributionAgreementEvent;
@@ -18,10 +19,20 @@ class OrganizationPortalController extends Controller
 {
     public function index(Request $request)
     {
+        $user = $request->user();
+        $vendor = $user->vendor()->withoutGlobalScopes()->with('primaryOrganization')->first();
+        // This endpoint only queries and serializes current records.
+
         $memberships = OrganizationMembership::with('organization')
-            ->where('user_id', $request->user()->id)
+            ->where('user_id', $user->id)
             ->where('status', 'active')
             ->get();
+
+        $memberships->each(function ($membership) {
+            if ($membership->organization && in_array($membership->role, ['owner', 'admin'], true)) {
+                $membership->organization->makeVisible(['tax_code', 'license_number']);
+            }
+        });
         $organizationIds = $memberships->pluck('organization_id');
         $agreements = OrganizationDistributionAgreement::with(['publisher', 'distributor'])
             ->where(function ($query) use ($organizationIds) {
@@ -31,7 +42,22 @@ class OrganizationPortalController extends Controller
             ->latest()
             ->get();
 
-        return response()->json(['status' => 'success', 'data' => compact('memberships', 'agreements')]);
+        $vendorData = $vendor ? [
+            'id' => $vendor->id,
+            'shop_name' => $vendor->shop_name,
+            'legal_name' => $vendor->legal_name,
+            'tax_code' => $vendor->tax_code,
+            'business_model' => $vendor->business_model,
+            'status' => $vendor->status,
+            'primary_organization_id' => $vendor->primary_organization_id,
+        ] : null;
+
+        $selectableBooks = $vendor ? Book::withoutGlobalScopes()
+            ->where('vendor_id', $vendor->id)
+            ->get(['id', 'title', 'slug'])
+            ->map(fn ($b) => ['id' => (string) $b->id, 'title' => "#{$b->id} - {$b->title}"]) : [];
+
+        return response()->json(['status' => 'success', 'data' => compact('vendorData', 'memberships', 'agreements', 'selectableBooks')]);
     }
 
     public function storeOrganization(Request $request)
@@ -88,7 +114,7 @@ class OrganizationPortalController extends Controller
             'scope.book_ids.*' => ['integer', 'exists:books,id'],
             'effective_from' => ['nullable', 'date'],
             'effective_until' => ['nullable', 'date', 'after_or_equal:effective_from'],
-            'evidence_document' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:5120'],
+            'evidence_document' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:5120'],
         ]);
         $managedIds = OrganizationMembership::where('user_id', $request->user()->id)
             ->where('status', 'active')
@@ -112,19 +138,43 @@ class OrganizationPortalController extends Controller
             )) > 0,
             422,
         );
-        if ($organizations->contains(fn (Organization $organization) => ! $organization->isVerified())) {
+        if ($organizations->contains(fn (Organization $organization) => ! $organization->hasAuthoritativeAcceptance())) {
             throw ValidationException::withMessages([
-                'organizations' => 'Cả Nhà xuất bản và Nhà phân phối phải được xác minh trước khi gửi thỏa thuận.',
+                'organizations' => 'Cả Nhà xuất bản và Nhà phân phối phải được xác minh hoặc chấp nhận Demo trước khi gửi thỏa thuận.',
             ]);
         }
 
-        $documentPath = $request->file('evidence_document')->store('organizations/distribution-agreements', 'private');
+        $isDemoProposal = $organizations->every(
+            fn (Organization $organization) => $organization->data_mode === 'demo',
+        );
+        if (($validated['scope']['coverage'] ?? null) === 'books') {
+            $vendor = $request->user()->vendor()->withoutGlobalScopes()->first();
+            abort_unless($vendor, 422);
+            $bookIds = $validated['scope']['book_ids'] ?? [];
+            if ($bookIds === [] || Book::withoutGlobalScopes()->whereIn('id', $bookIds)->where('vendor_id', $vendor->id)->count() !== count($bookIds)) {
+                throw ValidationException::withMessages([
+                    'scope.book_ids' => 'Every listed book must belong to your vendor account.',
+                ]);
+            }
+        }
+        if (! $isDemoProposal && ! $request->hasFile('evidence_document')) {
+            throw ValidationException::withMessages([
+                'evidence_document' => 'Thỏa thuận live hoặc mixed phải có tài liệu chứng minh.',
+            ]);
+        }
+        $demoReference = $isDemoProposal ? 'DEMO-AGR-'.Str::uuid() : null;
+
+        $documentPath = $request->file('evidence_document')
+            ?->store('organizations/distribution-agreements', 'private');
         try {
-            $agreement = DB::transaction(function () use ($validated, $documentPath, $request) {
+            $agreement = DB::transaction(function () use ($validated, $documentPath, $isDemoProposal, $demoReference, $request) {
                 $operationKey = 'distribution-agreement:'.Str::uuid();
                 $agreement = OrganizationDistributionAgreement::create([
                     ...$validated,
                     'evidence_document' => $documentPath,
+                    'is_demo' => $isDemoProposal,
+                    'evidence_mode' => $isDemoProposal ? 'demo_statement' : 'real_document',
+                    'demo_reference' => $demoReference,
                     'status' => 'submitted',
                     'submitted_at' => now(),
                     'operation_key' => $operationKey,
@@ -140,7 +190,9 @@ class OrganizationPortalController extends Controller
                 return $agreement;
             });
         } catch (\Throwable $exception) {
-            Storage::disk('private')->delete($documentPath);
+            if ($documentPath) {
+                Storage::disk('private')->delete($documentPath);
+            }
             throw $exception;
         }
 

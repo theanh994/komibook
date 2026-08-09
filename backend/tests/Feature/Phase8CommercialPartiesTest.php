@@ -9,6 +9,8 @@ use App\Models\User;
 use App\Models\Vendor;
 use App\Models\VendorOrganizationRelationship;
 use App\Services\CommercialPartyService;
+use App\Services\OrganizationRelationshipService;
+use App\Services\OrganizationReviewService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -19,7 +21,7 @@ class Phase8CommercialPartiesTest extends TestCase
     public function test_direct_publisher_assigns_explicit_roles_and_public_detail_exposes_no_private_fields(): void
     {
         [$user, $vendor] = $this->vendor('phase8-publisher', 'direct_publisher');
-        $organization = Organization::create([
+        $organization = $this->acceptedOrganization([
             'legal_name' => 'Công ty Xuất bản Riêng',
             'display_name' => 'NXB Bán Trực Tiếp',
             'slug' => 'nxb-ban-truc-tiep',
@@ -27,8 +29,6 @@ class Phase8CommercialPartiesTest extends TestCase
             'tax_code' => 'PRIVATE-TAX',
             'license_number' => 'PRIVATE-LICENSE',
             'verification_document' => 'private/document.pdf',
-            'status' => 'verified',
-            'verified_at' => now(),
         ]);
         $relationship = $this->relationship($vendor, $organization, 'self_legal_entity');
         $book = $this->book($vendor, 'Sách NXB bán trực tiếp');
@@ -57,13 +57,11 @@ class Phase8CommercialPartiesTest extends TestCase
     {
         [$user, $vendor] = $this->vendor('phase8-bookstore-parties', 'bookstore');
         [, $foreignVendor] = $this->vendor('phase8-foreign-parties', 'bookstore');
-        $organization = Organization::create([
+        $organization = $this->acceptedOrganization([
             'legal_name' => 'NXB Đối tác',
             'display_name' => 'NXB Đối tác',
             'slug' => 'nxb-doi-tac',
             'organization_types' => ['publisher', 'supplier'],
-            'status' => 'verified',
-            'verified_at' => now(),
         ]);
         $foreign = $this->relationship($foreignVendor, $organization, 'self_legal_entity');
         $pending = VendorOrganizationRelationship::create([
@@ -105,15 +103,26 @@ class Phase8CommercialPartiesTest extends TestCase
 
     private function relationship(Vendor $vendor, Organization $organization, string $role): VendorOrganizationRelationship
     {
-        return VendorOrganizationRelationship::create([
+        $relationship = VendorOrganizationRelationship::create([
             'vendor_id' => $vendor->id,
             'organization_id' => $organization->id,
             'role' => $role,
-            'status' => 'verified',
-            'verified_at' => now(),
+            'status' => 'submitted',
+            'evidence_document' => 'organizations/relationships/'.$vendor->id.'-'.$organization->id.'.pdf',
+            'submitted_at' => now()->subDay(),
             'effective_from' => now()->subDay(),
             'operation_key' => "phase8-relation-{$vendor->id}-{$organization->id}-{$role}",
         ]);
+        $admin = User::factory()->create(['role' => 'admin']);
+
+        return app(OrganizationRelationshipService::class)->transition($relationship, 'verified', $admin, 'Relationship evidence reviewed.', 'phase8-relation-review-'.$relationship->id);
+    }
+
+    private function acceptedOrganization(array $attributes): Organization
+    {
+        $organization = Organization::create([...$attributes, 'status' => 'pending_review', 'data_mode' => 'live', 'verification_document' => 'organizations/'.$attributes['slug'].'.pdf', 'submitted_at' => now()->subDay()]);
+
+        return app(OrganizationReviewService::class)->transition($organization, 'verified', User::factory()->create(['role' => 'admin']), 'Organization evidence reviewed.', 'phase8-organization-review-'.$organization->id);
     }
 
     private function book(Vendor $vendor, string $title): Book

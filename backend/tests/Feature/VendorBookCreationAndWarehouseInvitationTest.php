@@ -12,6 +12,8 @@ use App\Models\VendorOrganizationRelationship;
 use App\Models\Warehouse;
 use App\Models\WarehouseManagerAssignment;
 use App\Models\WarehouseStock;
+use App\Services\OrganizationRelationshipService;
+use App\Services\OrganizationReviewService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
@@ -43,6 +45,17 @@ class VendorBookCreationAndWarehouseInvitationTest extends TestCase
             'is_demo' => true,
             'operation_key' => 'integrated-book-relation',
         ]);
+        $organization->update(['status' => 'pending_review', 'submitted_at' => now()->subDay()]);
+        $admin = User::factory()->create(['role' => 'admin']);
+        app(OrganizationReviewService::class)->transition($organization, 'demo_accepted', $admin, 'Canonical demo organization fixture review.', 'integrated-book-organization-review');
+        $relationship->update([
+            'status' => 'submitted',
+            'evidence_mode' => 'demo_statement',
+            'demo_reference' => 'DEMO-INTEGRATED-BOOK',
+            'submitted_at' => now()->subDay(),
+            'effective_from' => now()->subDay(),
+        ]);
+        app(OrganizationRelationshipService::class)->transition($relationship, 'demo_accepted', $admin, 'Canonical demo self-legal relationship fixture review.', 'integrated-book-relationship-review');
 
         $response = $this->actingAs($vendorUser)->post('/api/vendor/books', [
             'title' => 'Sách mới tích hợp',
@@ -103,6 +116,24 @@ class VendorBookCreationAndWarehouseInvitationTest extends TestCase
             'verified_at' => now(),
             'operation_key' => 'rollback-book-relation',
         ]);
+        $organization->update([
+            'status' => 'pending_review',
+            'verification_document' => 'organizations/nxb-xac-minh-rollback.pdf',
+            'submitted_at' => now()->subDay(),
+            'verified_at' => null,
+        ]);
+        $admin = User::factory()->create(['role' => 'admin']);
+        app(OrganizationReviewService::class)->transition($organization, 'verified', $admin, 'Canonical live organization fixture review.', 'rollback-book-organization-review');
+        $relationship->update([
+            'status' => 'submitted',
+            'is_demo' => false,
+            'evidence_mode' => 'real_document',
+            'evidence_document' => 'organizations/relationships/nxb-xac-minh-rollback.pdf',
+            'submitted_at' => now()->subDay(),
+            'verified_at' => null,
+            'effective_from' => now()->subDay(),
+        ]);
+        app(OrganizationRelationshipService::class)->transition($relationship, 'verified', $admin, 'Canonical live self-legal relationship fixture review.', 'rollback-book-relationship-review');
 
         $this->actingAs($vendorUser)->post('/api/vendor/books', [
             'title' => 'Sách phải rollback',

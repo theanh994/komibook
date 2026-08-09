@@ -9,6 +9,8 @@ use App\Models\User;
 use App\Models\Vendor;
 use App\Models\VendorOrganizationRelationship;
 use App\Models\Warehouse;
+use App\Services\OrganizationRelationshipService;
+use App\Services\OrganizationReviewService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -221,8 +223,11 @@ class BookPrintEditionWarehouseWorkflowTest extends TestCase
             'slug' => 'nxb-'.$slug,
             'organization_types' => ['publisher', 'supplier'],
             'data_mode' => 'demo',
-            'status' => 'demo_accepted',
+            'status' => 'pending_review',
+            'submitted_at' => now()->subDay(),
         ]);
+        $admin = User::factory()->create(['role' => 'admin']);
+        app(OrganizationReviewService::class)->transition($organization, 'demo_accepted', $admin, 'Demo organization fixture accepted for self-supplied workflow.', 'book-workflow-org-'.$slug);
         $vendor = Vendor::withoutGlobalScopes()->create([
             'user_id' => $user->id,
             'shop_name' => 'Nhà bán '.$slug,
@@ -233,14 +238,19 @@ class BookPrintEditionWarehouseWorkflowTest extends TestCase
             'primary_organization_id' => $organization->id,
             'is_demo' => true,
         ]);
-        VendorOrganizationRelationship::create([
+        $relationship = VendorOrganizationRelationship::create([
             'vendor_id' => $vendor->id,
             'organization_id' => $organization->id,
             'role' => 'self_legal_entity',
-            'status' => 'demo_accepted',
+            'status' => 'submitted',
             'is_demo' => true,
+            'evidence_mode' => 'demo_statement',
+            'demo_reference' => 'DEMO-BOOK-WORKFLOW-'.strtoupper($slug),
+            'submitted_at' => now()->subDay(),
+            'effective_from' => now()->subDay(),
             'operation_key' => 'self-supplied-'.$slug,
         ]);
+        app(OrganizationRelationshipService::class)->transition($relationship, 'demo_accepted', $admin, 'Demo self-legal relationship fixture accepted.', 'book-workflow-relationship-'.$slug);
         $warehouse = Warehouse::withoutGlobalScopes()->create([
             'vendor_id' => $vendor->id,
             'name' => 'Kho tổng '.$slug,

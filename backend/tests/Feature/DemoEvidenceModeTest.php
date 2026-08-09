@@ -5,12 +5,19 @@ namespace Tests\Feature;
 use App\Models\Book;
 use App\Models\Category;
 use App\Models\Organization;
+use App\Models\OrganizationRelationshipEvent;
+use App\Models\OrganizationReviewEvent;
 use App\Models\User;
 use App\Models\Vendor;
 use App\Models\VendorOrganizationRelationship;
+use App\Services\CommercialPartyService;
+use App\Services\OrganizationRelationshipService;
+use App\Services\OrganizationReviewService;
+use App\Support\AuthorityReviewFingerprint;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
 
 class DemoEvidenceModeTest extends TestCase
@@ -44,6 +51,16 @@ class DemoEvidenceModeTest extends TestCase
 
         $this->assertNull($vendor->fresh()->business_registration_document);
         $this->assertNull($vendor->fresh()->payout_bank_account);
+        $organization = Organization::where('slug', 'ipm-demo-shop')->sole();
+        $relationship = VendorOrganizationRelationship::where('vendor_id', $vendor->id)->sole();
+        $this->assertTrue($relationship->is_demo);
+        $this->assertSame('demo_statement', $relationship->evidence_mode);
+        $this->assertNotNull($relationship->demo_reference);
+        $this->assertNull($relationship->evidence_document);
+        $admin = User::factory()->create(['role' => 'admin']);
+        app(OrganizationReviewService::class)->transition($organization, 'demo_accepted', $admin, 'Demo reviewed.', 'demo-bootstrap-org-review');
+        app(OrganizationRelationshipService::class)->transition($relationship, 'demo_accepted', $admin, 'Demo relationship reviewed.', 'demo-bootstrap-rel-review');
+        $this->assertTrue($relationship->fresh()->isCurrentlyVerified());
     }
 
     public function test_demo_wallet_cannot_request_real_payout_even_if_bank_status_is_forced_verified(): void
@@ -72,19 +89,21 @@ class DemoEvidenceModeTest extends TestCase
             ->assertJsonPath('message', 'Ví đối soát demo không được phép tạo yêu cầu rút tiền thật.');
     }
 
-    public function test_vendor_updates_existing_demo_organization_with_multipart_files_without_duplication(): void
+    public function test_demo_accepted_update_keeps_raw_status_but_invalidates_authority_without_reacceptance(): void
     {
         Storage::fake('public');
         Storage::fake('private');
         $user = User::factory()->create(['role' => 'vendor']);
+        $admin = User::factory()->create(['role' => 'admin']);
         $organization = Organization::create([
             'legal_name' => 'IPM Demo',
             'display_name' => 'IPM Demo',
             'slug' => 'ipm-demo',
             'organization_types' => ['distributor', 'supplier'],
-            'status' => 'demo_accepted',
+            'status' => 'pending_review',
             'data_mode' => 'demo',
         ]);
+        app(OrganizationReviewService::class)->transition($organization, 'demo_accepted', $admin, 'Demo accepted.', 'ipm-demo-accepted');
         $vendor = Vendor::withoutGlobalScopes()->create([
             'user_id' => $user->id,
             'status' => 'active',
@@ -106,6 +125,8 @@ class DemoEvidenceModeTest extends TestCase
             'operation_key' => 'demo-self-ipm',
         ]);
 
+        $originalFingerprint = $organization->fresh()->authority_fingerprint;
+        $eventFingerprint = $organization->fresh()->latestReviewEvent->reviewed_fingerprint;
         $this->actingAs($user)->post("/api/vendor/organizations/{$organization->id}", [
             '_method' => 'PATCH',
             'legal_name' => 'Công ty Cổ phần Xuất bản và Truyền thông IPM',
@@ -120,12 +141,19 @@ class DemoEvidenceModeTest extends TestCase
         ])->assertOk()->assertJsonPath('data.organization.status', 'demo_accepted');
 
         $this->assertDatabaseCount('organizations', 1);
-        $this->assertSame('IPM Việt Nam', $organization->fresh()->display_name);
-        Storage::disk('public')->assertExists($organization->fresh()->logo);
+        $fresh = $organization->fresh();
+        $this->assertSame('demo_accepted', $fresh->status);
+        $this->assertSame('IPM Việt Nam', $fresh->display_name);
+        $this->assertNotSame($originalFingerprint, $fresh->authority_fingerprint);
+        $this->assertSame($eventFingerprint, $fresh->latestReviewEvent->reviewed_fingerprint);
+        $this->assertFalse($fresh->hasAuthoritativeAcceptance());
+        $this->assertDatabaseCount('organization_review_events', 1);
+        Storage::disk('public')->assertExists($fresh->logo);
     }
 
     public function test_demo_acceptance_is_operational_but_not_legal_verification(): void
     {
+        $admin = User::factory()->create(['role' => 'admin']);
         $organization = Organization::create([
             'legal_name' => 'Demo',
             'display_name' => 'Demo',
@@ -133,20 +161,39 @@ class DemoEvidenceModeTest extends TestCase
             'organization_types' => ['publisher'],
             'status' => 'demo_accepted',
             'data_mode' => 'demo',
+            'verified_by' => $admin->id,
+            'last_review_reason' => 'Demo evidence reviewed.',
         ]);
-        $relationship = VendorOrganizationRelationship::make([
+        OrganizationReviewEvent::create(['organization_id' => $organization->id, 'actor_id' => $admin->id, 'from_status' => 'pending_review', 'to_status' => 'demo_accepted', 'reason' => 'Demo evidence reviewed.', 'operation_key' => 'demo-org-predicate']);
+        $vendorUser = User::factory()->create(['role' => 'vendor']);
+        $vendor = Vendor::withoutGlobalScopes()->create(['user_id' => $vendorUser->id, 'shop_name' => 'Predicate vendor', 'slug' => 'predicate-vendor', 'status' => 'active', 'onboarding_status' => 'approved']);
+        $relationship = VendorOrganizationRelationship::create([
+            'vendor_id' => $vendor->id,
+            'organization_id' => $organization->id,
             'status' => 'demo_accepted',
             'is_demo' => true,
+            'role' => 'self_legal_entity',
+            'evidence_mode' => 'demo_statement',
+            'demo_reference' => 'DEMO-PREDICATE-001',
+            'effective_from' => now()->subDay(),
+            'reviewed_by' => $admin->id,
+            'last_review_reason' => 'Demo relationship reviewed.',
+            'operation_key' => 'demo-relationship-predicate',
         ]);
+        OrganizationRelationshipEvent::create(['vendor_organization_relationship_id' => $relationship->id, 'actor_id' => $admin->id, 'from_status' => 'submitted', 'to_status' => 'demo_accepted', 'reason' => 'Demo relationship reviewed.', 'operation_key' => 'demo-relationship-event-predicate']);
 
         $this->assertTrue($organization->isOperationallyAccepted());
         $this->assertTrue($relationship->isCurrentlyVerified());
         $this->assertNull($organization->verified_at);
+
+        $relationship->update(['reviewed_by' => $vendorUser->id]);
+        OrganizationRelationshipEvent::create(['vendor_organization_relationship_id' => $relationship->id, 'actor_id' => $vendorUser->id, 'from_status' => 'demo_accepted', 'to_status' => 'demo_accepted', 'reason' => 'Demo relationship reviewed.', 'operation_key' => 'demo-relationship-non-admin-event']);
+        $this->assertFalse($relationship->fresh()->isCurrentlyVerified());
     }
 
     public function test_admin_demo_acceptance_keeps_legal_verification_timestamp_empty(): void
     {
-        $admin = User::factory()->create(['role' => 'admin']);
+        $admin = User::factory()->create(['role' => 'admin', 'email_verified_at' => now()]);
         $organization = Organization::create([
             'legal_name' => 'NXB Demo',
             'display_name' => 'NXB Demo',
@@ -156,8 +203,8 @@ class DemoEvidenceModeTest extends TestCase
             'data_mode' => 'demo',
         ]);
 
-        $this->actingAs($admin)->patchJson("/api/admin/organizations/{$organization->id}/transition", [
-            'to_status' => 'demo_accepted',
+        $this->actingAs($admin)->withHeader('Origin', 'https://komibook.id.vn')->withSession(['auth.password_confirmed_at' => time()])->patchJson("/api/admin/organizations/{$organization->id}/transition", [
+            'to_status' => 'demo_accepted', 'reason' => 'Demo reviewed.', 'operation_key' => 'demo-org-admin-accept',
         ])->assertOk()
             ->assertJsonPath('data.status', 'demo_accepted')
             ->assertJsonPath('data.verified_at', null);
@@ -168,6 +215,7 @@ class DemoEvidenceModeTest extends TestCase
     public function test_demo_relationship_can_be_assigned_to_a_book_and_is_labelled_as_demo_publicly(): void
     {
         $user = User::factory()->create(['role' => 'vendor']);
+        $admin = User::factory()->create(['role' => 'admin']);
         $organization = Organization::create([
             'legal_name' => 'Nhà xuất bản Demo',
             'display_name' => 'Nhà xuất bản Demo',
@@ -175,7 +223,10 @@ class DemoEvidenceModeTest extends TestCase
             'organization_types' => ['publisher', 'supplier'],
             'status' => 'demo_accepted',
             'data_mode' => 'demo',
+            'verified_by' => $admin->id,
+            'last_review_reason' => 'Demo organization reviewed.',
         ]);
+        OrganizationReviewEvent::create(['organization_id' => $organization->id, 'actor_id' => $admin->id, 'from_status' => 'pending_review', 'to_status' => 'demo_accepted', 'reason' => 'Demo organization reviewed.', 'operation_key' => 'demo-book-org-event']);
         $vendor = Vendor::withoutGlobalScopes()->create([
             'user_id' => $user->id,
             'shop_name' => 'Gian hàng NXB Demo',
@@ -196,8 +247,12 @@ class DemoEvidenceModeTest extends TestCase
             'is_demo' => true,
             'evidence_mode' => 'demo_statement',
             'demo_reference' => 'DEMO-REL-LISTING-001',
+            'effective_from' => now()->subDay(),
+            'reviewed_by' => $admin->id,
+            'last_review_reason' => 'Demo relationship reviewed.',
             'operation_key' => 'demo-listing-self',
         ]);
+        OrganizationRelationshipEvent::create(['vendor_organization_relationship_id' => $relationship->id, 'actor_id' => $admin->id, 'from_status' => 'submitted', 'to_status' => 'demo_accepted', 'reason' => 'Demo relationship reviewed.', 'operation_key' => 'demo-book-relationship-event']);
         $category = Category::create(['name' => 'Sách demo', 'slug' => 'sach-demo']);
         $book = Book::withoutGlobalScopes()->create([
             'vendor_id' => $vendor->id,
@@ -228,6 +283,71 @@ class DemoEvidenceModeTest extends TestCase
             ->assertJsonPath('data.commercial_parties.supplier.display_name', 'Nhà xuất bản Demo')
             ->assertJsonPath('data.commercial_parties.supplier.acceptance_status', 'demo_accepted')
             ->assertJsonPath('data.commercial_parties.supplier.is_demo', true);
+
+        $canonicalRelationship = $relationship->fresh(['organization']);
+        $this->assertSame($canonicalRelationship->authority_fingerprint, AuthorityReviewFingerprint::relationship($canonicalRelationship));
+        $this->assertSame($canonicalRelationship->authority_fingerprint, $canonicalRelationship->latestEvent->reviewed_fingerprint);
+
+        $supplierParty = $book->commercialParties()->where('role', 'supplier')->sole();
+        $supplierParty->update(['status' => 'verified', 'verified_at' => now(), 'verified_by' => $admin->id]);
+        $this->assertFalse($book->fresh()->activeCommercialParties()->where('role', 'supplier')->exists());
+        $this->assertNull(app(CommercialPartyService::class)->snapshot($book->fresh()));
+
+        $supplierParty->update(['status' => 'demo_accepted', 'verified_at' => null, 'verified_by' => null]);
+        $this->assertTrue($book->fresh()->activeCommercialParties()->where('role', 'supplier')->exists());
+
+        $originalFingerprint = $canonicalRelationship->authority_fingerprint;
+        $originalReviewedFingerprint = $canonicalRelationship->latestEvent->reviewed_fingerprint;
+        $relationship->update(['demo_reference' => 'DEMO-REL-LISTING-001-MUTATED']);
+        $mutatedRelationship = $relationship->fresh(['organization']);
+        $this->assertNotSame($originalFingerprint, $mutatedRelationship->authority_fingerprint);
+        $this->assertSame($mutatedRelationship->authority_fingerprint, AuthorityReviewFingerprint::relationship($mutatedRelationship));
+        $this->assertSame($originalReviewedFingerprint, $mutatedRelationship->latestEvent->reviewed_fingerprint);
+        $this->assertFalse($mutatedRelationship->isCurrentlyVerified());
+        $this->assertFalse($book->fresh()->activeCommercialParties()->whereIn('role', CommercialPartyService::ROLES)->exists());
+        $this->assertNull(app(CommercialPartyService::class)->snapshot($book->fresh()));
+
+        $service = app(OrganizationRelationshipService::class);
+        $eventCount = OrganizationRelationshipEvent::count();
+        $resourceFields = [
+            'status' => $mutatedRelationship->getRawOriginal('status'),
+            'demo_reference' => $mutatedRelationship->getRawOriginal('demo_reference'),
+            'authority_fingerprint' => $mutatedRelationship->getRawOriginal('authority_fingerprint'),
+            'reviewed_by' => $mutatedRelationship->getRawOriginal('reviewed_by'),
+            'last_review_reason' => $mutatedRelationship->getRawOriginal('last_review_reason'),
+        ];
+        try {
+            $service->transition($mutatedRelationship, 'demo_accepted', $admin, 'Demo relationship reviewed.', 'demo-book-relationship-event');
+            $this->fail('Fingerprint-stale relationship replay must reject.');
+        } catch (ValidationException) {
+            $this->assertSame($eventCount, OrganizationRelationshipEvent::count());
+            $freshRelationship = $mutatedRelationship->fresh();
+            $this->assertSame($resourceFields, [
+                'status' => $freshRelationship->getRawOriginal('status'),
+                'demo_reference' => $freshRelationship->getRawOriginal('demo_reference'),
+                'authority_fingerprint' => $freshRelationship->getRawOriginal('authority_fingerprint'),
+                'reviewed_by' => $freshRelationship->getRawOriginal('reviewed_by'),
+                'last_review_reason' => $freshRelationship->getRawOriginal('last_review_reason'),
+            ]);
+        }
+        foreach ([
+            fn () => $service->transition($mutatedRelationship, 'demo_accepted', $admin, 'Different reason.', 'demo-book-relationship-event'),
+            fn () => $service->transition($mutatedRelationship, 'demo_accepted', $admin, 'Demo relationship reviewed.', 'demo-book-org-event'),
+        ] as $attempt) {
+            try {
+                $attempt();
+                $this->fail('A mismatched relationship replay must reject.');
+            } catch (ValidationException) {
+                $this->assertSame($eventCount, OrganizationRelationshipEvent::count());
+            }
+        }
+        $service->transition($mutatedRelationship, 'suspended', $admin, 'Suspended after acceptance.', 'demo-book-relationship-suspended');
+        try {
+            $service->transition($mutatedRelationship, 'demo_accepted', $admin, 'Demo relationship reviewed.', 'demo-book-relationship-event');
+            $this->fail('A stale relationship replay must reject.');
+        } catch (ValidationException) {
+            $this->assertSame($eventCount + 1, OrganizationRelationshipEvent::count());
+        }
     }
 
     public function test_admin_dashboard_filters_demo_organizations_and_returns_independent_pagination(): void

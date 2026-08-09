@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\Vendor;
 use App\Http\Controllers\Controller;
 use App\Models\Book;
 use App\Models\Organization;
+use App\Models\OrganizationMembership;
 use App\Models\VendorOrganizationRelationship;
 use App\Services\CommercialPartyService;
 use App\Services\OrganizationRelationshipService;
@@ -19,8 +20,18 @@ class OrganizationController extends Controller
     public function index(Request $request)
     {
         $vendor = $request->user()->vendor()->withoutGlobalScopes()->firstOrFail();
+
         $relationships = $vendor->organizationRelationships()->with('organization')->latest()->get();
-        $relationships->each(fn (VendorOrganizationRelationship $relationship) => $relationship->organization?->makeVisible(['tax_code', 'license_number']));
+        $managedOrganizationIds = OrganizationMembership::query()
+            ->where('user_id', $request->user()->id)
+            ->where('status', 'active')
+            ->whereIn('role', ['owner', 'admin'])
+            ->pluck('organization_id');
+        $relationships->each(function (VendorOrganizationRelationship $relationship) use ($managedOrganizationIds): void {
+            if ($relationship->role === 'self_legal_entity' && $managedOrganizationIds->contains($relationship->organization_id)) {
+                $relationship->organization?->makeVisible(['tax_code', 'license_number']);
+            }
+        });
         $unlinkedBooks = Book::withoutGlobalScopes()
             ->where('vendor_id', $vendor->id)
             ->where(fn ($query) => $query->whereNull('provenance')->orWhere('provenance', '!=', 'used_resale'))
@@ -72,7 +83,7 @@ class OrganizationController extends Controller
             'public_source_url' => ['nullable', 'url', 'max:255'],
             'public_source_checked_at' => ['nullable', 'date', 'before_or_equal:today'],
             'logo' => ['nullable', 'file', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
-            'verification_document' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:5120'],
+            'verification_document' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:5120'],
         ]);
         $vendor = $request->user()->vendor()->withoutGlobalScopes()->firstOrFail();
 
@@ -90,8 +101,19 @@ class OrganizationController extends Controller
                     'organization_id' => $organization->id,
                     'role' => 'self_legal_entity',
                     'status' => 'submitted',
+                    'is_demo' => false,
+                    'evidence_mode' => 'real_document',
+                    'evidence_document' => $validated['verification_document'],
+                    'demo_reference' => null,
                     'submitted_at' => now(),
                     'operation_key' => 'organization-self:'.Str::uuid(),
+                ]);
+                OrganizationMembership::firstOrCreate([
+                    'user_id' => $vendor->user_id,
+                    'organization_id' => $organization->id,
+                ], [
+                    'role' => 'owner',
+                    'status' => 'active',
                 ]);
                 if (! $vendor->primary_organization_id) {
                     $vendor->update(['primary_organization_id' => $organization->id]);
@@ -120,7 +142,7 @@ class OrganizationController extends Controller
             ->where('organization_id', $organization->id)
             ->where('role', 'self_legal_entity')
             ->firstOrFail();
-        abort_unless(in_array($organization->status, ['draft', 'pending_review', 'changes_requested', 'demo_accepted'], true), 422);
+        abort_unless(in_array($organization->status, ['draft', 'pending_review', 'changes_requested', 'verified', 'demo_accepted'], true), 422);
 
         $validated = $request->validate([
             'legal_name' => ['required', 'string', 'max:255'],
@@ -155,7 +177,16 @@ class OrganizationController extends Controller
                 if ($organization->data_mode !== 'demo') {
                     $validated['status'] = 'pending_review';
                     $validated['submitted_at'] = now();
-                    $relationship->update(['status' => 'submitted', 'submitted_at' => now()]);
+                    $relationship->update([
+                        'status' => 'submitted',
+                        'submitted_at' => now(),
+                        ...($newVerification ? [
+                            'is_demo' => false,
+                            'evidence_mode' => 'real_document',
+                            'evidence_document' => $newVerification,
+                            'demo_reference' => null,
+                        ] : []),
+                    ]);
                 }
                 $organization->update($validated);
             });

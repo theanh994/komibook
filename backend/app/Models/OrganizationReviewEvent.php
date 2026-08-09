@@ -5,34 +5,28 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-class OrganizationRelationshipEvent extends Model
+class OrganizationReviewEvent extends Model
 {
     protected static function booted(): void
     {
         static::creating(function (self $event): void {
-            $event->reviewed_fingerprint ??= VendorOrganizationRelationship::find($event->vendor_organization_relationship_id)?->authority_fingerprint;
+            $event->reviewed_fingerprint ??= Organization::find($event->organization_id)?->authority_fingerprint;
         });
     }
 
     protected $fillable = [
-        'vendor_organization_relationship_id',
+        'organization_id',
         'actor_id',
         'from_status',
         'to_status',
         'reason',
         'operation_key',
-        'metadata',
         'reviewed_fingerprint',
     ];
 
-    protected function casts(): array
+    public function organization(): BelongsTo
     {
-        return ['metadata' => 'array'];
-    }
-
-    public function relationship(): BelongsTo
-    {
-        return $this->belongsTo(VendorOrganizationRelationship::class, 'vendor_organization_relationship_id');
+        return $this->belongsTo(Organization::class);
     }
 
     public function actor(): BelongsTo

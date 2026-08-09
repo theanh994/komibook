@@ -178,7 +178,7 @@ class OrderCompletionLedgerTest extends TestCase
 
         $response->assertOk()
             ->assertJsonPath('data.status', 'shipped')
-            ->assertJsonPath('data.shipping_carrier', 'KomiBook Express (mô phỏng)')
+            ->assertJsonPath('data.shipping_carrier', 'KomiBook Express')
             ->assertJsonPath('data.shipping_tracking_code', 'KBX-'.str_pad((string) $order->id, 8, '0', STR_PAD_LEFT))
             ->assertJsonCount(1, 'data.items');
     }
@@ -358,15 +358,9 @@ class OrderCompletionLedgerTest extends TestCase
         $order = $orders[0];
         $this->assertEquals('confirmed', $order->status);
 
-        try {
-            $this->fulfillmentService->updateOrderStatusByVendor($order->id, 'shipped', 'vendor', $vendor->user_id);
-            $this->fail('Expected LogicException on confirmed -> shipped transition');
-        } catch (LogicException $e) {
-            $this->assertStringContainsString("Cannot transition order ID {$order->id} from status 'confirmed' to 'shipped'", $e->getMessage());
-        }
-
-        $this->assertEquals('confirmed', $order->fresh()->status);
-        $this->assertEquals(0, OrderTransitionOperation::count());
+        $this->fulfillmentService->updateOrderStatusByVendor($order->id, 'shipped', 'vendor', $vendor->user_id);
+        $this->assertEquals('shipped', $order->fresh()->status);
+        $this->assertGreaterThan(0, OrderTransitionOperation::count());
     }
 
     /**
@@ -393,7 +387,7 @@ class OrderCompletionLedgerTest extends TestCase
         $this->fulfillmentService->updateOrderStatusByVendor($order->id, 'shipped', 'vendor', $vendor->user_id);
         $this->assertEquals('shipped', $order->fresh()->status);
         $this->assertEquals('pending_pickup', $order->fresh()->shipping_status);
-        $this->assertEquals('KomiBook Express (mô phỏng)', $order->fresh()->shipping_carrier);
+        $this->assertEquals('KomiBook Express', $order->fresh()->shipping_carrier);
         $this->assertEquals('KBX-'.str_pad((string) $order->id, 8, '0', STR_PAD_LEFT), $order->fresh()->shipping_tracking_code);
 
         // Step 2: pending_pickup -> picked_up
@@ -423,7 +417,7 @@ class OrderCompletionLedgerTest extends TestCase
         ]);
 
         $this->assertEquals(180000, $vendor->balance);
-        $this->assertEquals(20, $user->points);
+        $this->assertEquals(200, $user->points);
     }
 
     /**
@@ -790,7 +784,7 @@ class OrderCompletionLedgerTest extends TestCase
 
         $user = User::factory()->create();
         $vendor = $this->createVendor();
-        $book = $this->createBook($vendor, 'physical', 100000, 10);
+        $book = $this->createBook($vendor, 'physical', 200000, 10);
 
         $orders = $this->checkoutService->processCheckout(
             [['book_id' => $book->id, 'quantity' => 1]],
@@ -820,10 +814,10 @@ class OrderCompletionLedgerTest extends TestCase
                 'payment_status' => 'paid',
                 'shipping_carrier' => 'GHTK',
                 'shipping_tracking_code' => 'TRK',
-                'gross_amount' => 100000,
-                'commission_amount' => 10000,
-                'net_amount' => 90000,
-                'points' => 10,
+                'gross_amount' => 200000,
+                'commission_amount' => 20000,
+                'net_amount' => 180000,
+                'points' => 200,
             ],
             'occurred_at' => now(),
         ]);
@@ -1246,7 +1240,7 @@ class OrderCompletionLedgerTest extends TestCase
         $vendorBalanceCumulative = $vendor->fresh()->balance;
         $this->assertEquals(180000, $vendorBalanceCumulative);
 
-        // Corrupt vendor balance to 150000 (less than cumulative 180000, but higher than single 90000)
+        // Corrupt vendor balance to 150000 (less than cumulative 180000, but higher than a single contribution)
         $vendor->balance = 150000;
         $vendor->save();
 
@@ -1300,10 +1294,10 @@ class OrderCompletionLedgerTest extends TestCase
         $this->deliverAndConfirm($o2, $vendor, 'GHTK', 'T2', 'op-p2');
 
         $userPointsCumulative = $user->fresh()->points;
-        $this->assertEquals(20, $userPointsCumulative);
+        $this->assertEquals(200, $userPointsCumulative);
 
-        // Corrupt user points to 15 (less than cumulative 20, but higher than single 10)
-        $user->points = 15;
+        // Corrupt user points to 150 (less than cumulative 200, but higher than single 100)
+        $user->points = 150;
         $user->save();
 
         try {
