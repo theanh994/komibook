@@ -3,8 +3,14 @@
 namespace Tests\Feature;
 
 use App\Models\Category;
+use App\Models\DemoWalletAccount;
+use App\Models\DemoWalletLedgerEntry;
 use App\Models\SellerFulfillmentAddress;
+use App\Models\UsedBookSellerProfile;
 use App\Models\User;
+use App\Models\Vendor;
+use App\Models\Warehouse;
+use App\Models\WarehouseStock;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
@@ -66,17 +72,25 @@ class Phase7UsedBookSellerTest extends TestCase
         ])->assertForbidden();
     }
 
-    public function test_customer_receives_used_book_seller_capability_without_actor_profile(): void
+    public function test_get_used_book_seller_listings_does_not_provision_an_actor_profile(): void
     {
         $user = User::factory()->create(['role' => 'customer']);
+        $before = [Vendor::count(), UsedBookSellerProfile::count(), Warehouse::count(), WarehouseStock::count()];
 
         $this->actingAs($user)->getJson('/api/used-book-seller/listings')
-            ->assertOk()
-            ->assertJsonPath('meta.ownership', 'used_book_seller');
+            ->assertForbidden();
 
-        $this->assertDatabaseHas('used_book_seller_profiles', [
-            'user_id' => $user->id,
-            'status' => 'active',
-        ]);
+        $this->assertSame($before, [Vendor::count(), UsedBookSellerProfile::count(), Warehouse::count(), WarehouseStock::count()]);
+    }
+
+    public function test_wallet_get_without_account_returns_zero_without_writes(): void
+    {
+        $user = User::factory()->create(['role' => 'customer']);
+        $vendor = Vendor::create(['user_id' => $user->id, 'shop_name' => 'Wallet seller', 'slug' => 'wallet-seller-'.$user->id, 'status' => 'active', 'onboarding_status' => 'approved', 'business_model' => 'bookstore']);
+        UsedBookSellerProfile::create(['user_id' => $user->id, 'catalog_vendor_id' => $vendor->id, 'status' => 'active', 'capabilities' => ['used_resale']]);
+        $before = [DemoWalletAccount::count(), DemoWalletLedgerEntry::count(), UsedBookSellerProfile::count(), Vendor::count(), Warehouse::count(), WarehouseStock::count()];
+        $this->actingAs($user)->getJson('/api/used-book-seller/wallet')->assertOk()->assertJsonPath('data.balance', 0)->assertJsonPath('data.currency', 'VND')->assertJsonPath('data.entries', []);
+        $this->actingAs($user)->getJson('/api/used-book-seller/wallet')->assertOk();
+        $this->assertSame($before, [DemoWalletAccount::count(), DemoWalletLedgerEntry::count(), UsedBookSellerProfile::count(), Vendor::count(), Warehouse::count(), WarehouseStock::count()]);
     }
 }

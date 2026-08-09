@@ -2,7 +2,9 @@
 
 namespace App\Console\Commands;
 
+use App\Models\UsedBookListing;
 use App\Services\ProductionMediaIntegrityService;
+use App\Services\UsedBookInventoryService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -87,6 +89,38 @@ class CheckProductionReadiness extends Command
             );
         } catch (Throwable $exception) {
             $this->check($checks, 'public_media_integrity', false, $exception::class, ['missing_count' => 0]);
+        }
+
+        try {
+            if (! Schema::hasTable('used_book_listings') || ! Schema::hasColumn('used_book_listings', 'warehouse_id')) {
+                $this->check($checks, 'used_book_inventory_truth', false, ['reason_code' => 'warehouse_binding_schema_missing'], 'canonical used-book inventory');
+            } else {
+                $service = app(UsedBookInventoryService::class);
+                $unsafe = [];
+                $safeLegacy = [];
+                foreach (UsedBookListing::query()->orderBy('id')->get() as $listing) {
+                    $check = $service->inspect($listing);
+                    if ($check['valid']) {
+                        continue;
+                    }
+                    $candidate = $listing->warehouse_id === null
+                        ? $service->inspectBindableCandidate($listing)
+                        : ['valid' => false, 'book' => null];
+                    $safe = $listing->status === 'sold_out'
+                        && (int) $listing->quantity_available === 0
+                        && (int) ($candidate['book']?->stock ?? 0) === 0
+                        && $listing->warehouse_id === null
+                        && $candidate['valid'];
+                    if ($safe) {
+                        $safeLegacy[] = ['listing_id' => $listing->id, 'reason_code' => $check['reason_code']];
+                    } else {
+                        $unsafe[] = ['listing_id' => $listing->id, 'reason_code' => $check['reason_code']];
+                    }
+                }
+                $this->check($checks, 'used_book_inventory_truth', $unsafe === [], ['unsafe_count' => count($unsafe), 'safe_legacy_count' => count($safeLegacy), 'unsafe' => $unsafe, 'safe_legacy' => $safeLegacy], ['unsafe_count' => 0]);
+            }
+        } catch (Throwable $exception) {
+            $this->check($checks, 'used_book_inventory_truth', false, $exception::class, 'canonical used-book inventory');
         }
 
         $passed = collect($checks)->every(fn (array $check) => $check['passed']);

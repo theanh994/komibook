@@ -5,8 +5,12 @@ namespace App\Services;
 use App\Enums\InventoryReservationStatus;
 use App\Enums\PaymentTransactionStatus;
 use App\Models\Book;
+use App\Models\DemoWalletAccount;
+use App\Models\DemoWalletLedgerEntry;
+use App\Models\InventoryReservationAllocation;
 use App\Models\Order;
 use App\Models\OrderItem;
+use App\Models\PaymentTransaction;
 use App\Models\RefundTransaction;
 use App\Models\RefundTransactionAttempt;
 use App\Models\ReturnRequest;
@@ -198,6 +202,10 @@ class ReturnRefundService
         string $operationKey,
         ?string $reason = null
     ): ReturnRequest {
+        if ($target === 'refund_processing') {
+            throw new LogicException('Chỉ luồng xử lý hoàn tiền nguyên tử mới được chuyển sang trạng thái hoàn tiền.');
+        }
+
         return DB::transaction(function () use ($returnId, $target, $actor, $operationKey, $reason) {
             $existing = ReturnRequestTransition::where('operation_key', $operationKey)->first();
             if ($existing) {
@@ -219,25 +227,31 @@ class ReturnRefundService
             }
 
             if ($target === 'approved') {
+                $this->assertCanonicalApprovalOrder($return);
                 $holdAmount = $this->calculateVendorReversal($return)['net_amount'];
-                VendorFinancialHold::firstOrCreate(
-                    ['return_request_id' => $return->id],
-                    [
+                $hold = VendorFinancialHold::where('return_request_id', $return->id)->lockForUpdate()->first();
+                if ($hold) {
+                    if ((int) $hold->vendor_id !== (int) $return->vendor_id
+                        || $hold->operation_key !== "refund-hold:{$return->id}"
+                        || $hold->currency !== $return->currency
+                        || (int) $hold->amount !== $holdAmount
+                        || $hold->status !== 'active') {
+                        throw new LogicException('Khoản giữ tiền hoàn trả hiện có không nhất quán.');
+                    }
+                } else {
+                    VendorFinancialHold::create([
                         'vendor_id' => $return->vendor_id,
                         'operation_key' => "refund-hold:{$return->id}",
                         'amount' => $holdAmount,
                         'currency' => $return->currency,
                         'status' => 'active',
-                    ]
-                );
+                        'return_request_id' => $return->id,
+                    ]);
+                }
                 $return->approved_at = now();
             } elseif ($target === 'item_received') {
                 $this->restoreInventory($return);
                 $return->item_received_at = now();
-            } elseif ($target === 'refund_processing') {
-                $this->prepareRefund($return);
-                $return->refund_started_at = now();
-                $return->order()->withoutGlobalScopes()->update(['refund_status' => 'refunding']);
             } elseif ($target === 'rejected') {
                 $return->rejected_at = now();
                 $return->resolution_reason = $reason;
@@ -258,168 +272,114 @@ class ReturnRefundService
         string $clientIp,
         ?string $manualEvidence = null
     ): ReturnRequest {
-        $previousAttempt = RefundTransactionAttempt::where('operation_key', $operationKey)->first();
-        if ($previousAttempt) {
-            $return = ReturnRequest::whereKey($returnId)->firstOrFail();
-            $this->authorizeStaffActor($return, $actor);
-            if ((int) $previousAttempt->refundTransaction->return_request_id !== $returnId) {
-                throw new LogicException('Khóa thao tác hoàn tiền đã được dùng cho yêu cầu khác.');
-            }
-            if ($previousAttempt->status === 'succeeded' && $return->status !== 'refunded') {
-                return $this->finalizeRefund($returnId, $actor, $operationKey.':complete');
-            }
-            if (in_array($previousAttempt->status, ['processing', 'pending'], true)) {
-                if ($previousAttempt->status === 'pending') {
-                    return $return->load(['items.orderItem.book', 'transitions', 'refundTransaction.attempts']);
-                }
-                throw new LogicException('Giao dịch hoàn tiền này đang được xử lý.');
-            }
-
-            return $return->load(['items.orderItem.book', 'transitions', 'refundTransaction.attempts']);
-        }
-
-        $return = DB::transaction(function () use ($returnId, $actor, $operationKey) {
+        return DB::transaction(function () use ($returnId, $actor, $operationKey, $manualEvidence) {
             $return = ReturnRequest::whereKey($returnId)->lockForUpdate()->firstOrFail();
+            $order = Order::withoutGlobalScopes()->whereKey($return->order_id)->lockForUpdate()->firstOrFail();
+            $this->assertOnlineOrder($order);
+            $this->assertCanonicalReturnOrder($return, $order);
             $this->authorizeStaffActor($return, $actor);
+
+            $operationAttempt = RefundTransactionAttempt::where('operation_key', $operationKey)->lockForUpdate()->first();
+            if ($operationAttempt) {
+                $attemptRefund = RefundTransaction::whereKey($operationAttempt->refund_transaction_id)->lockForUpdate()->firstOrFail();
+                if ((int) $attemptRefund->return_request_id !== (int) $return->id) {
+                    throw new LogicException('Khóa thao tác hoàn tiền đã được dùng cho yêu cầu khác.');
+                }
+            }
 
             if ($return->status === 'refunded') {
-                return $return->load(['order.checkoutSessionOrder.checkoutSession.paymentTransactions', 'refundTransaction.attempts']);
+                $allocations = $this->canonicalAllocations($order, $return);
+                $this->assertRefundedEvidence($return, $order, $allocations[(int) $return->id] ?? null);
+                $this->assertOrderRefundProjection($order);
+
+                return $return->load(['items.orderItem.book', 'transitions', 'refundTransaction.attempts']);
             }
-            if ($return->status === 'item_received' || $return->status === 'refund_failed') {
-                return $this->transition($return->id, 'refund_processing', $actor, $operationKey);
-            }
-            if ($return->status !== 'refund_processing') {
+            if (! in_array($return->status, ['item_received', 'refund_failed', 'refund_processing'], true)) {
                 throw new LogicException('Yêu cầu chưa sẵn sàng để hoàn tiền.');
             }
+            $from = $return->status;
+            $refund = $this->prepareRefund($return, $from);
+            $attempt = $operationAttempt;
+            if ($attempt) {
+                $this->assertAttemptMatches($attempt, $refund, $return);
+                if ($attempt->status === 'succeeded' && $return->status === 'refunded') {
+                    return $return->load(['items.orderItem.book', 'transitions', 'refundTransaction.attempts']);
+                }
+                throw new LogicException('Bằng chứng attempt hoàn tiền hiện có không nhất quán với trạng thái trả hàng.');
+            }
+            if ($from === 'refund_failed') {
+                $priorStatuses = $refund->attempts()->lockForUpdate()->pluck('status');
+                if ($priorStatuses->isEmpty() || $priorStatuses->contains(fn ($status) => $status !== 'failed')) {
+                    throw new LogicException('Hoàn tiền thất bại lịch sử chỉ được thử lại khi có attempt thất bại nhất quán.');
+                }
+            }
+            if ($from === 'refund_processing' && $refund->attempts()->lockForUpdate()->exists()) {
+                throw new LogicException('Hoàn tiền đang xử lý lịch sử phải không có attempt để tiếp tục một cách an toàn.');
+            }
+            if ($refund->attempts()->whereIn('status', ['pending', 'processing', 'succeeded'])->exists()) {
+                throw new LogicException('Giao dịch hoàn tiền đã có attempt đang xử lý hoặc thành công nhưng chưa hoàn tất.');
+            }
 
-            return $return->load(['order.checkoutSessionOrder.checkoutSession.paymentTransactions', 'refundTransaction']);
-        });
+            $this->validateOtherRefundReversals($order, $return);
 
-        if ($return->status === 'refunded') {
-            return $return->load(['items.orderItem.book', 'transitions', 'refundTransaction.attempts']);
-        }
-
-        $refund = $return->refundTransaction;
-        if (! $refund) {
-            throw new LogicException('Không tìm thấy giao dịch hoàn tiền.');
-        }
-
-        // Refund destination is always the buyer's KomiBook Wallet. This is an
-        // internal, fee-free operation and never calls the original provider.
-        $attempt = RefundTransactionAttempt::firstOrCreate(
-            ['operation_key' => $operationKey],
-            [
+            $attempt = RefundTransactionAttempt::create([
                 'refund_transaction_id' => $refund->id,
-                'attempt_number' => $refund->attempts()->count() + 1,
-                'status' => 'succeeded',
-                'request_payload' => ['refund_destination' => 'komibook_wallet'],
-                'response_payload' => ['internal_wallet_credit' => true, 'no_external_call' => true],
-                'attempted_at' => now(),
-            ]
-        );
-        $refund->provider_reference = 'KOMIBOOK-WALLET-REFUND-'.$attempt->id;
-        $refund->save();
-
-        return $this->finalizeRefund($return->id, $actor, $operationKey.':complete');
-
-        if ($refund->provider === 'cod') {
-            if (! $manualEvidence) {
-                throw new LogicException('Hoàn tiền COD cần chứng từ hoặc mã tham chiếu.');
-            }
-
-            return $this->finalizeRefund($return->id, $actor, $operationKey.':complete', $manualEvidence);
-        }
-
-        $payment = $refund->paymentTransaction;
-        if (! $payment) {
-            throw new LogicException('Không tìm thấy giao dịch thanh toán gốc.');
-        }
-
-        if ($refund->provider === 'payos') {
-            throw new LogicException('payOS đã ngừng hỗ trợ; giao dịch lịch sử cần được Admin xử lý thủ công.');
-        }
-
-        if ($refund->provider === 'momo') {
-            throw new LogicException('MoMo đã ngừng hỗ trợ; giao dịch lịch sử cần được Admin xử lý thủ công.');
-        }
-
-        $isDemoPayment = (bool) ($payment->request_payload['demo_only'] ?? false);
-        if (in_array($refund->provider, ['vnpay', 'demo_wallet'], true) && $isDemoPayment) {
-
-            $attempt = RefundTransactionAttempt::firstOrCreate(
-                ['operation_key' => $operationKey],
-                [
-                    'refund_transaction_id' => $refund->id,
-                    'attempt_number' => $refund->attempts()->count() + 1,
-                    'status' => 'succeeded',
-                    'request_payload' => ['demo_only' => true],
-                    'response_payload' => ['demo_only' => true, 'no_external_call' => true],
-                    'attempted_at' => now(),
-                ]
-            );
-            if ($refund->provider === 'demo_wallet') {
-                $buyer = $payment->checkoutSession()->firstOrFail()->user()->firstOrFail();
-                app(DemoWalletService::class)->creditRefund($buyer, $payment, (int) $refund->amount, $return->id);
-            }
-            $refund->provider_reference = 'DEMO-REFUND-'.$attempt->id;
-            $refund->save();
-
-            return $this->finalizeRefund($return->id, $actor, $operationKey.':complete');
-        }
-
-        if ($refund->provider === 'demo_wallet') {
-            throw new LogicException('Không được hoàn giao dịch provider thật bằng luồng mô phỏng.');
-        }
-
-        $attempt = DB::transaction(function () use ($refund, $operationKey) {
-            $lockedRefund = RefundTransaction::whereKey($refund->id)->lockForUpdate()->firstOrFail();
-            if ($lockedRefund->attempts()->whereIn('status', ['processing', 'pending'])->exists()) {
-                throw new LogicException('Giao dịch hoàn tiền này đang được xử lý.');
-            }
-
-            return RefundTransactionAttempt::create([
-                'refund_transaction_id' => $lockedRefund->id,
                 'operation_key' => $operationKey,
-                'attempt_number' => $lockedRefund->attempts()->count() + 1,
+                'attempt_number' => (int) $refund->attempts()->max('attempt_number') + 1,
                 'status' => 'processing',
-                'request_payload' => [],
+                'request_payload' => ['refund_destination' => 'komibook_wallet'],
                 'response_payload' => [],
                 'attempted_at' => now(),
             ]);
-        });
 
-        try {
-            $result = $this->refundGateway->refund($refund->load('returnRequest'), $payment, (string) $actor->id, $clientIp);
-        } catch (\Throwable $exception) {
-            $result = [
-                'successful' => false,
-                'pending' => false,
-                'provider_reference' => null,
-                'request' => [],
-                'response' => [],
-                'failure_reason' => $exception->getMessage(),
-            ];
-        }
+            $return->status = 'refund_processing';
+            $return->refund_started_at = $return->refund_started_at ?? now();
+            $return->save();
+            if ($from !== 'refund_processing') {
+                $this->recordTransition(
+                    $return,
+                    $from,
+                    'refund_processing',
+                    $actor->role,
+                    $actor->id,
+                    null,
+                    $this->settlementTransitionKey($operationKey, 'processing')
+                );
+            }
+            $order->refund_status = 'refunding';
+            $order->save();
 
-        $attempt->update([
-            'status' => $result['successful'] ? 'succeeded' : ($result['pending'] ? 'pending' : 'failed'),
-            'request_payload' => $result['request'],
-            'response_payload' => $result['response'],
-            'failure_reason' => $result['failure_reason'],
-        ]);
+            $buyer = User::whereKey($return->user_id)->lockForUpdate()->firstOrFail();
+            app(DemoWalletService::class)->creditRefund($buyer, $refund->paymentTransaction, $order, (int) $refund->amount, $return->id);
+            $this->reverseFinancialEffects($return);
+            $this->consumeFinancialHold($return);
 
-        if ($result['successful']) {
-            $refund->provider_reference = $result['provider_reference'];
+            $attempt->status = 'succeeded';
+            $attempt->response_payload = ['internal_wallet_credit' => true, 'no_external_call' => true];
+            $attempt->failure_reason = null;
+            $attempt->save();
+            $refund->provider_reference = 'KOMIBOOK-WALLET-REFUND-'.$attempt->id;
+            $refund->status = 'refunded';
+            $refund->evidence = $manualEvidence ?? $refund->evidence;
+            $refund->failure_reason = null;
+            $refund->refunded_at = now();
             $refund->save();
+            $return->status = 'refunded';
+            $return->refunded_at = now();
+            $return->save();
+            $this->recordTransition(
+                $return,
+                'refund_processing',
+                'refunded',
+                $actor->role,
+                $actor->id,
+                $manualEvidence,
+                $this->settlementTransitionKey($operationKey, 'complete')
+            );
+            $this->updateOrderRefundProjection($return);
 
-            return $this->finalizeRefund($return->id, $actor, $operationKey.':complete');
-        }
-
-        if ($result['pending']) {
-            return $return->fresh()->load(['items.orderItem.book', 'transitions', 'refundTransaction.attempts']);
-        }
-
-        return $this->failRefund($return->id, $actor, $operationKey.':failed', $result['failure_reason']);
+            return $return->load(['items.orderItem.book', 'transitions', 'refundTransaction.attempts']);
+        });
     }
 
     public function reconcileRefund(
@@ -428,99 +388,48 @@ class ReturnRefundService
         string $operationKey,
         string $clientIp
     ): ReturnRequest {
-        $previousAttempt = RefundTransactionAttempt::where('operation_key', $operationKey)->first();
-        if ($previousAttempt) {
-            $return = ReturnRequest::whereKey($returnId)->firstOrFail();
+        return DB::transaction(function () use ($returnId, $actor) {
+            $return = ReturnRequest::whereKey($returnId)->lockForUpdate()->firstOrFail();
             $this->authorizeStaffActor($return, $actor);
-            if ((int) $previousAttempt->refundTransaction->return_request_id !== $returnId) {
-                throw new LogicException('Khóa đối soát đã được dùng cho yêu cầu khác.');
+            if ($return->status === 'refunded') {
+                $order = Order::withoutGlobalScopes()->whereKey($return->order_id)->lockForUpdate()->firstOrFail();
+                $this->assertOnlineOrder($order);
+                $this->assertCanonicalReturnOrder($return, $order);
+                $allocations = $this->canonicalAllocations($order, $return);
+                $this->assertRefundedEvidence($return, $order, $allocations[(int) $return->id] ?? null);
+                $this->assertOrderRefundProjection($order);
+
+                return $return->load(['items.orderItem.book', 'transitions', 'refundTransaction.attempts']);
             }
-            if ($previousAttempt->status === 'succeeded' && $return->status !== 'refunded') {
-                return $this->finalizeRefund($returnId, $actor, $operationKey.':complete');
-            }
 
-            return $return->load(['items.orderItem.book', 'transitions', 'refundTransaction.attempts']);
-        }
-
-        $return = ReturnRequest::with(['refundTransaction.paymentTransaction'])
-            ->whereKey($returnId)
-            ->firstOrFail();
-        $this->authorizeStaffActor($return, $actor);
-        if ($return->status === 'refunded') {
-            return $return->load(['items.orderItem.book', 'transitions', 'refundTransaction.attempts']);
-        }
-        if ($return->status !== 'refund_processing' || $return->refundTransaction?->provider !== 'vnpay') {
-            throw new LogicException('Chỉ giao dịch VNPAY đang xử lý mới có thể đối soát.');
-        }
-        if (! $return->refundTransaction->paymentTransaction) {
-            throw new LogicException('Không tìm thấy giao dịch thanh toán gốc để đối soát.');
-        }
-
-        $attempt = DB::transaction(function () use ($return, $operationKey) {
-            $refund = RefundTransaction::whereKey($return->refundTransaction->id)->lockForUpdate()->firstOrFail();
-
-            return RefundTransactionAttempt::create([
-                'refund_transaction_id' => $refund->id,
-                'operation_key' => $operationKey,
-                'attempt_number' => $refund->attempts()->count() + 1,
-                'status' => 'processing',
-                'request_payload' => [],
-                'response_payload' => [],
-                'attempted_at' => now(),
-            ]);
+            throw new LogicException('Đối soát gateway hoàn tiền đã bị vô hiệu hóa; trạng thái chưa hoàn tiền không thể được thay đổi qua endpoint này.');
         });
-
-        try {
-            $result = $this->refundGateway->queryRefund(
-                $return->refundTransaction->load('returnRequest'),
-                $return->refundTransaction->paymentTransaction,
-                $operationKey,
-                $clientIp
-            );
-        } catch (\Throwable $exception) {
-            $result = [
-                'successful' => false,
-                'pending' => false,
-                'provider_reference' => null,
-                'request' => [],
-                'response' => [],
-                'failure_reason' => $exception->getMessage(),
-            ];
-        }
-
-        $attempt->update([
-            'status' => $result['successful'] ? 'succeeded' : ($result['pending'] ? 'pending' : 'failed'),
-            'request_payload' => $result['request'],
-            'response_payload' => $result['response'],
-            'failure_reason' => $result['failure_reason'],
-        ]);
-
-        if ($result['successful']) {
-            $return->refundTransaction->update(['provider_reference' => $result['provider_reference']]);
-
-            return $this->finalizeRefund($returnId, $actor, $operationKey.':complete');
-        }
-
-        return $return->fresh()->load(['items.orderItem.book', 'transitions', 'refundTransaction.attempts']);
     }
 
-    private function prepareRefund(ReturnRequest $return): RefundTransaction
+    private function prepareRefund(ReturnRequest $return, string $returnState): RefundTransaction
     {
-        $order = Order::withoutGlobalScopes()
-            ->with('checkoutSessionOrder.checkoutSession.paymentTransactions')
-            ->findOrFail($return->order_id);
-        $payment = $order->payment_method === 'cod'
-            ? null
-            : $order->checkoutSessionOrder?->checkoutSession?->paymentTransactions
-                ?->first(fn ($transaction) => $transaction->status === PaymentTransactionStatus::PAID);
-        $provider = $order->payment_method === 'cod' ? 'cod' : ($payment?->provider ?? 'online');
-
-        if ($order->payment_method !== 'cod' && ! $payment) {
-            throw new LogicException('Không tìm thấy giao dịch online đã thanh toán.');
+        $order = Order::withoutGlobalScopes()->whereKey($return->order_id)->lockForUpdate()->firstOrFail();
+        $this->assertOnlineOrder($order);
+        $checkoutSessionId = $order->checkoutSessionOrder?->checkout_session_id;
+        $payments = $checkoutSessionId
+            ? PaymentTransaction::where('checkout_session_id', $checkoutSessionId)
+                ->where('status', PaymentTransactionStatus::PAID)
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->get()
+            : collect();
+        if ($payments->count() !== 1) {
+            throw new LogicException('Giao dịch online đã thanh toán phải có đúng một giao dịch gốc chuẩn.');
         }
+        /** @var PaymentTransaction $payment */
+        $payment = $payments->sole();
+        $this->assertCanonicalReturnOrder($return, $order);
+        $this->assertCanonicalPaidPayment($order, $return, $payment);
+        $provider = $payment->provider;
 
         if ($payment) {
             $reserved = (int) RefundTransaction::where('payment_transaction_id', $payment->id)
+                ->where('return_request_id', '!=', $return->id)
                 ->whereIn('status', ['pending', 'processing', 'refunded'])
                 ->sum('amount');
             if ($reserved + $return->refund_amount > $payment->amount) {
@@ -528,9 +437,13 @@ class ReturnRefundService
             }
         }
 
-        $refund = RefundTransaction::firstOrCreate(
-            ['return_request_id' => $return->id],
-            [
+        $refund = RefundTransaction::where('return_request_id', $return->id)->lockForUpdate()->first();
+        if (! $refund) {
+            if ($returnState !== 'item_received') {
+                throw new LogicException('Trạng thái hoàn tiền lịch sử không có giao dịch hoàn tiền chuẩn để tiếp tục.');
+            }
+            $refund = RefundTransaction::create([
+                'return_request_id' => $return->id,
                 'payment_transaction_id' => $payment?->id,
                 'provider' => $provider,
                 'idempotency_key' => "refund:{$return->code}",
@@ -538,96 +451,96 @@ class ReturnRefundService
                 'currency' => $return->currency,
                 'status' => 'processing',
                 'processing_at' => now(),
-            ]
-        );
-        if ($refund->status !== 'refunded') {
-            $refund->status = 'processing';
-            $refund->failure_reason = null;
-            $refund->failed_at = null;
-            $refund->processing_at = now();
-            $refund->save();
+            ]);
+        } else {
+            if ((int) $refund->payment_transaction_id !== (int) $payment->id
+                || $refund->provider !== $provider
+                || (int) $refund->amount !== (int) $return->refund_amount
+                || $refund->currency !== $return->currency
+                || $refund->idempotency_key !== "refund:{$return->code}") {
+                throw new LogicException('Giao dịch hoàn tiền hiện có không nhất quán với đơn hàng và giao dịch gốc.');
+            }
+            if ($returnState === 'item_received'
+                || ($returnState === 'refund_processing' && ($refund->status !== 'processing' || $refund->provider_reference !== null))
+                || ($returnState === 'refund_failed' && ($refund->status !== 'failed' || $refund->provider_reference !== null))
+                || ! in_array($returnState, ['item_received', 'refund_processing', 'refund_failed'], true)) {
+                throw new LogicException('Trạng thái hoàn tiền lịch sử không nhất quán và không thể tiếp tục.');
+            }
         }
 
         return $refund;
     }
 
-    private function finalizeRefund(
-        int $returnId,
-        User $actor,
-        string $operationKey,
-        ?string $evidence = null
-    ): ReturnRequest {
-        return DB::transaction(function () use ($returnId, $actor, $operationKey, $evidence) {
-            $return = ReturnRequest::whereKey($returnId)->lockForUpdate()->firstOrFail();
-            if ($return->status === 'refunded') {
-                return $return->load(['refundTransaction.attempts', 'transitions']);
-            }
-            if ($return->status !== 'refund_processing') {
-                throw new LogicException('Yêu cầu không ở trạng thái đang hoàn tiền.');
-            }
-
-            $refund = RefundTransaction::where('return_request_id', $return->id)->lockForUpdate()->firstOrFail();
-            $refund->status = 'refunded';
-            $refund->evidence = $evidence ?? $refund->evidence;
-            $refund->failure_reason = null;
-            $refund->refunded_at = now();
-            $refund->save();
-
-            $order = Order::withoutGlobalScopes()->whereKey($return->order_id)->lockForUpdate()->firstOrFail();
-            $buyer = User::whereKey($return->user_id)->lockForUpdate()->firstOrFail();
-            app(DemoWalletService::class)->creditRefund(
-                $buyer,
-                $refund->paymentTransaction,
-                $order,
-                (int) $refund->amount,
-                $return->id
-            );
-
-            $this->reverseFinancialEffects($return);
-
-            $hold = VendorFinancialHold::where('return_request_id', $return->id)->lockForUpdate()->first();
-            if ($hold && $hold->status === 'active') {
-                $hold->status = 'consumed';
-                $hold->consumed_at = now();
-                $hold->save();
-            }
-
-            $from = $return->status;
-            $return->status = 'refunded';
-            $return->refunded_at = now();
-            $return->save();
-            $this->recordTransition($return, $from, 'refunded', $actor->role, $actor->id, $evidence, $operationKey);
-            $this->updateOrderRefundProjection($return);
-
-            return $return->load(['items.orderItem.book', 'transitions', 'refundTransaction.attempts']);
-        });
-    }
-
-    private function failRefund(int $returnId, User $actor, string $operationKey, ?string $reason): ReturnRequest
-    {
-        return DB::transaction(function () use ($returnId, $actor, $operationKey, $reason) {
-            $return = ReturnRequest::whereKey($returnId)->lockForUpdate()->firstOrFail();
-            if ($return->status !== 'refund_processing') {
-                throw new LogicException('Yêu cầu không ở trạng thái đang hoàn tiền.');
-            }
-
-            $refund = RefundTransaction::where('return_request_id', $return->id)->lockForUpdate()->firstOrFail();
-            $refund->status = 'failed';
-            $refund->failure_reason = $reason;
-            $refund->failed_at = now();
-            $refund->save();
-
-            $return->status = 'refund_failed';
-            $return->save();
-            $this->recordTransition($return, 'refund_processing', 'refund_failed', $actor->role, $actor->id, $reason, $operationKey);
-
-            return $return->load(['items.orderItem.book', 'transitions', 'refundTransaction.attempts']);
-        });
-    }
-
     private function restoreInventory(ReturnRequest $return): void
     {
-        $return->load('items.orderItem.inventoryReservation.allocations');
+        $return->load('items.orderItem.inventoryReservation');
+        $itemsToRestore = $return->items
+            ->filter(fn (ReturnRequestItem $item) => $item->inventory_restored_at === null)
+            ->values();
+
+        foreach ($itemsToRestore as $returnItem) {
+            $orderItem = $returnItem->orderItem;
+            $reservation = $orderItem?->inventoryReservation;
+            if (! $orderItem || ! $reservation || $reservation->status !== InventoryReservationStatus::COMMITTED
+                || (int) $reservation->order_item_id !== (int) $returnItem->order_item_id
+                || (int) $reservation->book_id !== (int) $orderItem->book_id) {
+                throw new LogicException('Không tìm thấy committed inventory reservation hợp lệ để hoàn kho.');
+            }
+        }
+
+        $usedBookInventory = app(UsedBookInventoryService::class);
+        $usedListings = $usedBookInventory->lockListingsForBooks(
+            $itemsToRestore->pluck('orderItem.book_id')->unique()->values()->all()
+        )->keyBy('book_id');
+        $reservationIds = $itemsToRestore->pluck('orderItem.inventoryReservation.id')->unique()->values()->all();
+        $allocationsByReservation = InventoryReservationAllocation::whereIn('inventory_reservation_id', $reservationIds)
+            ->orderBy('id')
+            ->lockForUpdate()
+            ->get()
+            ->groupBy('inventory_reservation_id');
+        $stocksById = WarehouseStock::whereIn(
+            'id',
+            $allocationsByReservation->flatten(1)->pluck('warehouse_stock_id')->unique()->values()->all()
+        )
+            ->orderBy('book_id')
+            ->orderBy('warehouse_id')
+            ->orderBy('id')
+            ->lockForUpdate()
+            ->get()
+            ->keyBy('id');
+        $usedChecks = [];
+
+        foreach ($itemsToRestore as $returnItem) {
+            $bookId = (int) $returnItem->orderItem->book_id;
+            $listing = $usedListings->get($bookId);
+            if ($listing) {
+                $check = $usedBookInventory->inspect($listing, true);
+                if (! $check['valid']) {
+                    throw new LogicException('Used-book inventory is incoherent: '.$check['reason_code']);
+                }
+                $usedChecks[$bookId] = $check;
+            }
+
+            $reservation = $returnItem->orderItem->inventoryReservation;
+            $allocations = $allocationsByReservation->get($reservation->id, collect());
+            if ($allocations->isEmpty()
+                || (int) $reservation->quantity <= 0
+                || $allocations->contains(fn (InventoryReservationAllocation $allocation) => (int) $allocation->quantity <= 0)
+                || $allocations->pluck('warehouse_stock_id')->unique()->count() !== $allocations->count()
+                || (int) $allocations->sum('quantity') !== (int) $reservation->quantity) {
+                throw new LogicException('Phân bổ tồn kho committed không nhất quán để hoàn kho.');
+            }
+
+            foreach ($allocations as $allocation) {
+                $stock = $stocksById->get($allocation->warehouse_stock_id);
+                if (! $stock || (int) $stock->book_id !== $bookId) {
+                    throw new LogicException('Phân bổ tồn kho committed không thuộc sách của dòng trả hàng.');
+                }
+                if (isset($usedChecks[$bookId]) && (int) $stock->id !== (int) $usedChecks[$bookId]['stock']->id) {
+                    throw new LogicException('Used-book return allocation does not target its bound stock.');
+                }
+            }
+        }
 
         foreach ($return->items as $returnItem) {
             if ($returnItem->inventory_restored_at) {
@@ -635,12 +548,10 @@ class ReturnRefundService
             }
 
             $reservation = $returnItem->orderItem->inventoryReservation;
-            if (! $reservation || $reservation->status !== InventoryReservationStatus::COMMITTED) {
-                throw new LogicException('Không tìm thấy committed inventory reservation để hoàn kho.');
-            }
+            $listing = $usedListings->get($returnItem->orderItem->book_id);
 
             $remaining = $returnItem->quantity;
-            foreach ($reservation->allocations()->orderBy('id')->lockForUpdate()->get() as $allocation) {
+            foreach ($allocationsByReservation->get($reservation->id, collect()) as $allocation) {
                 if ($remaining <= 0) {
                     break;
                 }
@@ -654,7 +565,7 @@ class ReturnRefundService
                     continue;
                 }
 
-                $stock = WarehouseStock::whereKey($allocation->warehouse_stock_id)->lockForUpdate()->firstOrFail();
+                $stock = $stocksById->get($allocation->warehouse_stock_id);
                 $operationKey = "return-stock:{$returnItem->id}:{$allocation->id}";
                 DB::table('inventory_return_restorations')->insert([
                     'return_request_item_id' => $returnItem->id,
@@ -678,9 +589,254 @@ class ReturnRefundService
             $returnItem->inventory_restored_at = now();
             $returnItem->save();
             $bookId = $returnItem->orderItem->book_id;
-            $totalOnHand = (int) WarehouseStock::where('book_id', $bookId)->sum('quantity');
+            $totalOnHand = $listing
+                ? (int) $stocksById->get($usedChecks[$bookId]['stock']->id)->quantity
+                : (int) WarehouseStock::where('book_id', $bookId)->sum('quantity');
             Book::withoutGlobalScopes()->whereKey($bookId)->update(['stock' => $totalOnHand]);
+            if ($listing) {
+                $listing->update(['quantity_available' => $totalOnHand, 'status' => $totalOnHand > 0 && $listing->status === 'sold_out' ? 'active' : $listing->status]);
+            }
         }
+    }
+
+    private function assertOnlineOrder(Order $order): void
+    {
+        if ($order->payment_method === 'cod') {
+            throw new LogicException('Hoàn tiền COD không được hỗ trợ bởi luồng hoàn Ví KomiBook.');
+        }
+    }
+
+    private function assertCanonicalReturnOrder(ReturnRequest $return, Order $order): void
+    {
+        $order->unsetRelation('checkoutSessionOrder');
+        $order->unsetRelation('invoiceSnapshot');
+        $sessionOrder = $order->checkoutSessionOrder;
+        $sessionOrder?->unsetRelation('checkoutSession');
+        $session = $sessionOrder?->checkoutSession;
+        $invoice = $order->invoiceSnapshot;
+        if ((int) $return->order_id !== (int) $order->id || ! $sessionOrder || ! $session || ! $invoice
+            || (int) $sessionOrder->order_id !== (int) $order->id || (int) $invoice->order_id !== (int) $order->id
+            || (int) $return->user_id !== (int) $order->user_id || (int) $return->user_id !== (int) $session->user_id
+            || (int) $return->vendor_id !== (int) $order->vendor_id || (int) $return->vendor_id !== (int) $sessionOrder->vendor_id
+            || $return->currency !== $invoice->currency || $return->currency !== $session->currency) {
+            throw new LogicException('Ràng buộc party hoặc loại tiền canonical của yêu cầu hoàn trả không nhất quán.');
+        }
+    }
+
+    /**
+     * @param  array{gross_amount:int, commission_amount:int, tax_amount:int, net_amount:int}|null  $expected
+     */
+    private function assertRefundedEvidence(ReturnRequest $return, Order $order, ?array $expected): void
+    {
+        $this->assertCanonicalReturnOrder($return, $order);
+        if ($return->status !== 'refunded' || ! $expected) {
+            throw new LogicException('Bằng chứng hoàn tiền hiện có không nhất quán.');
+        }
+
+        $refunds = RefundTransaction::where('return_request_id', $return->id)->lockForUpdate()->get();
+        $sessionId = $order->checkoutSessionOrder?->checkout_session_id;
+        $paidPayments = $sessionId
+            ? PaymentTransaction::where('checkout_session_id', $sessionId)
+                ->where('status', PaymentTransactionStatus::PAID)
+                ->lockForUpdate()
+                ->get()
+            : collect();
+        if ($refunds->count() !== 1 || $paidPayments->count() !== 1) {
+            throw new LogicException('Bằng chứng hoàn tiền hiện có không nhất quán.');
+        }
+        /** @var RefundTransaction $refund */
+        $refund = $refunds->sole();
+        /** @var PaymentTransaction $payment */
+        $payment = $paidPayments->sole();
+        if ((int) $refund->return_request_id !== (int) $return->id
+            || (int) $refund->payment_transaction_id !== (int) $payment->id
+            || $refund->idempotency_key !== "refund:{$return->code}"
+            || (int) $refund->amount !== (int) $return->refund_amount
+            || $refund->currency !== $return->currency
+            || $refund->provider !== $payment->provider
+            || $refund->status !== 'refunded') {
+            throw new LogicException('Bằng chứng hoàn tiền hiện có không nhất quán.');
+        }
+        $this->assertCanonicalPaidPayment($order, $return, $payment);
+
+        $attempts = $refund->attempts()->lockForUpdate()->get();
+        if ($attempts->where('status', 'succeeded')->count() !== 1
+            || $attempts->contains(fn (RefundTransactionAttempt $attempt) => in_array($attempt->status, ['pending', 'processing'], true))) {
+            throw new LogicException('Bằng chứng attempt hoàn tiền hiện có không nhất quán.');
+        }
+        $succeededAttempt = $attempts->firstWhere('status', 'succeeded');
+        if ($refund->provider_reference !== 'KOMIBOOK-WALLET-REFUND-'.$succeededAttempt->id) {
+            throw new LogicException('Bằng chứng attempt hoàn tiền hiện có không nhất quán.');
+        }
+
+        $holds = VendorFinancialHold::where('return_request_id', $return->id)->lockForUpdate()->get();
+        if ($holds->count() !== 1) {
+            throw new LogicException('Khoản giữ tiền hoàn trả hiện có không nhất quán.');
+        }
+        $hold = $holds->sole();
+        if ((int) $hold->vendor_id !== (int) $return->vendor_id
+            || $hold->operation_key !== "refund-hold:{$return->id}"
+            || $hold->currency !== $return->currency
+            || (int) $hold->amount !== $expected['net_amount']
+            || $hold->status !== 'consumed') {
+            throw new LogicException('Khoản giữ tiền hoàn trả hiện có không nhất quán.');
+        }
+
+        $credits = DemoWalletLedgerEntry::where('return_request_id', $return->id)
+            ->where('entry_type', 'refund_credit')->lockForUpdate()->get();
+        $debits = DemoWalletLedgerEntry::where('return_request_id', $return->id)
+            ->where('entry_type', 'vendor_refund_debit')->lockForUpdate()->get();
+        if ($credits->count() !== 1 || $debits->count() !== 1) {
+            throw new LogicException('Bằng chứng ví hoàn tiền hiện có không nhất quán.');
+        }
+        $credit = $credits->sole();
+        $debit = $debits->sole();
+        $buyerAccount = DemoWalletAccount::whereKey($credit->demo_wallet_account_id)->lockForUpdate()->first();
+        $vendor = Vendor::withoutGlobalScopes()->whereKey($return->vendor_id)->lockForUpdate()->first();
+        $vendorAccount = DemoWalletAccount::whereKey($debit->demo_wallet_account_id)->lockForUpdate()->first();
+        $buyerKeys = ["komibook-wallet:refund:return:{$return->id}:credit", "komibook-wallet:refund:{$return->id}:credit"];
+        if (! $buyerAccount || (int) $buyerAccount->user_id !== (int) $return->user_id
+            || $buyerAccount->currency !== $return->currency || $buyerAccount->status !== 'active'
+            || ! in_array($credit->operation_key, $buyerKeys, true)
+            || (int) $credit->payment_transaction_id !== (int) $payment->id
+            || (int) $credit->order_id !== (int) $order->id
+            || (int) $credit->return_request_id !== (int) $return->id
+            || $credit->entry_type !== 'refund_credit'
+            || (int) $credit->amount !== (int) $return->refund_amount
+            || ! $vendor || ! $vendorAccount || (int) $vendorAccount->user_id !== (int) $vendor->user_id
+            || $vendorAccount->currency !== $return->currency || $vendorAccount->status !== 'active'
+            || $debit->operation_key !== "komibook-wallet:vendor-refund:{$return->id}:debit"
+            || (int) $debit->vendor_id !== (int) $return->vendor_id
+            || (int) $debit->order_id !== (int) $order->id
+            || (int) $debit->return_request_id !== (int) $return->id
+            || $debit->entry_type !== 'vendor_refund_debit'
+            || (int) $debit->amount !== $expected['net_amount']) {
+            throw new LogicException('Bằng chứng ví hoàn tiền hiện có không nhất quán.');
+        }
+        $this->assertWalletLedgerProjection($buyerAccount, $credit, true);
+        app(DemoWalletService::class)->assertVendorRefundDebitEvidence(
+            $debit,
+            $vendor,
+            $vendorAccount,
+            $order,
+            $expected['net_amount'],
+            (int) $return->id,
+        );
+
+        $earningRows = DB::table('vendor_earning_reversals')->where('return_request_id', $return->id)->lockForUpdate()->get();
+        if ($earningRows->count() !== 1) {
+            throw new LogicException('Bằng chứng đảo doanh thu hiện có không nhất quán.');
+        }
+        $earning = $earningRows->sole();
+        if ((int) $earning->vendor_id !== (int) $return->vendor_id
+            || (int) $earning->order_id !== (int) $order->id
+            || $earning->operation_key !== "vendor-refund:{$return->id}"
+            || (int) $earning->gross_amount !== $expected['gross_amount']
+            || (int) $earning->commission_amount !== $expected['commission_amount']
+            || (int) $earning->tax_amount !== $expected['tax_amount']
+            || (int) $earning->net_amount !== $expected['net_amount']
+            || $earning->currency !== $return->currency) {
+            throw new LogicException('Bằng chứng đảo doanh thu hiện có không nhất quán.');
+        }
+
+        $pointLedger = $order->loyaltyPointLedger()->lockForUpdate()->first();
+        $pointRows = DB::table('loyalty_point_reversals')->where('return_request_id', $return->id)->lockForUpdate()->get();
+        if (! $pointLedger) {
+            if ($pointRows->isNotEmpty()) {
+                throw new LogicException('Bằng chứng đảo điểm hiện có không nhất quán.');
+            }
+
+            return;
+        }
+        if ($pointRows->count() !== 1) {
+            throw new LogicException('Bằng chứng đảo điểm hiện có không nhất quán.');
+        }
+        $point = $pointRows->sole();
+        if ((int) $point->user_id !== (int) $return->user_id
+            || (int) $point->order_id !== (int) $order->id
+            || $point->operation_key !== "loyalty-refund:{$return->id}"
+            || (int) $point->points !== $this->calculateLoyaltyReversal($return, (int) $pointLedger->points)) {
+            throw new LogicException('Bằng chứng đảo điểm hiện có không nhất quán.');
+        }
+    }
+
+    private function settlementTransitionKey(string $operationKey, string $phase): string
+    {
+        return 'refund-settlement:'.$phase.':'.hash('sha256', $operationKey);
+    }
+
+    private function assertCanonicalPaidPayment(Order $order, ReturnRequest $return, PaymentTransaction $payment): void
+    {
+        $session = $order->checkoutSessionOrder?->checkoutSession;
+        if (! $session
+            || (int) $payment->checkout_session_id !== (int) $session->id
+            || $payment->status !== PaymentTransactionStatus::PAID
+            || (int) $payment->amount !== (int) $session->total_amount
+            || $payment->currency !== $return->currency
+            || ! $payment->paid_at
+            || trim((string) $payment->provider_reference) === ''
+            || trim((string) $payment->provider_transaction_id) === '') {
+            throw new LogicException('Giao dịch thanh toán gốc không cùng bằng chứng canonical.');
+        }
+    }
+
+    private function assertWalletLedgerProjection(
+        DemoWalletAccount $account,
+        DemoWalletLedgerEntry $entry,
+        bool $isCredit
+    ): void {
+        $arithmeticValid = $isCredit
+            ? (int) $entry->balance_before + (int) $entry->amount === (int) $entry->balance_after
+            : (int) $entry->balance_before - (int) $entry->amount === (int) $entry->balance_after;
+        if (! $arithmeticValid) {
+            throw new LogicException('Bằng chứng số dư Ví KomiBook hiện có không nhất quán.');
+        }
+
+        $entries = DemoWalletLedgerEntry::where('demo_wallet_account_id', $account->id)
+            ->orderBy('id')->lockForUpdate()->get();
+        if ($entries->isEmpty()) {
+            throw new LogicException('Ví KomiBook không có chuỗi sổ cái để xác minh số dư.');
+        }
+        $previousAfter = null;
+        foreach ($entries as $ledgerEntry) {
+            if ($previousAfter !== null && $previousAfter !== (int) $ledgerEntry->balance_before) {
+                throw new LogicException('Chuỗi sổ cái Ví KomiBook không liên tục.');
+            }
+            $previousAfter = (int) $ledgerEntry->balance_after;
+        }
+        if ($previousAfter === null || (int) $account->balance !== $previousAfter) {
+            throw new LogicException('Số dư Ví KomiBook không khớp với sổ cái.');
+        }
+    }
+
+    private function assertAttemptMatches(
+        RefundTransactionAttempt $attempt,
+        RefundTransaction $refund,
+        ReturnRequest $return
+    ): void {
+        if ((int) $attempt->refund_transaction_id !== (int) $refund->id
+            || (int) $refund->return_request_id !== (int) $return->id
+            || ! in_array($attempt->status, ['processing', 'succeeded'], true)) {
+            throw new LogicException('Attempt hoàn tiền hiện có không thuộc đúng yêu cầu hoặc có trạng thái không hợp lệ.');
+        }
+    }
+
+    private function consumeFinancialHold(ReturnRequest $return): void
+    {
+        $hold = VendorFinancialHold::where('return_request_id', $return->id)->lockForUpdate()->first();
+        $expected = $this->calculateVendorReversal($return)['net_amount'];
+        if (! $hold
+            || (int) $hold->vendor_id !== (int) $return->vendor_id
+            || $hold->operation_key !== "refund-hold:{$return->id}"
+            || $hold->currency !== $return->currency
+            || (int) $hold->amount !== $expected
+            || $hold->status !== 'active') {
+            throw new LogicException('Khoản giữ tiền hoàn trả không tồn tại, đã được dùng, hoặc không nhất quán.');
+        }
+
+        $hold->status = 'consumed';
+        $hold->consumed_at = now();
+        $hold->save();
     }
 
     private function reverseFinancialEffects(ReturnRequest $return): void
@@ -690,8 +846,23 @@ class ReturnRefundService
         $user = User::whereKey($return->user_id)->lockForUpdate()->firstOrFail();
 
         $earning = $order->vendorEarningLedger()->first();
-        if ($earning && ! DB::table('vendor_earning_reversals')->where('return_request_id', $return->id)->exists()) {
-            $reversal = $this->calculateVendorReversal($return);
+        if (! $earning) {
+            throw new LogicException('Không tìm thấy vendor earning ledger để đảo doanh thu.');
+        }
+        $reversal = $this->calculateVendorReversal($return);
+        $existingEarningReversal = DB::table('vendor_earning_reversals')->where('return_request_id', $return->id)->lockForUpdate()->first();
+        if ($existingEarningReversal) {
+            if ((int) $existingEarningReversal->vendor_id !== (int) $vendor->id
+                || (int) $existingEarningReversal->order_id !== (int) $order->id
+                || $existingEarningReversal->operation_key !== "vendor-refund:{$return->id}"
+                || (int) $existingEarningReversal->gross_amount !== $reversal['gross_amount']
+                || (int) $existingEarningReversal->commission_amount !== $reversal['commission_amount']
+                || (int) $existingEarningReversal->tax_amount !== $reversal['tax_amount']
+                || (int) $existingEarningReversal->net_amount !== $reversal['net_amount']
+                || $existingEarningReversal->currency !== $return->currency) {
+                throw new LogicException('Bằng chứng đảo doanh thu nhà bán không nhất quán.');
+            }
+        } else {
             DB::table('vendor_earning_reversals')->insert([
                 'vendor_id' => $vendor->id,
                 'order_id' => $order->id,
@@ -705,42 +876,36 @@ class ReturnRefundService
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
-            app(DemoWalletService::class)->debitVendorRefund(
-                $vendor,
-                $order,
-                $reversal['net_amount'],
-                $return->id
-            );
         }
+        app(DemoWalletService::class)->debitVendorRefund($vendor, $order, $reversal['net_amount'], $return->id);
 
         $pointLedger = $order->loyaltyPointLedger()->first();
-        if ($pointLedger && ! DB::table('loyalty_point_reversals')->where('return_request_id', $return->id)->exists()) {
-            $alreadyReversed = (int) DB::table('loyalty_point_reversals')
-                ->where('order_id', $order->id)
-                ->sum('points');
-            $refundedBefore = (int) ReturnRequest::where('order_id', $order->id)
-                ->where('status', 'refunded')
-                ->where('id', '!=', $return->id)
-                ->sum('refund_amount');
-            $cumulativeRatio = $order->total_amount > 0
-                ? min(1, ($refundedBefore + $return->refund_amount) / $order->total_amount)
-                : 0;
-            $targetReversal = min(
-                (int) $pointLedger->points,
-                (int) round((int) $pointLedger->points * $cumulativeRatio)
-            );
-            $points = max(0, $targetReversal - $alreadyReversed);
-            DB::table('loyalty_point_reversals')->insert([
-                'user_id' => $user->id,
-                'order_id' => $order->id,
-                'return_request_id' => $return->id,
-                'operation_key' => "loyalty-refund:{$return->id}",
-                'points' => $points,
-                'created_at' => now(),
-                'updated_at' => now(),
-            ]);
-            $user->points = max(0, (int) $user->points - $points);
-            $user->save();
+        if ($pointLedger) {
+            $existingPointReversal = DB::table('loyalty_point_reversals')->where('return_request_id', $return->id)->lockForUpdate()->first();
+            $points = $this->calculateLoyaltyReversal($return, (int) $pointLedger->points);
+            if ($existingPointReversal) {
+                if ((int) $existingPointReversal->user_id !== (int) $user->id
+                    || (int) $existingPointReversal->order_id !== (int) $order->id
+                    || $existingPointReversal->operation_key !== "loyalty-refund:{$return->id}"
+                    || (int) $existingPointReversal->points !== $points) {
+                    throw new LogicException('Bằng chứng đảo điểm khách hàng không nhất quán.');
+                }
+            } else {
+                if ((int) $user->points < $points) {
+                    throw new LogicException('Điểm khách hàng không đủ để đảo chính xác giao dịch hoàn trả.');
+                }
+                DB::table('loyalty_point_reversals')->insert([
+                    'user_id' => $user->id,
+                    'order_id' => $order->id,
+                    'return_request_id' => $return->id,
+                    'operation_key' => "loyalty-refund:{$return->id}",
+                    'points' => $points,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+                $user->points = (int) $user->points - $points;
+                $user->save();
+            }
         }
     }
 
@@ -755,43 +920,222 @@ class ReturnRefundService
             throw new LogicException('Không tìm thấy vendor earning ledger để giữ và đảo doanh thu.');
         }
 
-        $alreadyGross = (int) DB::table('vendor_earning_reversals')
-            ->where('order_id', $order->id)
-            ->sum('gross_amount');
-        $alreadyCommission = (int) DB::table('vendor_earning_reversals')
-            ->where('order_id', $order->id)
-            ->sum('commission_amount');
-        $alreadyTax = (int) DB::table('vendor_earning_reversals')
-            ->where('order_id', $order->id)
-            ->sum('tax_amount');
-        $refundedBefore = (int) ReturnRequest::where('order_id', $order->id)
-            ->where('status', 'refunded')
-            ->where('id', '!=', $return->id)
-            ->sum('refund_amount');
-        $gross = min(
-            (int) $return->refund_amount,
-            max(0, (int) $earning->gross_amount - $alreadyGross)
-        );
-        $cumulativeRatio = $order->total_amount > 0
-            ? min(1, ($refundedBefore + $return->refund_amount) / $order->total_amount)
-            : 0;
-        $targetCommission = min(
-            (int) $earning->commission_amount,
-            (int) round((int) $earning->commission_amount * $cumulativeRatio)
-        );
-        $commission = min($gross, max(0, $targetCommission - $alreadyCommission));
-        $targetTax = min(
-            (int) $earning->tax_amount,
-            (int) round((int) $earning->tax_amount * $cumulativeRatio)
-        );
-        $tax = min(max(0, $gross - $commission), max(0, $targetTax - $alreadyTax));
+        return $this->canonicalAllocations($order, $return)[(int) $return->id];
+    }
 
-        return [
-            'gross_amount' => $gross,
-            'commission_amount' => $commission,
-            'tax_amount' => $tax,
-            'net_amount' => max(0, $gross - $commission - $tax),
-        ];
+    private function assertCanonicalApprovalOrder(ReturnRequest $return): void
+    {
+        $lowerReturns = ReturnRequest::where('order_id', $return->order_id)
+            ->where('id', '<', $return->id)
+            ->lockForUpdate()
+            ->get();
+        $lowerHolds = VendorFinancialHold::whereIn('return_request_id', $lowerReturns->pluck('id'))
+            ->lockForUpdate()
+            ->get()
+            ->keyBy('return_request_id');
+        foreach ($lowerReturns as $lower) {
+            if (in_array($lower->status, ['requested', 'under_review'], true)
+                || ($lower->status !== 'rejected' && ! $lowerHolds->has($lower->id))) {
+                throw new LogicException('Phải phê duyệt theo thứ tự canonical của yêu cầu trả hàng trên cùng đơn hàng.');
+            }
+        }
+
+        $laterHoldExists = VendorFinancialHold::query()
+            ->join('return_requests', 'return_requests.id', '=', 'vendor_financial_holds.return_request_id')
+            ->where('return_requests.order_id', $return->order_id)
+            ->where('return_requests.id', '>', $return->id)
+            ->lockForUpdate()
+            ->exists();
+        if ($laterHoldExists) {
+            throw new LogicException('Khoản giữ tiền của yêu cầu có ID lớn hơn làm thứ tự phê duyệt canonical không nhất quán.');
+        }
+    }
+
+    /**
+     * @return array<int, array{gross_amount:int, commission_amount:int, tax_amount:int, net_amount:int}>
+     */
+    private function canonicalAllocations(Order $order, ReturnRequest $current): array
+    {
+        $earning = $order->vendorEarningLedger()->firstOrFail();
+        $heldIds = VendorFinancialHold::query()
+            ->join('return_requests', 'return_requests.id', '=', 'vendor_financial_holds.return_request_id')
+            ->where('return_requests.order_id', $order->id)
+            ->lockForUpdate()
+            ->pluck('return_requests.id');
+        $returns = ReturnRequest::whereIn('id', $heldIds)->lockForUpdate()->get()->keyBy('id');
+        $returns->put($current->id, $current);
+        $ordered = $returns->sortBy('id')->values();
+        $total = (int) $order->total_amount;
+        if ($total <= 0) {
+            throw new LogicException('Đơn hàng không có tổng tiền hợp lệ để phân bổ hoàn trả.');
+        }
+
+        $cumulative = 0;
+        $previous = ['gross' => 0, 'commission' => 0, 'tax' => 0];
+        $allocations = [];
+        foreach ($ordered as $candidate) {
+            $cumulative += (int) $candidate->refund_amount;
+            if ($cumulative > $total) {
+                throw new LogicException('Tổng phân bổ hoàn trả canonical vượt giá trị đơn hàng.');
+            }
+            $targets = [
+                'gross' => $this->canonicalTarget((int) $earning->gross_amount, $cumulative, $total),
+                'commission' => $this->canonicalTarget((int) $earning->commission_amount, $cumulative, $total),
+                'tax' => $this->canonicalTarget((int) $earning->tax_amount, $cumulative, $total),
+            ];
+            $gross = $targets['gross'] - $previous['gross'];
+            $commission = $targets['commission'] - $previous['commission'];
+            $tax = $targets['tax'] - $previous['tax'];
+            if ($gross < 0 || $commission < 0 || $tax < 0 || $gross < $commission + $tax) {
+                throw new LogicException('Phân bổ canonical của doanh thu nhà bán không hợp lệ.');
+            }
+            $allocations[(int) $candidate->id] = [
+                'gross_amount' => $gross,
+                'commission_amount' => $commission,
+                'tax_amount' => $tax,
+                'net_amount' => $gross - $commission - $tax,
+            ];
+            $previous = $targets;
+        }
+
+        $holds = VendorFinancialHold::whereIn('return_request_id', $ordered->pluck('id'))->lockForUpdate()->get()->keyBy('return_request_id');
+        foreach ($holds as $returnId => $hold) {
+            $candidate = $returns->get($returnId);
+            $expected = $allocations[(int) $returnId] ?? null;
+            if (! $candidate || ! $expected || (int) $hold->vendor_id !== (int) $candidate->vendor_id
+                || $hold->operation_key !== "refund-hold:{$returnId}" || $hold->currency !== $candidate->currency
+                || (int) $hold->amount !== $expected['net_amount'] || ! in_array($hold->status, ['active', 'consumed'], true)) {
+                throw new LogicException('Khoản giữ tiền canonical không nhất quán.');
+            }
+            if ($hold->status === 'consumed') {
+                $refund = RefundTransaction::where('return_request_id', $returnId)->lockForUpdate()->first();
+                if ($candidate->status !== 'refunded' || ! $refund || $refund->status !== 'refunded') {
+                    throw new LogicException('Khoản giữ tiền đã dùng không có bằng chứng hoàn tiền canonical.');
+                }
+            }
+        }
+
+        return $allocations;
+    }
+
+    private function canonicalTarget(int $componentTotal, int $cumulative, int $orderTotal): int
+    {
+        if ($cumulative >= $orderTotal) {
+            return $componentTotal;
+        }
+
+        return intdiv(($componentTotal * $cumulative) + intdiv($orderTotal, 2), $orderTotal);
+    }
+
+    private function calculateLoyaltyReversal(ReturnRequest $return, int $totalPoints): int
+    {
+        $order = Order::withoutGlobalScopes()->whereKey($return->order_id)->lockForUpdate()->firstOrFail();
+        $heldIds = VendorFinancialHold::query()
+            ->join('return_requests', 'return_requests.id', '=', 'vendor_financial_holds.return_request_id')
+            ->where('return_requests.order_id', $order->id)
+            ->lockForUpdate()
+            ->pluck('return_requests.id');
+        $returns = ReturnRequest::whereIn('id', $heldIds)->lockForUpdate()->get()->keyBy('id');
+        $returns->put($return->id, $return);
+        $cumulative = 0;
+        $previous = 0;
+        foreach ($returns->sortBy('id') as $candidate) {
+            $cumulative += (int) $candidate->refund_amount;
+            $target = $this->canonicalTarget($totalPoints, $cumulative, (int) $order->total_amount);
+            if ((int) $candidate->id === (int) $return->id) {
+                return $target - $previous;
+            }
+            $previous = $target;
+        }
+
+        throw new LogicException('Không thể xác định phân bổ điểm canonical cho yêu cầu hoàn trả.');
+    }
+
+    private function validateOtherRefundReversals(Order $order, ReturnRequest $current): void
+    {
+        $allocations = $this->canonicalAllocations($order, $current);
+        $checkoutSessionId = $order->checkoutSessionOrder?->checkout_session_id;
+        $paidPayments = $checkoutSessionId
+            ? PaymentTransaction::where('checkout_session_id', $checkoutSessionId)
+                ->where('status', PaymentTransactionStatus::PAID)
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->get()
+            : collect();
+        if ($paidPayments->count() !== 1) {
+            throw new LogicException('Giao dịch online đã thanh toán phải có đúng một giao dịch gốc chuẩn.');
+        }
+        /** @var PaymentTransaction $canonicalPayment */
+        $canonicalPayment = $paidPayments->sole();
+        $this->assertCanonicalPaidPayment($order, $current, $canonicalPayment);
+        $returns = ReturnRequest::where('order_id', $order->id)->lockForUpdate()->get()->keyBy('id');
+        $holds = VendorFinancialHold::whereIn('return_request_id', $returns->keys())->lockForUpdate()->get()->keyBy('return_request_id');
+        $refunds = RefundTransaction::whereIn('return_request_id', $returns->keys())->lockForUpdate()->get()->keyBy('return_request_id');
+        $earningRows = DB::table('vendor_earning_reversals')->where('order_id', $order->id)->lockForUpdate()->get()->keyBy('return_request_id');
+        $pointRows = DB::table('loyalty_point_reversals')->where('order_id', $order->id)->lockForUpdate()->get()->keyBy('return_request_id');
+
+        foreach ($returns as $returnId => $other) {
+            if ((int) $returnId === (int) $current->id) {
+                continue;
+            }
+            $this->assertCanonicalReturnOrder($other, $order);
+            $hold = $holds->get($returnId);
+            $refund = $refunds->get($returnId);
+            $attempts = $refund ? $refund->attempts()->lockForUpdate()->get() : collect();
+            $earningRow = $earningRows->get($returnId);
+            $pointRow = $pointRows->get($returnId);
+            $returnWalletEvidence = DemoWalletLedgerEntry::where('return_request_id', $returnId)
+                ->whereIn('entry_type', ['refund_credit', 'vendor_refund_debit'])->lockForUpdate()->get();
+            $expected = $allocations[(int) $returnId] ?? null;
+            $hasFinancialEvidence = $earningRow || $pointRow;
+            $coherentHold = $hold && $expected
+                && (int) $hold->vendor_id === (int) $other->vendor_id
+                && $hold->operation_key === "refund-hold:{$returnId}"
+                && $hold->currency === $other->currency
+                && (int) $hold->amount === $expected['net_amount'];
+            $coherentRefund = $refund
+                && (int) $refund->payment_transaction_id === (int) $canonicalPayment->id
+                && $refund->provider === $canonicalPayment->provider
+                && $refund->idempotency_key === "refund:{$other->code}"
+                && (int) $refund->amount === (int) $other->refund_amount
+                && $refund->currency === $other->currency;
+
+            if (in_array($other->status, ['requested', 'under_review', 'rejected'], true)) {
+                if ($hold || $refund || $attempts->isNotEmpty() || $hasFinancialEvidence || $returnWalletEvidence->isNotEmpty()) {
+                    throw new LogicException('Yêu cầu chưa phê duyệt có bằng chứng hoàn tiền không hợp lệ.');
+                }
+
+                continue;
+            }
+            if (in_array($other->status, ['approved', 'item_received'], true)) {
+                if (! $coherentHold || $hold->status !== 'active' || $refund || $attempts->isNotEmpty() || $hasFinancialEvidence || $returnWalletEvidence->isNotEmpty()) {
+                    throw new LogicException('Yêu cầu đã phê duyệt có bằng chứng hoàn tiền không hợp lệ.');
+                }
+
+                continue;
+            }
+            if ($other->status === 'refund_processing') {
+                if (! $coherentHold || $hold->status !== 'active' || ! $coherentRefund || $refund->status !== 'processing'
+                    || $refund->provider_reference !== null || $attempts->isNotEmpty() || $hasFinancialEvidence || $returnWalletEvidence->isNotEmpty()) {
+                    throw new LogicException('Yêu cầu đang hoàn tiền có bằng chứng lịch sử không hợp lệ.');
+                }
+
+                continue;
+            }
+            if ($other->status === 'refund_failed') {
+                if (! $coherentHold || $hold->status !== 'active' || ! $coherentRefund || $refund->status !== 'failed'
+                    || $refund->provider_reference !== null || $attempts->isEmpty()
+                    || $attempts->contains(fn ($attempt) => $attempt->status !== 'failed') || $hasFinancialEvidence || $returnWalletEvidence->isNotEmpty()) {
+                    throw new LogicException('Yêu cầu hoàn tiền thất bại có bằng chứng lịch sử không hợp lệ.');
+                }
+
+                continue;
+            }
+            if ($other->status !== 'refunded') {
+                throw new LogicException('Yêu cầu hoàn tiền khác có vòng đời bằng chứng không hợp lệ.');
+            }
+            $this->assertRefundedEvidence($other, $order, $expected);
+        }
     }
 
     private function updateOrderRefundProjection(ReturnRequest $return): void
@@ -802,6 +1146,19 @@ class ReturnRefundService
             ->sum('refund_amount');
         $order->refund_status = $refunded >= (int) $order->total_amount ? 'refunded' : 'partially_refunded';
         $order->save();
+    }
+
+    private function assertOrderRefundProjection(Order $order): void
+    {
+        $refunded = (int) ReturnRequest::where('order_id', $order->id)
+            ->where('status', 'refunded')
+            ->sum('refund_amount');
+        $expected = $refunded <= 0
+            ? 'none'
+            : ($refunded >= (int) $order->total_amount ? 'refunded' : 'partially_refunded');
+        if ($order->refund_status !== $expected) {
+            throw new LogicException('Projection trạng thái hoàn tiền của đơn hàng không nhất quán.');
+        }
     }
 
     private function authorizeStaffActor(ReturnRequest $return, User $actor): void

@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Vendor;
 
+use App\Models\UsedBookListing;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -56,7 +57,20 @@ class UpdateBookRequest extends FormRequest
             'gallery_images.*' => ['image', 'mimes:jpg,jpeg,png,webp', 'max:10240'],
             'existing_gallery_images' => ['nullable'],
             'ebook_file' => ['nullable', 'file', 'mimes:pdf,epub', 'max:51200'],
+            'publisher_relationship_id' => ['nullable', 'integer', 'exists:vendor_organization_relationships,id'],
+            'supplier_relationship_id' => ['nullable', 'integer', 'exists:vendor_organization_relationships,id'],
+            'responsible_organization_relationship_id' => ['nullable', 'integer', 'exists:vendor_organization_relationships,id'],
         ];
+    }
+
+    public function withValidator($validator): void
+    {
+        $validator->after(function ($validator): void {
+            $book = $this->route('book');
+            if ($this->has('stock') && $book && UsedBookListing::where('book_id', $book->id)->exists()) {
+                $validator->errors()->add('stock', 'Used-book stock is managed only through its canonical inventory path.');
+            }
+        });
     }
 
     /**

@@ -7,7 +7,11 @@ use App\Models\Category;
 use App\Models\Order;
 use App\Models\SellerFulfillmentAddress;
 use App\Models\UsedBookListing;
+use App\Models\UsedBookSellerProfile;
 use App\Models\User;
+use App\Models\Vendor;
+use App\Models\Warehouse;
+use App\Models\WarehouseStock;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
@@ -40,6 +44,8 @@ class Phase5UsedBookTest extends TestCase
 
         $bookId = $response->json('data.book.id');
         $listing = UsedBookListing::where('book_id', $bookId)->firstOrFail();
+        $listing->update(['status' => 'active']);
+        Book::withoutGlobalScopes()->whereKey($bookId)->update(['status' => 'published', 'publishing_status' => 'published']);
         $buyer = User::factory()->create(['role' => 'customer']);
         $order = Order::withoutGlobalScopes()->create([
             'order_code' => 'ORD-USED-DISPUTE', 'user_id' => $buyer->id,
@@ -68,5 +74,14 @@ class Phase5UsedBookTest extends TestCase
         ])->assertOk()->assertJsonPath('data.hold_status', 'consumed');
 
         $this->assertSame('suspended', $listing->fresh()->status);
+    }
+
+    public function test_seller_read_endpoints_never_provision_or_switch_warehouse(): void
+    {
+        $user = User::factory()->create(['role' => 'customer']);
+        $before = [Vendor::count(), UsedBookSellerProfile::count(), Warehouse::count(), WarehouseStock::count()];
+        $this->actingAs($user)->getJson('/api/used-book-seller/listings')->assertForbidden();
+        $this->actingAs($user)->getJson('/api/used-book-seller/orders')->assertForbidden();
+        $this->assertSame($before, [Vendor::count(), UsedBookSellerProfile::count(), Warehouse::count(), WarehouseStock::count()]);
     }
 }

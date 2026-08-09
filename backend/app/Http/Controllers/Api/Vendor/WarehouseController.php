@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\Vendor;
 
 use App\Http\Controllers\Controller;
 use App\Models\Book;
+use App\Models\UsedBookListing;
 use App\Models\Warehouse;
 use App\Models\WarehouseStock;
 use App\Support\PublicMediaUrl;
@@ -225,6 +226,7 @@ class WarehouseController extends Controller
         $book = Book::withoutGlobalScopes()
             ->where('vendor_id', $vendor->id)
             ->findOrFail($request->book_id);
+        abort_if(UsedBookListing::where('book_id', $book->id)->exists(), 422, 'Used-book inventory can only be changed through its canonical path.');
         $sourceWarehouse = Warehouse::withoutGlobalScopes()
             ->where('vendor_id', $vendor->id)
             ->findOrFail($request->source_warehouse_id);

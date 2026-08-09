@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Book;
+use App\Models\UsedBookListing;
 use App\Models\User;
 use App\Models\Vendor;
 use App\Models\Warehouse;
@@ -21,6 +22,9 @@ class BookInventoryOnboardingService
         ?string $externalCounterpartyName,
         string $operationKey,
     ): WarehouseDocument {
+        if (UsedBookListing::where('book_id', $book->id)->exists()) {
+            throw new \LogicException('Used-book inventory can only be changed through its canonical path.');
+        }
         WarehouseStock::firstOrCreate(
             ['warehouse_id' => $warehouse->id, 'book_id' => $book->id],
             ['quantity' => 0],

@@ -10,6 +10,7 @@ use App\Models\UserNotification;
 use App\Models\Vendor;
 use App\Models\VendorOrganizationRelationship;
 use App\Models\Warehouse;
+use App\Models\WarehouseDocument;
 use App\Models\WarehouseManagerAssignment;
 use App\Models\WarehouseStock;
 use App\Services\OrganizationRelationshipService;
@@ -249,6 +250,55 @@ class VendorBookCreationAndWarehouseInvitationTest extends TestCase
             ->assertJsonPath('low_stock_books.0.stock', 4);
     }
 
+    public function test_create_scope_and_store_require_a_configured_primary_or_exactly_one_active_warehouse(): void
+    {
+        [$vendorUser, $vendor] = $this->vendor('scope-primary');
+        $this->configureAcceptedDemoSelfSupplier($vendor);
+        $firstWarehouse = $this->warehouse($vendor);
+        $secondWarehouse = $this->warehouse($vendor);
+        $category = Category::create(['name' => 'Warehouse scope', 'slug' => 'warehouse-scope']);
+        $snapshot = fn () => [
+            $vendor->fresh()->primary_warehouse_id,
+            Book::withoutGlobalScopes()->count(),
+            WarehouseStock::count(),
+            WarehouseDocument::count(),
+            \DB::table('warehouse_document_lines')->count(),
+        ];
+        $before = $snapshot();
+
+        $this->actingAs($vendorUser)->getJson('/api/vendor/books/create-scope')
+            ->assertOk()
+            ->assertJsonPath('data.primary_warehouse', null)
+            ->assertJsonPath('data.can_create_physical_book', false)
+            ->assertJsonPath('data.blocking_reasons.0', 'Gian hàng có nhiều kho nhưng chưa chọn kho tổng.');
+        $this->actingAs($vendorUser)->postJson('/api/vendor/books', [
+            'title' => 'Must not choose first warehouse',
+            'author' => 'KomiBook',
+            'category_id' => $category->id,
+            'price' => 20000,
+            'stock' => 2,
+            'type' => 'physical',
+            'warehouse_id' => $firstWarehouse->id,
+        ])->assertUnprocessable();
+        $this->assertSame($before, $snapshot());
+
+        $secondWarehouse->update(['status' => 'inactive']);
+        $this->actingAs($vendorUser)->getJson('/api/vendor/books/create-scope')
+            ->assertOk()
+            ->assertJsonPath('data.primary_warehouse.id', $firstWarehouse->id)
+            ->assertJsonPath('data.can_create_physical_book', true);
+        $this->actingAs($vendorUser)->postJson('/api/vendor/books', [
+            'title' => 'Exactly one active warehouse is allowed',
+            'author' => 'KomiBook',
+            'category_id' => $category->id,
+            'price' => 20000,
+            'stock' => 2,
+            'type' => 'physical',
+            'warehouse_id' => $firstWarehouse->id,
+        ])->assertCreated();
+        $this->assertNull($vendor->fresh()->primary_warehouse_id);
+    }
+
     private function vendor(string $slug): array
     {
         $user = User::factory()->create(['role' => 'vendor']);
@@ -273,5 +323,37 @@ class VendorBookCreationAndWarehouseInvitationTest extends TestCase
             'capacity' => '1000',
             'status' => 'Hoạt động',
         ]);
+    }
+
+    private function configureAcceptedDemoSelfSupplier(Vendor $vendor): void
+    {
+        $organization = Organization::create([
+            'legal_name' => 'Demo scope organization '.$vendor->id,
+            'display_name' => 'Demo scope organization '.$vendor->id,
+            'slug' => 'demo-scope-organization-'.$vendor->id,
+            'organization_types' => ['publisher', 'supplier'],
+            'data_mode' => 'demo',
+            'status' => 'demo_accepted',
+        ]);
+        $relationship = VendorOrganizationRelationship::create([
+            'vendor_id' => $vendor->id,
+            'organization_id' => $organization->id,
+            'role' => 'self_legal_entity',
+            'status' => 'demo_accepted',
+            'is_demo' => true,
+            'operation_key' => 'scope-primary-relationship-'.$vendor->id,
+        ]);
+        $admin = User::factory()->create(['role' => 'admin']);
+        $organization->update(['status' => 'pending_review', 'submitted_at' => now()->subDay()]);
+        app(OrganizationReviewService::class)->transition($organization, 'demo_accepted', $admin, 'Accepted demo organization for warehouse scope.', 'scope-primary-organization-'.$vendor->id);
+        $relationship->update([
+            'status' => 'submitted',
+            'evidence_mode' => 'demo_statement',
+            'demo_reference' => 'DEMO-SCOPE-'.$vendor->id,
+            'submitted_at' => now()->subDay(),
+            'effective_from' => now()->subDay(),
+        ]);
+        app(OrganizationRelationshipService::class)->transition($relationship, 'demo_accepted', $admin, 'Accepted demo relationship for warehouse scope.', 'scope-primary-relationship-review-'.$vendor->id);
+        $vendor->update(['business_model' => 'direct_publisher', 'primary_organization_id' => $organization->id]);
     }
 }

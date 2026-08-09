@@ -17,7 +17,9 @@ use App\Services\CommercialPartyService;
 use App\Services\ProductTaxonomyService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Redis;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -28,19 +30,16 @@ class BookController extends Controller
     public function createScope(Request $request, BookSupplyChainRequirementResolver $resolver): JsonResponse
     {
         $vendor = $request->user()->vendor()->withoutGlobalScopes()->firstOrFail();
-        $activeWarehouses = Warehouse::withoutGlobalScopes()
-            ->where('vendor_id', $vendor->id)
-            ->whereIn('status', ['active', 'Hoạt động'])
-            ->orderBy('id')
-            ->get(['id', 'vendor_id', 'name', 'address', 'province', 'district', 'status']);
-        $primaryWarehouse = $activeWarehouses->firstWhere('id', $vendor->primary_warehouse_id)
-            ?? ($activeWarehouses->count() === 1 ? $activeWarehouses->first() : null);
+        $activeWarehouses = $this->activeVendorWarehouses($vendor, ['id', 'vendor_id', 'name', 'address', 'province', 'district', 'status']);
+        $primaryWarehouse = $this->resolvePrimaryWarehouse($vendor->primary_warehouse_id, $activeWarehouses);
         $supplyChain = $resolver->scope($vendor);
         $blockingReasons = [];
         if (! $primaryWarehouse) {
-            $blockingReasons[] = $activeWarehouses->isEmpty()
-                ? 'Gian hàng chưa có kho đang hoạt động.'
-                : 'Gian hàng có nhiều kho nhưng chưa chọn kho tổng.';
+            $blockingReasons[] = $vendor->primary_warehouse_id !== null
+                ? 'Kho tổng đã chọn không còn hoạt động hoặc không thuộc gian hàng.'
+                : ($activeWarehouses->isEmpty()
+                    ? 'Gian hàng chưa có kho đang hoạt động.'
+                    : 'Gian hàng có nhiều kho nhưng chưa chọn kho tổng.');
         }
         if (! $supplyChain['supply_chain_ready']) {
             $blockingReasons[] = 'Hồ sơ xuất bản và cung ứng chưa đủ điều kiện.';
@@ -205,7 +204,7 @@ class BookController extends Controller
                 ->store('books/covers', 'public');
             $uploadedPublicPaths[] = $data['cover_image'];
         } else {
-            $data['cover_image'] = 'https://images.unsplash.com/photo-1543002588-bfa74002ed7e?q=80&w=600&auto=format&fit=crop';
+            $data['cover_image'] = null;
         }
 
         // Upload album ảnh phụ (gallery_images)
@@ -242,9 +241,10 @@ class BookController extends Controller
         $seriesIdProvided = $request->has('series_id') ? ($request->input('series_id') ?: null) : null;
 
         $initialQuantity = max(0, (int) ($data['stock'] ?? 0));
-        $data['status'] = 'published';
-        $data['publishing_status'] = 'published';
-        $data['published_at'] = now();
+        $initialStatus = in_array($data['status'] ?? '', ['draft', 'published'], true) ? $data['status'] : 'published';
+        $data['status'] = $initialStatus;
+        $data['publishing_status'] = $initialStatus;
+        $data['published_at'] = $initialStatus === 'published' ? now() : null;
         if (($data['type'] ?? 'physical') === 'physical') {
             $data['stock'] = 0;
         }
@@ -285,13 +285,8 @@ class BookController extends Controller
                 }
 
                 if ($book->type === 'physical') {
-                    $activeWarehouses = Warehouse::withoutGlobalScopes()
-                        ->where('vendor_id', $vendor->id)
-                        ->whereIn('status', ['active', 'Hoạt động'])
-                        ->orderBy('id')
-                        ->get();
-                    $warehouse = $activeWarehouses->firstWhere('id', $vendor->primary_warehouse_id)
-                        ?? ($activeWarehouses->count() === 1 ? $activeWarehouses->first() : null);
+                    $activeWarehouses = $this->activeVendorWarehouses($vendor);
+                    $warehouse = $this->resolvePrimaryWarehouse($vendor->primary_warehouse_id, $activeWarehouses);
                     if (! $warehouse) {
                         throw ValidationException::withMessages([
                             'warehouse_id' => 'Hãy chọn một kho tổng đang hoạt động trước khi thêm sách vật lý.',
@@ -301,9 +296,6 @@ class BookController extends Controller
                         throw ValidationException::withMessages([
                             'warehouse_id' => 'Sách mới chỉ được nhập vào kho tổng của gian hàng.',
                         ]);
-                    }
-                    if (! $vendor->primary_warehouse_id) {
-                        $vendor->update(['primary_warehouse_id' => $warehouse->id]);
                     }
                 }
 
@@ -351,6 +343,25 @@ class BookController extends Controller
         ], 201);
     }
 
+    /** @param array<int, string> $columns */
+    private function activeVendorWarehouses($vendor, array $columns = ['*']): Collection
+    {
+        return Warehouse::withoutGlobalScopes()
+            ->where('vendor_id', $vendor->id)
+            ->whereIn('status', ['active', 'Hoạt động'])
+            ->orderBy('id')
+            ->get($columns);
+    }
+
+    private function resolvePrimaryWarehouse(?int $configuredPrimaryWarehouseId, Collection $activeWarehouses): ?Warehouse
+    {
+        if ($configuredPrimaryWarehouseId !== null) {
+            return $activeWarehouses->firstWhere('id', $configuredPrimaryWarehouseId);
+        }
+
+        return $activeWarehouses->count() === 1 ? $activeWarehouses->first() : null;
+    }
+
     /**
      * Xem chi tiết một cuốn sách của Vendor.
      *
@@ -361,7 +372,7 @@ class BookController extends Controller
         return response()->json([
             'status' => 'success',
             'message' => 'Lấy chi tiết sách thành công.',
-            'data' => new BookResource($book->load(['category', 'categories'])),
+            'data' => new BookResource($book->load(['category', 'categories', 'activeCommercialParties.organization'])),
         ]);
     }
 
@@ -392,8 +403,6 @@ class BookController extends Controller
             }
             $data['cover_image'] = $request->file('cover_image')
                 ->store('books/covers', 'public');
-        } elseif (! $book->cover_image) {
-            $data['cover_image'] = 'https://images.unsplash.com/photo-1543002588-bfa74002ed7e?q=80&w=600&auto=format&fit=crop';
         }
 
         // Xử lý album ảnh minh họa (gallery_images)
@@ -476,21 +485,48 @@ class BookController extends Controller
             $data['series_id'] = $request->input('series_id') ?: null;
         }
 
-        unset($data['ebook_file'], $data['category_ids'], $data['existing_gallery_images'], $data['series_name']);
+        $publisherRelId = $data['publisher_relationship_id'] ?? null;
+        $supplierRelId = $data['supplier_relationship_id'] ?? null;
+        $responsibleRelId = $data['responsible_organization_relationship_id'] ?? null;
+
+        unset(
+            $data['ebook_file'],
+            $data['category_ids'],
+            $data['existing_gallery_images'],
+            $data['series_name'],
+            $data['publisher_relationship_id'],
+            $data['supplier_relationship_id'],
+            $data['responsible_organization_relationship_id']
+        );
 
         $book->update($taxonomy->normalize($data, $book));
+
+        if ($publisherRelId && $supplierRelId && $responsibleRelId && $book->provenance !== 'used_resale') {
+            $vendor = $request->user()->vendor()->withoutGlobalScopes()->first();
+            if ($vendor) {
+                $supplyChainResolver = app(BookSupplyChainRequirementResolver::class);
+                $commercialParties = app(CommercialPartyService::class);
+                $submittedRelationships = [
+                    'publisher_relationship_id' => $publisherRelId,
+                    'supplier_relationship_id' => $supplierRelId,
+                    'responsible_organization_relationship_id' => $responsibleRelId,
+                ];
+                $relationshipIds = $supplyChainResolver->resolve($vendor, $submittedRelationships);
+                $commercialParties->assign($book, $relationshipIds, $request->user());
+            }
+        }
 
         // Xoá key cache tồn kho trên Redis để cập nhật thông tin mới nhất
         try {
             Redis::del("book_stock:{$book->id}");
         } catch (\Exception $ex) {
-            \Illuminate\Support\Facades\Log::warning('Failed to clear Redis stock cache: '.$ex->getMessage());
+            Log::warning('Failed to clear Redis stock cache: '.$ex->getMessage());
         }
 
         return response()->json([
             'status' => 'success',
             'message' => 'Cập nhật sách thành công!',
-            'data' => new BookResource($book->fresh()->load(['category', 'categories'])),
+            'data' => new BookResource($book->fresh()->load(['category', 'categories', 'activeCommercialParties.organization'])),
         ]);
     }
 

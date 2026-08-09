@@ -3,12 +3,14 @@
 namespace App\Services;
 
 use App\Enums\InventoryReservationStatus;
+use App\Models\Book;
 use App\Models\CheckoutSession;
 use App\Models\InventoryReservation;
 use App\Models\Order;
 use App\Models\User;
 use App\Models\Vendor;
 use App\Models\WarehouseDocument;
+use App\Models\WarehouseStock;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -34,7 +36,7 @@ class OrderDispatchDocumentService
                 ->with([
                     'orderItem.order',
                     'book',
-                    'allocations.warehouseStock.warehouse',
+                    'allocations',
                 ])
                 ->orderBy('id')
                 ->lockForUpdate()
@@ -48,6 +50,19 @@ class OrderDispatchDocumentService
             if ($reservations->contains(fn (InventoryReservation $reservation) => $reservation->status !== InventoryReservationStatus::RESERVED)) {
                 throw new LogicException('Không thể xuất kho vì một hoặc nhiều giữ chỗ không còn ở trạng thái reserved.');
             }
+
+            $usedBookInventory = app(UsedBookInventoryService::class);
+            $lockedUsedListings = $usedBookInventory->lockListingsForBooks(
+                $reservations->pluck('book_id')->unique()->values()->all()
+            );
+            foreach ($lockedUsedListings as $listing) {
+                $check = $usedBookInventory->inspect($listing, true);
+                if (! $check['valid']) {
+                    throw new RuntimeException('Used-book inventory is incoherent: '.$check['reason_code']);
+                }
+            }
+            $usedListings = $lockedUsedListings->keyBy('book_id');
+            $reservations->load('allocations.warehouseStock.warehouse');
 
             $groups = collect();
             foreach ($reservations as $reservation) {
@@ -64,6 +79,10 @@ class OrderDispatchDocumentService
                     }
                     if ((int) $order->vendor_id !== (int) $warehouse->vendor_id || (int) $stock->book_id !== (int) $reservation->book_id) {
                         throw new RuntimeException("Allocation ID {$allocation->id} không khớp tenant/sản phẩm.");
+                    }
+                    $listing = $usedListings->get($reservation->book_id);
+                    if ($listing && ((int) $listing->warehouse_id !== (int) $warehouse->id || (int) $stock->warehouse_id !== (int) $listing->warehouse_id)) {
+                        throw new RuntimeException('Used-book allocation does not target its bound stock.');
                     }
                     $allocated += (int) $allocation->quantity;
                     $key = "{$order->id}:{$warehouse->id}";
@@ -92,6 +111,22 @@ class OrderDispatchDocumentService
                     'status' => InventoryReservationStatus::COMMITTED,
                     'committed_at' => now(),
                 ]);
+            }
+
+            $bookIds = $reservations->pluck('book_id')->unique();
+            foreach ($bookIds as $bookId) {
+                $listing = $usedListings->get($bookId);
+                $totalOnHand = $listing
+                    ? (int) WarehouseStock::where('book_id', $bookId)->where('warehouse_id', $listing->warehouse_id)->value('quantity')
+                    : (int) WarehouseStock::where('book_id', $bookId)->sum('quantity');
+                Book::withoutGlobalScopes()->where('id', $bookId)->update(['stock' => $totalOnHand]);
+
+                if ($listing) {
+                    $listing->update(['quantity_available' => $totalOnHand]);
+                    if ($totalOnHand <= 0 && $listing->status === 'active') {
+                        $listing->update(['status' => 'sold_out']);
+                    }
+                }
             }
 
             return $reservations->fresh()->all();

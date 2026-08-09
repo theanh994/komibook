@@ -13,6 +13,7 @@ class UsedBookListingResource extends JsonResource
     {
         return [
             'id' => $this->id,
+            'warehouse_id' => $this->warehouse_id,
             'book' => $this->relationLoaded('book') && $this->book ? [
                 'id' => $this->book->id,
                 'title' => $this->book->title,
@@ -37,7 +38,13 @@ class UsedBookListingResource extends JsonResource
             'quantity_sold' => $this->quantity_sold,
             'quantity_returned' => $this->quantity_returned,
             'authenticity_attested_at' => $this->authenticity_attested_at?->toISOString(),
+            'seller' => $this->relationLoaded('seller') && $this->seller ? [
+                'id' => $this->seller->id,
+                'name' => $this->seller->name,
+                'email' => $this->seller->email,
+            ] : null,
             'status' => $this->status,
+            'rejection_reason' => $this->rejection_reason,
             'created_at' => $this->created_at?->toISOString(),
             'updated_at' => $this->updated_at?->toISOString(),
         ];

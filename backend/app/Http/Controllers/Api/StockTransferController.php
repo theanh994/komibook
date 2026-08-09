@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Book;
 use App\Models\StockTransfer;
 use App\Models\StockTransferItem;
+use App\Models\UsedBookListing;
 use App\Models\Warehouse;
 use App\Models\WarehouseStock;
 use Illuminate\Http\Request;
@@ -57,6 +58,8 @@ class StockTransferController extends Controller
         abort_unless($ownedBookIds->count() === $bookIds->count(), 403, 'Phiếu điều chuyển chứa sách không thuộc gian hàng hiện tại.');
         $transferCode = 'TRF-'.now()->format('Ymd').'-'.strtoupper(substr(uniqid(), -4));
 
+        abort_if(UsedBookListing::whereIn('book_id', $bookIds)->exists(), 422, 'Used-book inventory can only be changed through its canonical path.');
+
         return DB::transaction(function () use ($request, $vendor, $transferCode, $fromWarehouse, $toWarehouse) {
             $transfer = StockTransfer::create([
                 'vendor_id' => $vendor->id,
@@ -96,6 +99,7 @@ class StockTransferController extends Controller
         }
 
         return DB::transaction(function () use ($transfer, $vendor) {
+            abort_if(UsedBookListing::whereIn('book_id', $transfer->items()->pluck('book_id'))->exists(), 422, 'Used-book inventory can only be changed through its canonical path.');
             $ownedWarehouseIds = Warehouse::withoutGlobalScopes()->where('vendor_id', $vendor->id)->pluck('id');
             foreach ($transfer->items as $item) {
                 // Trừ kho xuất
@@ -136,7 +140,9 @@ class StockTransferController extends Controller
         $ownedWarehouseIds = Warehouse::where('vendor_id', $vendor->id)->pluck('id');
 
         return DB::transaction(function () use ($transfer, $vendor, $ownedWarehouseIds) {
-            foreach ($transfer->items as $item) {
+            $items = $transfer->items()->orderBy('id')->lockForUpdate()->get();
+            abort_if(UsedBookListing::whereIn('book_id', $items->pluck('book_id'))->exists(), 422, 'Used-book inventory can only be changed through its canonical path.');
+            foreach ($items as $item) {
                 // Cộng kho nhập
                 $stockTo = WarehouseStock::where('warehouse_id', $transfer->to_warehouse_id)
                     ->where('book_id', $item->book_id)

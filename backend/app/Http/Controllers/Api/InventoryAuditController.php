@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Book;
 use App\Models\InventoryAudit;
 use App\Models\InventoryAuditItem;
+use App\Models\UsedBookListing;
 use App\Models\Warehouse;
 use App\Models\WarehouseStock;
 use Illuminate\Http\Request;
@@ -55,6 +56,8 @@ class InventoryAuditController extends Controller
         $ownedBookIds = Book::withoutGlobalScopes()->where('vendor_id', $vendor->id)->whereIn('id', $bookIds)->pluck('id');
         abort_unless($ownedBookIds->count() === $bookIds->count(), 403, 'Phiếu kiểm kê chứa sách không thuộc gian hàng hiện tại.');
 
+        abort_if(UsedBookListing::whereIn('book_id', $bookIds)->exists(), 422, 'Used-book inventory can only be changed through its canonical path.');
+
         return DB::transaction(function () use ($request, $user, $vendor, $warehouse) {
             $audit = InventoryAudit::create([
                 'vendor_id' => $vendor->id,
@@ -102,6 +105,7 @@ class InventoryAuditController extends Controller
         }
 
         return DB::transaction(function () use ($audit, $vendor) {
+            abort_if(UsedBookListing::whereIn('book_id', $audit->items()->pluck('book_id'))->exists(), 422, 'Used-book inventory can only be changed through its canonical path.');
             $ownedWarehouseIds = Warehouse::withoutGlobalScopes()->where('vendor_id', $vendor->id)->pluck('id');
             foreach ($audit->items as $item) {
                 // Cập nhật số lượng trong warehouse_stocks

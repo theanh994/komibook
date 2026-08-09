@@ -12,8 +12,10 @@ use App\Models\InventoryReservation;
 use App\Models\InventoryReservationAllocation;
 use App\Models\Order;
 use App\Models\OrderItem;
+use App\Models\UsedBookListing;
 use App\Models\WarehouseStock;
 use App\Services\OrderDispatchDocumentService;
+use App\Services\UsedBookInventoryService;
 use DateTimeInterface;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -28,10 +30,62 @@ class InventoryReservationService
     {
         DB::transaction(function () use ($order, $operationKey) {
             $items = $order->orderItems()->with('inventoryReservation')->orderBy('id')->lockForUpdate()->get();
+            $usedBookInventory = app(UsedBookInventoryService::class);
+            $usedListings = $usedBookInventory->lockListingsForBooks(
+                $items->pluck('book_id')->unique()->values()->all()
+            )->keyBy('book_id');
+            foreach ($items as $item) {
+                $reservation = $item->inventoryReservation;
+                if ($reservation && ((int) $reservation->order_item_id !== (int) $item->id || (int) $reservation->book_id !== (int) $item->book_id)) {
+                    throw new RuntimeException("Inventory reservation ID {$reservation->id} does not match its order item.");
+                }
+            }
+            $committedReservations = $items->pluck('inventoryReservation')
+                ->filter(fn ($reservation) => $reservation?->status === InventoryReservationStatus::COMMITTED);
+            $committedReservationIds = $committedReservations->pluck('id')->sort()->values()->all();
+            $lockedAllocations = $committedReservationIds === []
+                ? collect()
+                : InventoryReservationAllocation::whereIn('inventory_reservation_id', $committedReservationIds)
+                    ->orderBy('id')
+                    ->lockForUpdate()
+                    ->get();
+            $allocationStockIds = $lockedAllocations->pluck('warehouse_stock_id')->unique()->sort()->values()->all();
+            $lockedStocks = $allocationStockIds === []
+                ? collect()
+                : WarehouseStock::whereIn('id', $allocationStockIds)
+                    ->orderBy('book_id', 'asc')
+                    ->orderBy('warehouse_id', 'asc')
+                    ->orderBy('id', 'asc')
+                    ->lockForUpdate()
+                    ->get()
+                    ->keyBy('id');
+            $usedChecks = [];
+
+            foreach ($committedReservations->pluck('book_id')->unique() as $bookId) {
+                $listing = $usedListings->get($bookId);
+                if (! $listing) {
+                    continue;
+                }
+
+                $check = $usedBookInventory->inspect($listing, true);
+                if (! $check['valid']) {
+                    throw new RuntimeException('Used-book inventory is incoherent: '.$check['reason_code']);
+                }
+                $usedChecks[(int) $bookId] = $check;
+            }
+
+            foreach ($committedReservations as $reservation) {
+                $this->assertRestorableCommittedAllocationIntegrity(
+                    $reservation,
+                    $lockedAllocations->where('inventory_reservation_id', $reservation->id),
+                    $lockedStocks,
+                    $usedChecks[(int) $reservation->book_id]['stock'] ?? null,
+                );
+            }
 
             foreach ($items as $item) {
                 $reservation = $item->inventoryReservation;
-                if (! $reservation || $reservation->status === InventoryReservationStatus::RESTORED) {
+                if (! $reservation || $reservation->status === InventoryReservationStatus::RESTORED || $reservation->status === InventoryReservationStatus::RELEASED) {
                     continue;
                 }
 
@@ -46,10 +100,9 @@ class InventoryReservationService
                     throw new LogicException("Cannot restore reservation ID {$reservation->id} in status '{$reservation->status->value}'");
                 }
 
-                $allocations = InventoryReservationAllocation::where('inventory_reservation_id', $reservation->id)
-                    ->orderBy('id')
-                    ->lockForUpdate()
-                    ->get();
+                $listing = $usedListings->get($item->book_id);
+                $usedStock = $usedChecks[(int) $item->book_id]['stock'] ?? null;
+                $allocations = $lockedAllocations->where('inventory_reservation_id', $reservation->id);
 
                 foreach ($allocations as $allocation) {
                     $restoreKey = "{$operationKey}:{$allocation->id}";
@@ -57,7 +110,10 @@ class InventoryReservationService
                         continue;
                     }
 
-                    $stock = WarehouseStock::whereKey($allocation->warehouse_stock_id)->lockForUpdate()->firstOrFail();
+                    $stock = $lockedStocks->get($allocation->warehouse_stock_id);
+                    if (! $stock) {
+                        throw new RuntimeException("WarehouseStock ID {$allocation->warehouse_stock_id} not found");
+                    }
                     DB::table('inventory_cancellation_restorations')->insert([
                         'order_item_id' => $item->id,
                         'inventory_reservation_allocation_id' => $allocation->id,
@@ -74,10 +130,59 @@ class InventoryReservationService
 
                 $reservation->status = InventoryReservationStatus::RESTORED;
                 $reservation->save();
-                $totalOnHand = (int) WarehouseStock::where('book_id', $item->book_id)->sum('quantity');
+                $totalOnHand = $usedStock
+                    ? (int) WarehouseStock::whereKey($usedStock->id)->value('quantity')
+                    : (int) WarehouseStock::where('book_id', $item->book_id)->sum('quantity');
                 Book::withoutGlobalScopes()->whereKey($item->book_id)->update(['stock' => $totalOnHand]);
+
+                if ($listing) {
+                    $listing->update(['quantity_available' => $totalOnHand]);
+                    if ($totalOnHand > 0 && $listing->status === 'sold_out') {
+                        $listing->update(['status' => 'active']);
+                    }
+                }
             }
         });
+    }
+
+    /**
+     * @param  Collection<int, InventoryReservationAllocation>  $allocations
+     * @param  Collection<int, WarehouseStock>  $lockedStocks
+     */
+    private function assertRestorableCommittedAllocationIntegrity(
+        InventoryReservation $reservation,
+        Collection $allocations,
+        Collection $lockedStocks,
+        ?WarehouseStock $usedStock,
+    ): void {
+        if ((int) $reservation->quantity <= 0) {
+            throw new RuntimeException("Reservation ID {$reservation->id} has invalid quantity {$reservation->quantity}");
+        }
+        if ($allocations->isEmpty()) {
+            throw new RuntimeException("Reservation ID {$reservation->id} has no allocation records");
+        }
+        if ($allocations->contains(fn (InventoryReservationAllocation $allocation) => (int) $allocation->quantity <= 0)) {
+            throw new RuntimeException("Reservation ID {$reservation->id} has a nonpositive allocation quantity");
+        }
+        if ($allocations->pluck('warehouse_stock_id')->unique()->count() !== $allocations->count()) {
+            throw new RuntimeException("Reservation ID {$reservation->id} has duplicate warehouse-stock allocations");
+        }
+        if ((int) $allocations->sum('quantity') !== (int) $reservation->quantity) {
+            throw new RuntimeException("Reservation ID {$reservation->id} quantity does not match sum of allocations");
+        }
+
+        foreach ($allocations as $allocation) {
+            $stock = $lockedStocks->get($allocation->warehouse_stock_id);
+            if (! $stock) {
+                throw new RuntimeException("WarehouseStock ID {$allocation->warehouse_stock_id} not found");
+            }
+            if ((int) $stock->book_id !== (int) $reservation->book_id) {
+                throw new RuntimeException("WarehouseStock ID {$stock->id} book_id does not match reservation book_id");
+            }
+            if ($usedStock && (int) $stock->id !== (int) $usedStock->id) {
+                throw new RuntimeException('Used-book restoration allocation does not target its canonical bound stock.');
+            }
+        }
     }
 
     /**
@@ -146,12 +251,22 @@ class InventoryReservationService
             sort($physicalBookIds);
 
             // 3. Khóa WarehouseStocks theo (book_id, warehouse_id, id)
+            $usedListings = app(UsedBookInventoryService::class)->lockListingsForBooks($physicalBookIds)->keyBy('book_id');
+
             $warehouseStocks = WarehouseStock::whereIn('book_id', $physicalBookIds)
                 ->orderBy('book_id', 'asc')
                 ->orderBy('warehouse_id', 'asc')
                 ->orderBy('id', 'asc')
                 ->lockForUpdate()
                 ->get();
+
+            foreach ($usedListings as $usedListing) {
+                $check = app(UsedBookInventoryService::class)->inspect($usedListing, true);
+                if (! $check['valid']) {
+                    throw new RuntimeException('Used-book inventory is incoherent: '.$check['reason_code']);
+                }
+                $warehouseStocks = $warehouseStocks->reject(fn (WarehouseStock $stock) => (int) $stock->book_id === (int) $usedListing->book_id && (int) $stock->id !== (int) $check['stock']->id);
+            }
 
             // 4. Kiểm tra Idempotency cho operationKey
             $targetKeys = array_map(
@@ -297,6 +412,7 @@ class InventoryReservationService
 
             // 2. Lock WarehouseStocks theo (book_id, warehouse_id, id)
             $bookIds = $reservations->pluck('book_id')->unique()->sort()->values()->toArray();
+            $usedListings = app(UsedBookInventoryService::class)->lockListingsForBooks($bookIds)->keyBy('book_id');
             $lockedStocks = WarehouseStock::whereIn('book_id', $bookIds)
                 ->orderBy('book_id', 'asc')
                 ->orderBy('warehouse_id', 'asc')
@@ -317,6 +433,13 @@ class InventoryReservationService
                 ->orderBy('id', 'asc')
                 ->lockForUpdate()
                 ->get();
+
+            foreach ($usedListings as $listing) {
+                $check = app(UsedBookInventoryService::class)->inspect($listing, true);
+                if (! $check['valid']) {
+                    throw new RuntimeException('Used-book inventory is incoherent: '.$check['reason_code']);
+                }
+            }
 
             // Kiểm tra tính toàn vẹn của allocation trước khi trừ kho
             $allCommitted = true;
@@ -353,6 +476,10 @@ class InventoryReservationService
 
                     if ((int) $stock->book_id !== (int) $res->book_id) {
                         throw new RuntimeException("WarehouseStock ID {$stock->id} book_id does not match reservation book_id");
+                    }
+                    $listing = $usedListings->get($res->book_id);
+                    if ($listing && ((int) $listing->warehouse_id === 0 || (int) $listing->warehouse_id !== (int) $stock->warehouse_id)) {
+                        throw new RuntimeException('Used-book reservation allocation does not target its bound warehouse stock.');
                     }
                 }
 
@@ -393,10 +520,20 @@ class InventoryReservationService
                 $res->save();
             }
 
-            // Đồng bộ projection books.stock trong cùng transaction
+            // Đồng bộ projection books.stock và UsedBookListing trong cùng transaction
             foreach (array_keys($affectedBookIds) as $bookId) {
-                $totalOnHand = (int) WarehouseStock::where('book_id', $bookId)->sum('quantity');
+                $listing = $usedListings->get($bookId);
+                $totalOnHand = $listing
+                    ? (int) WarehouseStock::where('book_id', $bookId)->where('warehouse_id', $listing->warehouse_id)->lockForUpdate()->value('quantity')
+                    : (int) WarehouseStock::where('book_id', $bookId)->sum('quantity');
                 Book::withoutGlobalScopes()->where('id', $bookId)->update(['stock' => $totalOnHand]);
+
+                if ($listing) {
+                    $listing->update(['quantity_available' => $totalOnHand]);
+                    if ($totalOnHand <= 0 && $listing->status === 'active') {
+                        $listing->update(['status' => 'sold_out']);
+                    }
+                }
             }
 
             return $lockedReservations->all();
@@ -427,7 +564,7 @@ class InventoryReservationService
                 ->get();
 
             foreach ($lockedReservations as $res) {
-                if ($res->status === InventoryReservationStatus::RELEASED) {
+                if ($res->status === InventoryReservationStatus::RELEASED || $res->status === InventoryReservationStatus::RESTORED) {
                     continue; // Idempotent
                 }
 
@@ -544,7 +681,16 @@ class InventoryReservationService
     public function getAvailableToSell(int|Book $book): int
     {
         $bookId = is_object($book) ? $book->id : $book;
-        $stocks = WarehouseStock::where('book_id', $bookId)->get();
+        $listing = UsedBookListing::where('book_id', $bookId)->first();
+        if ($listing) {
+            $check = app(UsedBookInventoryService::class)->inspect($listing);
+            if (! $check['valid']) {
+                return 0;
+            }
+            $stocks = collect([$check['stock']]);
+        } else {
+            $stocks = WarehouseStock::where('book_id', $bookId)->get();
+        }
         $totalAvailable = 0;
         $now = now();
 

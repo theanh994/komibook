@@ -83,6 +83,10 @@ class WarehouseDocumentService
         if ($document->lines->isEmpty()) {
             throw ValidationException::withMessages(['lines' => 'Phiếu phải có ít nhất một dòng sản phẩm.']);
         }
+        // Global D5 lock order: used listings (ID asc) precede any stock lock.
+        $usedListings = app(UsedBookInventoryService::class)
+            ->lockListingsForBooks($document->lines->pluck('book_id')->unique()->sort()->values()->all())
+            ->keyBy('book_id');
 
         foreach ($document->lines as $line) {
             if ($document->type !== 'count' && (int) $line->quantity <= 0) {
@@ -91,6 +95,29 @@ class WarehouseDocumentService
                 ]);
             }
             $book = Book::withoutGlobalScopes()->findOrFail($line->book_id);
+            $usedListing = $usedListings->get($book->id);
+            if ($usedListing && $document->origin !== 'order_fulfillment') {
+                throw ValidationException::withMessages(['lines' => 'Used-book inventory can only be changed through its canonical path.']);
+            }
+            if ($usedListing && (int) $document->source_warehouse_id !== (int) $usedListing->warehouse_id) {
+                throw ValidationException::withMessages(['warehouse' => 'Used-book dispatch must use its bound warehouse.']);
+            }
+            if ($usedListing) {
+                $check = app(UsedBookInventoryService::class)->inspect($usedListing, true);
+                $allocationExists = $document->origin === 'order_fulfillment'
+                    && $document->type === 'dispatch'
+                    && $document->order_id
+                    && DB::table('inventory_reservation_allocations as a')
+                        ->join('inventory_reservations as r', 'r.id', '=', 'a.inventory_reservation_id')
+                        ->join('order_items as oi', 'oi.id', '=', 'r.order_item_id')
+                        ->where('r.book_id', $book->id)
+                        ->where('oi.order_id', $document->order_id)
+                        ->where('a.warehouse_stock_id', $check['stock']?->id)
+                        ->exists();
+                if (! $check['valid'] || ! $allocationExists) {
+                    throw ValidationException::withMessages(['lines' => 'Used-book dispatch evidence is not canonical.']);
+                }
+            }
             if ($book->vendor_id !== $document->vendor_id) {
                 throw ValidationException::withMessages(['lines' => 'Sách không thuộc Nhà bán của phiếu kho.']);
             }
@@ -109,7 +136,9 @@ class WarehouseDocumentService
                 $this->persistDelta($document, $line, $stock, $delta, $actor, "{$operationKey}:count:{$line->id}");
             }
 
-            $total = WarehouseStock::query()->where('book_id', $line->book_id)->sum('quantity');
+            $total = $usedListing
+                ? (int) WarehouseStock::query()->where('book_id', $line->book_id)->where('warehouse_id', $usedListing->warehouse_id)->value('quantity')
+                : WarehouseStock::query()->where('book_id', $line->book_id)->sum('quantity');
             Book::withoutGlobalScopes()->whereKey($line->book_id)->update(['stock' => $total]);
         }
     }
