@@ -13,6 +13,7 @@ use App\Services\PayoutService;
 use App\Services\RevenueReportService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use LogicException;
@@ -102,6 +103,13 @@ class FinanceController extends Controller
         $reversals = DB::table('vendor_earning_reversals')
             ->where('vendor_id', $vendor->id)
             ->whereBetween('created_at', [$range['start'], $range['end']])->get();
+        $refunds = DB::table('refund_transactions')
+            ->join('return_requests', 'return_requests.id', '=', 'refund_transactions.return_request_id')
+            ->where('return_requests.vendor_id', $vendor->id)
+            ->where('refund_transactions.status', 'refunded')
+            ->whereBetween('refund_transactions.refunded_at', [$range['start'], $range['end']])
+            ->select('refund_transactions.*')
+            ->orderByDesc('refund_transactions.refunded_at')->get();
 
         return response()->json(['status' => 'success', 'data' => [
             'period' => ['granularity' => $validated['granularity'], 'value' => $range['label'], 'start' => $range['start']->toDateString(), 'end' => $range['end']->toDateString()],
@@ -109,8 +117,13 @@ class FinanceController extends Controller
                 'gross_revenue' => (int) $earnings->sum('gross_amount'),
                 'commission_amount' => (int) $earnings->sum('commission_amount'),
                 'net_revenue' => (int) $earnings->sum('net_amount'),
-                'refund_amount' => (int) $reversals->sum('gross_amount'),
-                'tax_withheld' => 0,
+                'customer_refund_amount' => (int) $refunds->sum('amount'),
+                'refund_amount' => (int) $refunds->sum('amount'),
+                'commission_reversal_amount' => (int) $reversals->sum('commission_amount'),
+                'vendor_net_reversal_amount' => (int) $reversals->sum('net_amount'),
+                'vendor_net_after_refunds' => (int) $earnings->sum('net_amount') - (int) $reversals->sum('net_amount'),
+                'tax_amount' => (int) $earnings->sum('tax_amount'),
+                'tax_withheld' => (int) $earnings->sum('tax_amount'),
                 'completed_orders' => $earnings->count(),
             ],
             'entries' => $earnings->map(fn ($entry) => [
@@ -121,6 +134,20 @@ class FinanceController extends Controller
                 'commission_amount' => $entry->commission_amount,
                 'net_amount' => $entry->net_amount,
                 'recorded_at' => $entry->created_at->toISOString(),
+            ]),
+            'refund_events' => $refunds->map(fn ($refund) => [
+                'id' => $refund->id,
+                'customer_refund_amount' => (int) $refund->amount,
+                'currency' => $refund->currency,
+                'refunded_at' => Carbon::parse($refund->refunded_at)->toISOString(),
+            ]),
+            'earning_reversal_events' => $reversals->map(fn ($reversal) => [
+                'id' => $reversal->id,
+                'gross_reversal_amount' => (int) $reversal->gross_amount,
+                'commission_reversal_amount' => (int) $reversal->commission_amount,
+                'vendor_net_reversal_amount' => (int) $reversal->net_amount,
+                'currency' => $reversal->currency,
+                'recorded_at' => Carbon::parse($reversal->created_at)->toISOString(),
             ]),
         ]]);
     }
@@ -141,13 +168,27 @@ class FinanceController extends Controller
         $rows = VendorEarningLedger::where('vendor_id', $vendor->id)
             ->whereBetween('created_at', [$range['start'], $range['end']])
             ->with('order:id,order_code,payment_method')->orderBy('created_at')->get();
+        $refunds = DB::table('refund_transactions')
+            ->join('return_requests', 'return_requests.id', '=', 'refund_transactions.return_request_id')
+            ->where('return_requests.vendor_id', $vendor->id)
+            ->where('refund_transactions.status', 'refunded')
+            ->whereBetween('refund_transactions.refunded_at', [$range['start'], $range['end']])
+            ->select('refund_transactions.*')->get();
+        $reversals = DB::table('vendor_earning_reversals')->where('vendor_id', $vendor->id)
+            ->whereBetween('created_at', [$range['start'], $range['end']])->get();
 
-        return response()->streamDownload(function () use ($rows): void {
+        return response()->streamDownload(function () use ($rows, $refunds, $reversals): void {
             $output = fopen('php://output', 'wb');
             fwrite($output, "\xEF\xBB\xBF");
-            fputcsv($output, ['Ngày ghi nhận', 'Mã đơn', 'Phương thức', 'Doanh thu gộp', 'Commission', 'Doanh thu ròng', 'Thuế khấu trừ', 'Tiền tệ']);
+            fputcsv($output, ['Thời điểm sự kiện', 'Mã đơn', 'Loại sự kiện', 'Doanh thu gộp', 'Hoa hồng hoặc hoàn hoa hồng', 'Thu nhập nhà bán hoặc hoàn thu nhập', 'Hoàn tiền khách hàng', 'Tiền tệ']);
             foreach ($rows as $row) {
-                fputcsv($output, [$row->created_at->format('d/m/Y H:i'), $row->order?->order_code, $row->order?->payment_method, $row->gross_amount, $row->commission_amount, $row->net_amount, 0, $row->currency]);
+                fputcsv($output, [$row->created_at->format('d/m/Y H:i'), $row->order?->order_code, 'earning', $row->gross_amount, $row->commission_amount, $row->net_amount, '', $row->currency]);
+            }
+            foreach ($refunds as $refund) {
+                fputcsv($output, [Carbon::parse($refund->refunded_at)->format('d/m/Y H:i'), '', 'customer_refund', '', '', '', $refund->amount, $refund->currency]);
+            }
+            foreach ($reversals as $reversal) {
+                fputcsv($output, [Carbon::parse($reversal->created_at)->format('d/m/Y H:i'), '', 'earning_reversal', '', $reversal->commission_amount, $reversal->net_amount, '', $reversal->currency]);
             }
             fclose($output);
         }, "doanh-thu-{$validated['granularity']}-{$validated['period']}.csv", ['Content-Type' => 'text/csv; charset=UTF-8']);

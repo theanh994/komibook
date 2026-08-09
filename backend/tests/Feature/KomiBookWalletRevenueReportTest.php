@@ -14,17 +14,16 @@ class KomiBookWalletRevenueReportTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_admin_report_persists_a_continuous_24_month_window_without_tax_withholding(): void
+    public function test_admin_report_requires_an_explicit_completed_run_and_does_not_write_legacy_snapshots(): void
     {
         $admin = User::factory()->create(['role' => 'admin', 'email_verified_at' => now()]);
         Sanctum::actingAs($admin);
-
         $response = $this->getJson('/api/admin/finance-report')->assertOk()
-            ->assertJsonPath('data.reporting_policy.retention_months', 24)
-            ->assertJsonPath('data.reporting_policy.tax_calculated_or_withheld', false);
+            ->assertJsonPath('status', 'unavailable')
+            ->assertJsonPath('reason', 'no_completed_run');
 
-        $this->assertCount(24, $response->json('data.revenue_by_month'));
-        $this->assertDatabaseCount('revenue_report_snapshots', 24);
+        $this->assertNull($response->json('data'));
+        $this->assertDatabaseCount('revenue_report_snapshots', 0);
     }
 
     public function test_vendor_can_filter_revenue_by_month_and_new_earnings_have_zero_tax(): void

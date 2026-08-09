@@ -108,6 +108,7 @@ Route::post('/article-submissions', [ArticleSubmissionController::class, 'store'
 Route::get('/organizations', [OrganizationController::class, 'index']);
 Route::get('/organizations/{slug}', [OrganizationController::class, 'show']);
 Route::get('/payment-providers', [PaymentController::class, 'providers']);
+Route::get('/commerce/shipping-policy', [CouponController::class, 'shippingPolicy']);
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Protected routes — Yêu cầu Sanctum token hợp lệ

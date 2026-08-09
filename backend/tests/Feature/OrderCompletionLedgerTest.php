@@ -417,7 +417,69 @@ class OrderCompletionLedgerTest extends TestCase
         ]);
 
         $this->assertEquals(180000, $vendor->balance);
-        $this->assertEquals(200, $user->points);
+        $this->assertEquals(20, $user->points);
+    }
+
+    /**
+     * 6A. KomiPoint uses each immutable order total snapshot, rounded down per order.
+     */
+    public function test_completed_orders_award_points_from_total_amount_snapshot_per_order(): void
+    {
+        Queue::fake();
+
+        $user = User::factory()->create(['points' => 0]);
+        $vendor = $this->createVendor();
+        $book = $this->createBook($vendor, 'physical', 100000, 20);
+        $cases = [
+            ['total_amount' => 9999, 'points' => 0],
+            ['total_amount' => 9999, 'points' => 0],
+            ['total_amount' => 10000, 'points' => 1],
+            ['total_amount' => 100000, 'points' => 10],
+        ];
+
+        $lastOrder = null;
+        $lastCompletionKey = null;
+
+        foreach ($cases as $index => $case) {
+            $order = $this->checkoutService->processCheckout(
+                [['book_id' => $book->id, 'quantity' => 1]],
+                ['shipping_address' => "Point Snapshot {$index}", 'phone' => '0901234567', 'payment_method' => 'cod'],
+                $user->id
+            )[0];
+            $snapshot = CheckoutSessionOrder::where('order_id', $order->id)->firstOrFail();
+            $snapshot->update([
+                'total_amount' => $case['total_amount'],
+                'commission_amount' => 0,
+            ]);
+            $order->update(['status' => 'processing']);
+
+            $this->fulfillmentService->updateOrderStatusByVendor($order->id, 'shipped', 'vendor', $vendor->user_id);
+            $this->fulfillmentService->updateShippingStatus($order->id, 'picked_up', 'GHTK', "POINT-{$index}", 'vendor', $vendor->user_id);
+            $this->fulfillmentService->updateShippingStatus($order->id, 'delivering', 'GHTK', "POINT-{$index}", 'vendor', $vendor->user_id);
+            $completionKey = "point-snapshot-{$index}";
+            $this->deliverAndConfirm($order, $vendor, 'GHTK', "POINT-{$index}", $completionKey);
+
+            $this->assertSame($case['total_amount'], (int) VendorEarningLedger::where('order_id', $order->id)->value('gross_amount'));
+            $this->assertSame($case['points'], (int) LoyaltyPointLedger::where('order_id', $order->id)->value('points'));
+
+            if ($case['points'] === 0) {
+                $this->assertSame(0, LoyaltyPointLedger::where('order_id', $order->id)->count());
+            }
+
+            $lastOrder = $order;
+            $lastCompletionKey = $completionKey;
+        }
+
+        // Two 9,999 VND orders do not aggregate into a point before flooring.
+        $this->assertSame(11, (int) $user->fresh()->points);
+        $this->assertSame(2, LoyaltyPointLedger::where('user_id', $user->id)->count());
+
+        $pointsBeforeRetry = (int) $user->fresh()->points;
+        $ledgerCountBeforeRetry = LoyaltyPointLedger::count();
+        $this->deliverAndConfirm($lastOrder, $vendor, 'GHTK', 'POINT-3', $lastCompletionKey);
+
+        $this->assertSame($pointsBeforeRetry, (int) $user->fresh()->points);
+        $this->assertSame($ledgerCountBeforeRetry, LoyaltyPointLedger::count());
     }
 
     /**
@@ -817,7 +879,7 @@ class OrderCompletionLedgerTest extends TestCase
                 'gross_amount' => 200000,
                 'commission_amount' => 20000,
                 'net_amount' => 180000,
-                'points' => 200,
+                'points' => 20,
             ],
             'occurred_at' => now(),
         ]);
@@ -1238,10 +1300,10 @@ class OrderCompletionLedgerTest extends TestCase
         $this->deliverAndConfirm($o2, $vendor, 'GHTK', 'T2', 'op-o2');
 
         $vendorBalanceCumulative = $vendor->fresh()->balance;
-        $this->assertEquals(180000, $vendorBalanceCumulative);
+        $this->assertEquals(210000, $vendorBalanceCumulative);
 
-        // Corrupt vendor balance to 150000 (less than cumulative 180000, but higher than a single contribution)
-        $vendor->balance = 150000;
+        // Corrupt vendor balance to 160000 (less than cumulative 210000, but higher than a single contribution)
+        $vendor->balance = 160000;
         $vendor->save();
 
         try {
@@ -1294,10 +1356,10 @@ class OrderCompletionLedgerTest extends TestCase
         $this->deliverAndConfirm($o2, $vendor, 'GHTK', 'T2', 'op-p2');
 
         $userPointsCumulative = $user->fresh()->points;
-        $this->assertEquals(200, $userPointsCumulative);
+        $this->assertEquals(22, $userPointsCumulative);
 
-        // Corrupt user points to 150 (less than cumulative 200, but higher than single 100)
-        $user->points = 150;
+        // Corrupt user points to 16 (less than cumulative 22, but higher than single 11)
+        $user->points = 16;
         $user->save();
 
         try {

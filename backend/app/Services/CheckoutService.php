@@ -67,9 +67,12 @@ class CheckoutService
         ?string $couponCode = null,
         ?array $digitalConsent = null,
     ): array {
-        $bookIds = array_column($items, 'book_id');
+        $bookIds = array_map(fn ($item) => (int) ($item['book_id'] ?? 0), $items);
+        if (count($bookIds) !== count(array_unique($bookIds, SORT_REGULAR))) {
+            throw ValidationException::withMessages(['items' => 'Duplicate book IDs are not allowed.']);
+        }
         $books = Book::withoutGlobalScopes()
-            ->with(['vendor', 'returnPolicyVersion'])
+            ->with(['vendor', 'returnPolicyVersion', 'categories'])
             ->whereIn('id', $bookIds)
             ->get()
             ->keyBy('id');
@@ -176,65 +179,13 @@ class CheckoutService
         }
 
         // BƯỚC 3: Xác thực & Tính toán giảm giá Coupon
-        $coupon = null;
-        $vendorDiscounts = [];
+        $shippingPricing = app(ShippingPricingPolicy::class);
         if ($couponCode) {
             foreach ($groupedItems as $vendorItems) {
                 foreach ($vendorItems as $vendorItem) {
                     if (($vendorItem['promotion_snapshot']['coupon_stacking_policy'] ?? null) === 'deny') {
                         throw ValidationException::withMessages(['coupon' => 'This coupon cannot be stacked with the active Flash Sale.']);
                     }
-                }
-            }
-            $coupon = Coupon::where('code', $couponCode)->first();
-            if ($coupon) {
-                $now = now();
-                $isValidTime = true;
-                if (($coupon->start_time && $now->lt($coupon->start_time)) || ($coupon->end_time && $now->gt($coupon->end_time))) {
-                    $isValidTime = false;
-                }
-                if ($coupon->valid_until && $coupon->valid_until->isPast()) {
-                    $isValidTime = false;
-                }
-
-                $isValidUsage = true;
-                if ($coupon->usage_limit > 0 && $coupon->used_count >= $coupon->usage_limit) {
-                    $isValidUsage = false;
-                }
-
-                $isValidMinOrder = $totalCartAmount >= $coupon->min_order_value;
-
-                if ($isValidTime && $isValidUsage && $isValidMinOrder) {
-                    $totalCategoryBase = 0;
-                    foreach ($groupedItems as $vendorId => $vendorItems) {
-                        $eligibleBase = 0;
-                        foreach ($vendorItems as $vItem) {
-                            $book = $books->get($vItem['book_id']);
-                            $inBookScope = empty($coupon->scope_book_ids)
-                                || in_array((int) $vItem['book_id'], array_map('intval', $coupon->scope_book_ids), true);
-                            if ($inBookScope && (! $coupon->category_id || ($book && $book->category_id == $coupon->category_id))) {
-                                $eligibleBase += $vItem['price'] * $vItem['quantity'];
-                            }
-                        }
-                        $vendorDiscounts[$vendorId] = ($eligibleBase * $coupon->discount_percent) / 100;
-                        $totalCategoryBase += $eligibleBase;
-                    }
-
-                    $totalCalculatedDiscount = array_sum($vendorDiscounts);
-                    if ($totalCalculatedDiscount > 0) {
-                        if ($coupon->max_discount_amount && $totalCalculatedDiscount > $coupon->max_discount_amount) {
-                            $scale = $coupon->max_discount_amount / $totalCalculatedDiscount;
-                            foreach ($vendorDiscounts as $vendorId => $discount) {
-                                $vendorDiscounts[$vendorId] = round($discount * $scale);
-                            }
-                        } else {
-                            foreach ($vendorDiscounts as $vendorId => $discount) {
-                                $vendorDiscounts[$vendorId] = round($discount);
-                            }
-                        }
-                    }
-                } else {
-                    $coupon = null;
                 }
             }
         }
@@ -247,62 +198,37 @@ class CheckoutService
                 $paymentMethod = 'online';
             }
         }
+        $isCod = ($paymentMethod === 'cod');
 
         // BƯỚC 5: Tính toán snapshot tài chính cho từng vendor & session
         $user = User::with('membershipTier')->find($userId);
         $feeService = app(CommerceFeeService::class);
         $feeSchedule = $feeService->effective();
 
-        $vendorSnapshots = [];
-        $sessionSubtotal = 0;
-        $sessionDiscount = 0;
-        $sessionFee = 0;
-        $sessionTotal = 0;
-
-        foreach ($groupedItems as $vendorId => $vendorItems) {
-            $subtotal = (int) array_sum(array_map(function ($vItem) {
-                return $vItem['price'] * $vItem['quantity'];
-            }, $vendorItems));
-
-            $couponDisc = (int) round($vendorDiscounts[$vendorId] ?? 0);
-
-            $membershipDisc = 0;
-            if ($user && $user->membershipTier && $user->membershipTier->discount_percent > 0) {
-                $afterCoupon = max(0, $subtotal - $couponDisc);
-                $membershipDisc = (int) round(($afterCoupon * (float) $user->membershipTier->discount_percent) / 100.0);
-            }
-
-            $discount = min($subtotal, $couponDisc + $membershipDisc);
-            $feeCalculation = $feeService->calculate(max(0, $subtotal - $discount), $feeSchedule);
-            $fee = $feeCalculation['service_fee_amount'];
-            $total = $feeCalculation['total_amount'];
-            $commissionAmt = $feeCalculation['commission_amount'];
-
-            $vendorSnapshots[$vendorId] = [
-                'subtotal_amount' => $subtotal,
-                'coupon_discount_amount' => $couponDisc,
-                'membership_discount_amount' => $membershipDisc,
-                'discount_amount' => $discount,
-                'fee_amount' => $fee,
-                'total_amount' => $total,
-                'fee_schedule_id' => $feeSchedule['id'],
-                'service_fee_rate' => $feeCalculation['service_fee_rate'],
-                'commission_rate' => $feeCalculation['commission_rate'],
-                'commission_amount' => $commissionAmt,
-            ];
-
-            $sessionSubtotal += $subtotal;
-            $sessionDiscount += $discount;
-            $sessionFee += $fee;
-            $sessionTotal += $total;
-        }
-
         // BƯỚC 6: DB Transaction - Create Session, Orders, Items, Links, và Inventory Reservations
         $createdOrders = [];
-        $isCod = ($paymentMethod === 'cod');
 
         try {
             DB::beginTransaction();
+
+            [$coupon, $vendorDiscounts, $vendorShippingDiscounts] = $this->resolveLockedCouponPricing(
+                $couponCode,
+                $totalCartAmount,
+                $groupedItems,
+                $books,
+                $shippingPricing,
+            );
+            [$vendorSnapshots, $sessionSubtotal, $sessionDiscount, $sessionFee, $sessionTotal] = $this->buildVendorSnapshots(
+                $groupedItems,
+                $books,
+                $vendorDiscounts,
+                $vendorShippingDiscounts,
+                $totalCartAmount,
+                $user,
+                $feeService,
+                $feeSchedule,
+                $shippingPricing,
+            );
 
             $expiresAt = now()->addMinutes(15);
 
@@ -399,7 +325,7 @@ class CheckoutService
                     'subtotal_amount' => $snapshot['subtotal_amount'],
                     'coupon_discount_amount' => $snapshot['coupon_discount_amount'],
                     'membership_discount_amount' => $snapshot['membership_discount_amount'],
-                    'shipping_fee_amount' => 0,
+                    'shipping_fee_amount' => $snapshot['shipping_fee_amount'],
                     'service_fee_amount' => $snapshot['fee_amount'],
                     'tax_rate' => 0,
                     'tax_amount' => 0,
@@ -410,6 +336,13 @@ class CheckoutService
                     'checkout_session_id' => $checkoutSession->id,
                     'order_id' => $order->id,
                     'vendor_id' => $vendorId,
+                    'coupon_id' => $coupon?->id,
+                    'coupon_type' => $coupon?->coupon_type,
+                    'coupon_code' => $coupon?->code,
+                    'coupon_discount_amount' => $snapshot['coupon_discount_amount'],
+                    'membership_discount_amount' => $snapshot['membership_discount_amount'],
+                    'shipping_fee_amount' => $snapshot['shipping_fee_amount'],
+                    'pricing_policy_snapshot' => $shippingPricing->snapshot(),
                     'commerce_fee_schedule_id' => $snapshot['fee_schedule_id'],
                     'subtotal_amount' => $snapshot['subtotal_amount'],
                     'discount_amount' => $snapshot['discount_amount'],
@@ -433,18 +366,18 @@ class CheckoutService
             );
 
             // Tăng số lượt sử dụng Coupon
-            if ($coupon) {
+            if ($coupon && (array_sum($vendorDiscounts) + array_sum($vendorShippingDiscounts)) > 0) {
                 $coupon->increment('used_count');
             }
 
             DB::commit();
-        } catch (Exception $e) {
+        } catch (\Throwable $e) {
             DB::rollBack();
 
             throw $e;
         }
 
-        // BƯỚC 7: Post-Commit - Chỉ dispatch ProcessOrder cho đơn COD
+        // BƯỚC 7: Post-Commit - Dispatch ProcessOrder cho đơn COD
         if ($isCod) {
             foreach ($createdOrders as $order) {
                 ProcessOrder::dispatch($order->id);
@@ -453,4 +386,71 @@ class CheckoutService
 
         return $createdOrders;
     }
+
+    /**
+     * Giai đoạn 2: Xác nhận đơn COD (draft -> confirmed -> dispatch ProcessOrder)
+     *
+     * @param  int[]  $orderIds
+     */
+    /**
+     * Revalidates the exact coupon row while it is locked by this checkout
+     * transaction. A coupon quote is never trusted across this lock boundary.
+     *
+     * @return array{0:?Coupon,1:array<int,int>,2:array<int,int>}
+     */
+    private function resolveLockedCouponPricing(?string $couponCode, int $totalCartAmount, array $groupedItems, $books, ShippingPricingPolicy $shippingPricing): array
+    {
+        if (! $couponCode) {
+            return [null, [], []];
+        }
+
+        $coupon = Coupon::where('code', $couponCode)->lockForUpdate()->first();
+        if (! $coupon || $coupon->status !== 'active' || ! in_array($coupon->coupon_type, ['product', 'shipping'], true)) {
+            throw ValidationException::withMessages(['coupon' => 'Coupon is unavailable or has an invalid type.']);
+        }
+        app(CouponPricingService::class)->validateCurrent($coupon, $totalCartAmount);
+        $quote = app(CouponPricingService::class)->quote($coupon, $groupedItems, $books, $totalCartAmount, $shippingPricing);
+
+        return [$coupon, $quote['product_discounts'], $quote['shipping_discounts']];
+    }
+
+    /** @return array{0:array<int,array<string,int|float>>,1:int,2:int,3:int,4:int} */
+    private function buildVendorSnapshots(array $groupedItems, $books, array $vendorDiscounts, array $vendorShippingDiscounts, int $totalCartAmount, ?User $user, CommerceFeeService $feeService, array $feeSchedule, ShippingPricingPolicy $shippingPricing): array
+    {
+        $snapshots = [];
+        $sessionSubtotal = $sessionDiscount = $sessionFee = $sessionTotal = 0;
+        foreach ($groupedItems as $vendorId => $vendorItems) {
+            $subtotal = (int) array_sum(array_map(fn ($item) => (int) $item['price'] * (int) $item['quantity'], $vendorItems));
+            $hasPhysical = collect($vendorItems)->some(fn ($item) => ($books->get($item['book_id'])?->type ?? 'ebook') !== 'ebook');
+            $productCouponDiscount = (int) ($vendorDiscounts[$vendorId] ?? 0);
+            $shippingCouponDiscount = (int) ($vendorShippingDiscounts[$vendorId] ?? 0);
+            $couponDiscount = $productCouponDiscount + $shippingCouponDiscount;
+            $shippingFee = $shippingPricing->feeAfterDiscount($shippingPricing->baseFeeForVendor($hasPhysical, $totalCartAmount), $shippingCouponDiscount);
+            $membershipDiscount = $user?->membershipTier?->discount_percent > 0
+                ? (int) round((max(0, $subtotal - $productCouponDiscount) * (float) $user->membershipTier->discount_percent) / 100, 0, PHP_ROUND_HALF_UP)
+                : 0;
+            $discount = min($subtotal, $productCouponDiscount + $membershipDiscount);
+            $fee = $feeService->calculate(max(0, $subtotal - $discount), $feeSchedule);
+            $snapshots[$vendorId] = [
+                'subtotal_amount' => $subtotal,
+                'coupon_discount_amount' => $couponDiscount,
+                'membership_discount_amount' => $membershipDiscount,
+                'discount_amount' => $discount,
+                'shipping_fee_amount' => $shippingFee,
+                'fee_amount' => (int) $fee['service_fee_amount'],
+                'total_amount' => (int) $fee['total_amount'] + $shippingFee,
+                'fee_schedule_id' => $feeSchedule['id'],
+                'service_fee_rate' => $fee['service_fee_rate'],
+                'commission_rate' => $fee['commission_rate'],
+                'commission_amount' => (int) $fee['commission_amount'],
+            ];
+            $sessionSubtotal += $subtotal;
+            $sessionDiscount += $discount;
+            $sessionFee += (int) $fee['service_fee_amount'];
+            $sessionTotal += (int) $fee['total_amount'] + $shippingFee;
+        }
+
+        return [$snapshots, $sessionSubtotal, $sessionDiscount, $sessionFee, $sessionTotal];
+    }
+
 }

@@ -48,6 +48,24 @@
           
           <!-- STEP 1: CART ITEMS -->
           <template v-if="step === 1">
+            <!-- Freeship Notification Banner -->
+            <div v-if="cartStore.items.length > 0" class="rounded-2xl p-md border transition-all flex items-center justify-between gap-md" :class="hasAutoFreeShipping ? 'bg-emerald-50 border-emerald-200 text-emerald-900' : 'bg-amber-50 border-amber-200 text-amber-900'">
+              <div class="flex items-center gap-3">
+                <span class="material-symbols-outlined text-2xl" :class="hasAutoFreeShipping ? 'text-emerald-600' : 'text-amber-600'">local_shipping</span>
+                <div>
+                  <div class="font-bold text-sm">
+                    {{ hasAutoFreeShipping ? '🎉 Đã đạt điều kiện Miễn phí vận chuyển Komi Express!' : '💡 Ưu đãi vận chuyển Komi Express toàn sàn' }}
+                  </div>
+                  <div class="text-xs">
+                    {{ !shippingPreviewAvailable ? 'Phí vận chuyển sẽ được tính khi thanh toán.' : (hasAutoFreeShipping ? 'Đơn hàng của bạn đã được TỰ ĐỘNG MIỄN PHÍ VẬN CHUYỂN toàn bộ các nhà bán.' : `Mua thêm ${formatCurrency(amountToFreeShipping)} để được Miễn phí vận chuyển toàn bộ (Phí hiện tại: ${policyFeeLabel}/nhà bán).`) }}
+                  </div>
+                </div>
+              </div>
+              <span class="text-xs font-bold px-3 py-1 rounded-full shrink-0" :class="hasAutoFreeShipping ? 'bg-emerald-200 text-emerald-800' : 'bg-amber-200 text-amber-800'">
+                {{ hasAutoFreeShipping ? 'MIỄN PHÍ SHIP 100%' : (shippingPreviewAvailable ? `${policyFeeLabel}/NHÀ BÁN` : 'TÍNH KHI THANH TOÁN') }}
+              </span>
+            </div>
+
             <div v-for="group in cartStore.groupedItems" :key="group.vendorId" class="bg-surface-container-lowest rounded-2xl border border-outline-variant/30 soft-shadow overflow-hidden">
               <!-- Header Shop -->
               <div class="px-lg py-md bg-surface-container-low/50 flex items-center justify-between border-b border-outline-variant/20">
@@ -148,7 +166,7 @@
             <div class="lg:hidden fixed bottom-0 left-0 right-0 p-lg bg-surface-container-lowest border-t border-outline-variant/30 z-30 flex items-center justify-between shadow-2xl">
               <div>
                 <div class="text-xs text-outline font-medium">Tổng tiền</div>
-                <div class="text-xl font-black text-primary">{{ formatCurrency(cartStore.totalPrice) }}</div>
+                <div class="text-xl font-black text-primary">{{ finalTotal === null ? 'Tính khi thanh toán' : formatCurrency(finalTotal) }}</div>
               </div>
               <button 
                 @click="goToCheckout"
@@ -301,13 +319,27 @@
                 <span>Tổng tiền sản phẩm</span>
                 <span class="font-bold text-on-surface">{{ formatCurrency(cartStore.totalPrice) }}</span>
               </div>
+              <div v-if="vendorShippingBreakdown.length > 0" class="py-2 border-y border-outline-variant/10 space-y-1.5">
+                <div class="text-xs font-bold text-on-surface-variant flex items-center gap-1">
+                  <span class="material-symbols-outlined text-sm text-primary">local_shipping</span>
+                  Phí vận chuyển ({{ vendorShippingBreakdown.length }} nhà bán):
+                </div>
+                <div v-for="v in vendorShippingBreakdown" :key="v.vendorName" class="flex justify-between text-xs pl-4 text-on-surface-variant">
+                  <span>{{ v.vendorName }}</span>
+                  <span :class="v.isFreeship ? 'text-emerald-600 font-bold' : 'text-on-surface font-medium'">
+                    {{ !v.previewAvailable ? 'Tính khi thanh toán' : (v.isFreeship ? 'Miễn phí' : formatCurrency(v.fee)) }}
+                  </span>
+                </div>
+              </div>
               <div class="flex justify-between text-sm text-on-surface-variant" v-if="appliedCoupon">
                 <span>Giảm giá</span>
                 <span class="font-bold text-emerald-600">-{{ formatCurrency(appliedCoupon.discount_amount) }}</span>
               </div>
               <div class="flex justify-between text-sm text-on-surface-variant">
-                <span>Phí vận chuyển</span>
-                <span class="font-bold text-on-surface text-emerald-600">Miễn phí</span>
+                <span>Tổng phí vận chuyển</span>
+                <span class="font-bold" :class="shippingPreviewAvailable && totalShippingFee === 0 ? 'text-emerald-600' : 'text-on-surface'">
+                  {{ !shippingPreviewAvailable ? 'Tính khi thanh toán' : (totalShippingFee === 0 ? 'Miễn phí' : formatCurrency(totalShippingFee)) }}
+                </span>
               </div>
             </div>
 
@@ -315,7 +347,7 @@
               <div class="flex justify-between items-center">
                 <span class="text-base font-bold text-on-surface">Tổng cộng</span>
                 <div class="text-right">
-                  <div class="text-3xl font-black text-primary leading-none mb-1">{{ formatCurrency(finalTotal) }}</div>
+                  <div class="text-3xl font-black text-primary leading-none mb-1">{{ finalTotal === null ? 'Tính khi thanh toán' : formatCurrency(finalTotal) }}</div>
                   <div class="text-[10px] text-outline font-medium italic">(Đã bao gồm VAT nếu có)</div>
                 </div>
               </div>
@@ -399,6 +431,14 @@
   </div>
 </template>
 
+<script>
+export const calculateCheckoutPreviewTotal = ({ subtotal, shippingFee, couponDiscount, hasPhysicalItems, shippingPolicyAvailable }) => {
+  if (hasPhysicalItems && !shippingPolicyAvailable) return null
+
+  return Math.max(0, subtotal + shippingFee - couponDiscount)
+}
+</script>
+
 <script setup>
 import { useCartStore } from '@/stores/cart'
 import { useAuthStore } from '@/stores/auth'
@@ -441,6 +481,7 @@ const isApplyingCoupon = ref(false)
 const appliedCoupon = ref(null)
 const ebookTermsAccepted = ref(false)
 const ebookPolicy = ref(null)
+const shippingPolicy = ref(null)
 const hasEbooks = computed(() => cartStore.items.some(item => item.book.type === 'ebook'))
 const hasPhysicalBooks = computed(() => cartStore.items.some(item => item.book.type !== 'ebook'))
 const ebookPolicyLabel = computed(() => ebookPolicy.value?.version
@@ -450,6 +491,7 @@ const ebookPolicyLabel = computed(() => ebookPolicy.value?.version
 onMounted(() => {
   refreshCartBooks()
   fetchPublicPolicies()
+  fetchShippingPolicy()
   fetchPaymentProviders()
   if (authStore.isAuthenticated) {
     fetchAddresses()
@@ -484,6 +526,18 @@ const fetchPublicPolicies = async () => {
   }
 }
 
+const fetchShippingPolicy = async () => {
+  try {
+    const response = await apiClient.get('/api/commerce/shipping-policy')
+    const policy = readApiData(response.data)
+    shippingPolicy.value = Number.isInteger(policy?.free_shipping_threshold) && Number.isInteger(policy?.base_fee_per_physical_vendor)
+      ? policy
+      : null
+  } catch {
+    shippingPolicy.value = null
+  }
+}
+
 const refreshCartBooks = async () => {
   await Promise.allSettled(cartStore.items.map(async (item) => {
     if (!item.book?.slug) return
@@ -515,13 +569,31 @@ const onAddressSelect = () => {
   }
 }
 
-const finalTotal = computed(() => {
-  let total = cartStore.totalPrice
-  if (appliedCoupon.value && appliedCoupon.value.discount_amount) {
-    total -= appliedCoupon.value.discount_amount
+const shippingPreviewAvailable = computed(() => Boolean(shippingPolicy.value))
+const hasAutoFreeShipping = computed(() => shippingPreviewAvailable.value && cartStore.totalPrice >= shippingPolicy.value.free_shipping_threshold)
+const amountToFreeShipping = computed(() => shippingPreviewAvailable.value ? Math.max(0, shippingPolicy.value.free_shipping_threshold - cartStore.totalPrice) : 0)
+const policyFeeLabel = computed(() => shippingPreviewAvailable.value ? formatCurrency(shippingPolicy.value.base_fee_per_physical_vendor) : '')
+
+const vendorShippingBreakdown = computed(() => cartStore.groupedItems.map(group => {
+  const hasPhysical = group.items.some(item => item.book.type !== 'ebook')
+  const fee = shippingPreviewAvailable.value ? ((!hasPhysical || hasAutoFreeShipping.value) ? 0 : shippingPolicy.value.base_fee_per_physical_vendor) : null
+  return {
+    vendorName: group.vendorName,
+    fee,
+    isFreeship: fee === 0,
+    previewAvailable: shippingPreviewAvailable.value
   }
-  return total > 0 ? total : 0
-})
+}))
+
+const totalShippingFee = computed(() => vendorShippingBreakdown.value.reduce((sum, vendor) => sum + (vendor.fee || 0), 0))
+
+const finalTotal = computed(() => calculateCheckoutPreviewTotal({
+  subtotal: cartStore.totalPrice,
+  shippingFee: totalShippingFee.value,
+  couponDiscount: appliedCoupon.value?.discount_amount || 0,
+  hasPhysicalItems: hasPhysicalBooks.value,
+  shippingPolicyAvailable: shippingPreviewAvailable.value
+}))
 
 const formatCurrency = (value) => {
   if (!value) return '0 đ'
@@ -566,6 +638,10 @@ const applyCoupon = async () => {
       }))
     })
     appliedCoupon.value = readApiData(response.data)
+    const responsePolicy = appliedCoupon.value?.shipping_policy
+    if (Number.isInteger(responsePolicy?.free_shipping_threshold) && Number.isInteger(responsePolicy?.base_fee_per_physical_vendor)) {
+      shippingPolicy.value = responsePolicy
+    }
     toast.add({ severity: 'success', summary: 'Thành công', detail: response.data.message || 'Đã áp dụng mã giảm giá!', life: 3000 })
   } catch (error) {
     const msg = error.response?.data?.message || 'Có lỗi xảy ra khi áp dụng mã'

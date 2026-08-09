@@ -6,84 +6,61 @@ use App\Http\Controllers\Controller;
 use App\Models\Book;
 use App\Models\Coupon;
 use App\Models\FlashSale;
+use App\Services\CouponPricingService;
+use App\Services\FlashSalePricingService;
+use App\Services\ShippingPricingPolicy;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Validation\ValidationException;
 
 class CouponController extends Controller
 {
-    public function apply(Request $request)
+    public function apply(Request $request, ShippingPricingPolicy $shippingPricing, CouponPricingService $couponPricing, FlashSalePricingService $flashPricing)
     {
         $request->validate([
             'code' => 'required|string',
-            'total_amount' => 'required|numeric|min:0',
-            'items' => 'nullable|array',
+            'items' => 'required|array|min:1',
+            'items.*.id' => 'required|integer|distinct',
+            'items.*.quantity' => 'required|integer|min:1',
         ]);
+        $normalizedBookIds = collect($request->items)->map(fn ($item) => (int) $item['id']);
+        if ($normalizedBookIds->count() !== $normalizedBookIds->unique()->count()) {
+            throw ValidationException::withMessages(['items' => 'Duplicate book IDs are not allowed.']);
+        }
 
-        $coupon = Coupon::where('code', $request->code)->where('status', 'active')->first();
+        $coupon = Coupon::where('code', $request->code)->first();
         if (! $coupon) {
-            return $this->errorResponse('Mã giảm giá không tồn tại.', 404);
+            return $this->errorResponse('Coupon not found.', 404);
         }
-
-        $now = now();
-        if (($coupon->start_time && $now->lt($coupon->start_time)) || ($coupon->end_time && $now->gt($coupon->end_time))) {
-            return $this->errorResponse('Mã không trong thời gian sử dụng.');
-        }
-        if ($coupon->valid_until && $coupon->valid_until->isPast()) {
-            return $this->errorResponse('Mã giảm giá đã hết hạn.');
-        }
-        if ($coupon->usage_limit > 0 && $coupon->used_count >= $coupon->usage_limit) {
-            return $this->errorResponse('Mã giảm giá đã hết lượt sử dụng.');
-        }
-        if ($request->total_amount < $coupon->min_order_value) {
-            return $this->errorResponse('Đơn hàng chưa đạt giá trị tối thiểu để áp dụng mã này.');
-        }
-
-        $baseAmountForDiscount = $request->total_amount;
-        if ($request->has('items') && ($coupon->vendor_id || $coupon->category_id || ! empty($coupon->scope_book_ids))) {
-            $itemBookIds = collect($request->items)
-                ->map(fn ($item) => (int) ($item['id'] ?? $item['book_id'] ?? 0))
-                ->filter()
-                ->unique();
-            $eligibleQuery = Book::withoutGlobalScopes()->whereIn('id', $itemBookIds);
-            if ($coupon->vendor_id) {
-                $eligibleQuery->where('vendor_id', $coupon->vendor_id);
-            }
-            if (! empty($coupon->scope_book_ids)) {
-                $eligibleQuery->whereIn('id', array_map('intval', $coupon->scope_book_ids));
-            } elseif ($coupon->category_id) {
-                $eligibleQuery->where(function ($query) use ($coupon) {
-                    $query->where('category_id', $coupon->category_id)
-                        ->orWhereHas('categories', fn ($categories) => $categories->whereKey($coupon->category_id));
-                });
-            }
-
-            $eligibleBookIds = $eligibleQuery->pluck('id')->map(fn ($id) => (int) $id)->all();
-            $baseAmountForDiscount = 0;
-            foreach ($request->items as $item) {
-                $bookId = (int) ($item['id'] ?? $item['book_id'] ?? 0);
-                if (in_array($bookId, $eligibleBookIds, true)) {
-                    $baseAmountForDiscount += ((int) $item['price'] * (int) $item['quantity']);
-                }
-            }
-        }
-
-        $discountAmount = ($baseAmountForDiscount * $coupon->discount_percent) / 100;
-        if ($coupon->max_discount_amount && $discountAmount > $coupon->max_discount_amount) {
-            $discountAmount = $coupon->max_discount_amount;
-        }
-        if ($discountAmount <= 0) {
-            return $this->errorResponse('Mã này không áp dụng cho các sản phẩm trong giỏ hàng của bạn.');
+        try {
+            [$groupedItems, $books, $cartSubtotal] = $this->serverPricedGroups($request->items, $flashPricing);
+            $couponPricing->validateCurrent($coupon, $cartSubtotal);
+            $quote = $couponPricing->quote($coupon, $groupedItems, $books, $cartSubtotal, $shippingPricing);
+        } catch (ValidationException $exception) {
+            return $this->errorResponse($exception->errors()['coupon'][0] ?? 'Coupon is invalid.');
         }
 
         return response()->json([
             'status' => 'success',
             'success' => true,
-            'message' => 'Áp dụng mã giảm giá thành công!',
+            'message' => $coupon->coupon_type === 'shipping' ? 'Shipping coupon applied.' : 'Coupon applied.',
             'data' => [
-                'discount_amount' => round($discountAmount),
+                'discount_amount' => $quote['total_discount'],
                 'code' => $coupon->code,
+                'coupon_type' => $coupon->coupon_type,
+                'shipping_policy' => $shippingPricing->publicPayload(),
             ],
+        ]);
+    }
+
+    public function shippingPolicy(ShippingPricingPolicy $shippingPricing): JsonResponse
+    {
+        return response()->json([
+            'status' => 'success',
+            'success' => true,
+            'data' => $shippingPricing->publicPayload(),
         ]);
     }
 
@@ -120,18 +97,10 @@ class CouponController extends Controller
                         'views_count' => (int) ($vendor->views_count ?? 0),
                     ]);
 
-                return [
-                    ...$sale->toArray(),
-                    'time_status' => $sale->start_time->isFuture() ? 'upcoming' : 'active',
-                    'vendor_spotlights' => $spotlights,
-                ];
+                return [...$sale->toArray(), 'time_status' => $sale->start_time->isFuture() ? 'upcoming' : 'active', 'vendor_spotlights' => $spotlights];
             });
 
-        return response()->json([
-            'status' => 'success',
-            'success' => true,
-            'data' => $flashSales,
-        ]);
+        return response()->json(['status' => 'success', 'success' => true, 'data' => $flashSales]);
     }
 
     public function activeFlashSale()
@@ -144,25 +113,39 @@ class CouponController extends Controller
             ->with(['items' => function ($query) {
                 $query->where('status', 'approved')->where(function ($items) {
                     $items->where('max_quantity', 0)->orWhereColumn('sold_quantity', '<', 'max_quantity');
-                })
-                    ->whereHas('book', fn ($books) => $books->withoutGlobalScopes()->where('status', 'published')->whereHas('vendor', fn ($vendors) => $vendors->withoutGlobalScopes()->where('status', 'active')))
-                    ->with(['book.category', 'book.vendor']);
-            }])
-            ->first();
+                })->whereHas('book', fn ($books) => $books->withoutGlobalScopes()->where('status', 'published')->whereHas('vendor', fn ($vendors) => $vendors->withoutGlobalScopes()->where('status', 'active')))->with(['book.category', 'book.vendor']);
+            }])->first();
 
-        return response()->json([
-            'status' => 'success',
-            'success' => true,
-            'data' => $activeSale,
-        ]);
+        return response()->json(['status' => 'success', 'success' => true, 'data' => $activeSale]);
+    }
+
+    /** @return array{0:array<int,array<int,array{book_id:int,quantity:int,price:int}>>,1:Collection,2:int} */
+    private function serverPricedGroups(array $items, FlashSalePricingService $flashPricing): array
+    {
+        $bookIds = collect($items)->pluck('id')->map(fn ($id) => (int) $id)->unique()->values();
+        $books = Book::withoutGlobalScopes()->with(['categories', 'vendor'])->whereIn('id', $bookIds)->get()->keyBy('id');
+        $groups = [];
+        $subtotal = 0;
+        foreach ($items as $item) {
+            $book = $books->get((int) $item['id']);
+            if (! $book || ! $book->isPublished() || ! $book->vendor || ! $book->vendor->isActive()) {
+                throw ValidationException::withMessages(['coupon' => 'Cart contains an unavailable book.']);
+            }
+            $quantity = (int) $item['quantity'];
+            $pricing = $flashPricing->resolve($book, $quantity);
+            if (($pricing['promotion_snapshot']['coupon_stacking_policy'] ?? null) === 'deny') {
+                throw ValidationException::withMessages(['coupon' => 'This coupon cannot be stacked with the active Flash Sale.']);
+            }
+            $price = (int) $pricing['unit_price'];
+            $groups[(int) $book->vendor_id][] = ['book_id' => (int) $book->id, 'quantity' => $quantity, 'price' => $price];
+            $subtotal += $price * $quantity;
+        }
+
+        return [$groups, $books, $subtotal];
     }
 
     private function errorResponse(string $message, int $httpStatus = 400): JsonResponse
     {
-        return response()->json([
-            'status' => 'error',
-            'success' => false,
-            'message' => $message,
-        ], $httpStatus);
+        return response()->json(['status' => 'error', 'success' => false, 'message' => $message], $httpStatus);
     }
 }

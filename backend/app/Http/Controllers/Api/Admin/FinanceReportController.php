@@ -3,98 +3,115 @@
 namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Models\Order;
-use App\Models\PayoutRequest;
-use App\Models\User;
+use App\Models\RevenueReportRun;
+use App\Services\RevenueReportRequestConflict;
 use App\Services\RevenueReportService;
+use App\Services\RevenueReportSourceIntegrityException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class FinanceReportController extends Controller
 {
     public function index(Request $request, RevenueReportService $reports): JsonResponse
     {
-        $snapshots = $reports->last24Months();
-        if ($snapshots->count() !== 24) {
-            $snapshots = $reports->refreshLast24Months($request->user());
+        $run = $reports->latestCompletedRun();
+        if (! $run) {
+            return response()->json(['status' => 'unavailable', 'data' => null, 'reason' => 'no_completed_run']);
         }
 
-        $totalRevenue = (int) $snapshots->sum('gross_revenue');
-        $completedOrders = (int) $snapshots->sum('completed_orders');
-
-        return response()->json(['status' => 'success', 'data' => [
-            'kpi' => [
-                'total_revenue' => $totalRevenue,
-                'monthly_revenue' => (int) ($snapshots->last()?->gross_revenue ?? 0),
-                'total_orders' => Order::withoutGlobalScopes()->count(),
-                'completed_orders' => $completedOrders,
-                'total_customers' => User::where('role', 'customer')->count(),
-                'avg_order_value' => $completedOrders > 0 ? (int) round($totalRevenue / $completedOrders) : 0,
-            ],
-            'revenue_by_month' => $snapshots->map(fn ($row) => [
-                'month' => $row->period_month->format('Y-m'),
-                'revenue' => $row->gross_revenue,
-                'orders' => $row->completed_orders,
-                'commission' => $row->commission_amount,
-                'vendor_net' => $row->vendor_net_amount,
-                'refunds' => $row->refund_amount,
-                'generated_at' => $row->generated_at?->toISOString(),
-            ])->values(),
-            'revenue_by_payment_method' => Order::withoutGlobalScopes()
-                ->where('status', 'completed')
-                ->where('created_at', '>=', now()->subMonthsNoOverflow(23)->startOfMonth())
-                ->select('payment_method', DB::raw('SUM(total_amount) as revenue'), DB::raw('COUNT(*) as count'))
-                ->groupBy('payment_method')->get(),
-            'top_vendors' => Order::withoutGlobalScopes()
-                ->where('orders.status', 'completed')
-                ->where('orders.created_at', '>=', now()->subMonthsNoOverflow(23)->startOfMonth())
-                ->join('vendors', 'orders.vendor_id', '=', 'vendors.id')
-                ->select('vendors.id', 'vendors.shop_name', DB::raw('SUM(orders.total_amount) as revenue'), DB::raw('COUNT(orders.id) as total_orders'))
-                ->groupBy('vendors.id', 'vendors.shop_name')->orderByDesc('revenue')->limit(10)->get(),
-            'payout_stats' => [
-                'pending' => (int) PayoutRequest::where('status', 'pending')->sum('amount'),
-                'approved' => (int) PayoutRequest::whereIn('status', ['approved', 'processing', 'completed'])->sum('amount'),
-                'rejected' => (int) PayoutRequest::where('status', 'rejected')->sum('amount'),
-            ],
-            'reporting_policy' => [
-                'retention_months' => 24,
-                'tax_calculated_or_withheld' => false,
-                'purpose' => 'Hỗ trợ đối soát, kê khai và phối hợp với cơ quan thuế khi có yêu cầu hợp lệ.',
-            ],
-        ]]);
+        return response()->json(['status' => 'success', 'data' => $run->payload, 'run' => $this->runMeta($run)]);
     }
 
     public function refresh(Request $request, RevenueReportService $reports): JsonResponse
     {
-        $snapshots = $reports->refreshLast24Months($request->user());
+        $validated = $request->validate([
+            'reason' => ['required', 'string', 'max:2000'],
+            'idempotency_key' => ['nullable', 'string', 'max:128'],
+        ]);
+        $reason = trim($validated['reason']);
+        $operationKey = trim((string) ($request->header('Idempotency-Key') ?: ($validated['idempotency_key'] ?? '')));
+        if ($reason === '' || $operationKey === '') {
+            return response()->json(['message' => 'reason and idempotency key are required.'], 422);
+        }
+
+        try {
+            $result = $reports->refreshLast24Months($request->user(), $operationKey, $reason);
+        } catch (RevenueReportRequestConflict $exception) {
+            return response()->json(['message' => $exception->getMessage()], $exception->getMessage() === 'refresh_in_progress' ? 409 : 422);
+        } catch (RevenueReportSourceIntegrityException) {
+            return response()->json(['message' => 'Immutable financial evidence could not be reconciled.'], 422);
+        } catch (\Throwable) {
+            return response()->json(['message' => 'The report refresh failed safely.'], 500);
+        }
+
+        $run = $result['run'];
+        if ($run->status === RevenueReportRun::RUNNING) {
+            return response()->json([
+                'status' => 'running',
+                'replayed' => true,
+                'data' => null,
+                'run' => $this->runMeta($run),
+            ], 202);
+        }
+        if ($run->status === RevenueReportRun::FAILED) {
+            return response()->json([
+                'status' => 'failed',
+                'replayed' => true,
+                'data' => null,
+                'failure_code' => $run->failure_code,
+                'run' => $this->runMeta($run),
+            ], 422);
+        }
 
         return response()->json([
             'status' => 'success',
-            'message' => 'Đã làm mới báo cáo doanh thu 24 tháng.',
-            'data' => ['months' => $snapshots->count(), 'generated_at' => now()->toISOString()],
+            'replayed' => $result['replayed'],
+            'data' => $run->payload,
+            'run' => $this->runMeta($run),
         ]);
     }
 
-    public function export(Request $request, RevenueReportService $reports): StreamedResponse
+    public function export(Request $request, RevenueReportService $reports): StreamedResponse|JsonResponse
     {
-        $snapshots = $reports->last24Months();
-        if ($snapshots->count() !== 24) {
-            $snapshots = $reports->refreshLast24Months($request->user());
+        $run = $request->filled('run_id')
+            ? $reports->completedRun((string) $request->query('run_id'))
+            : $reports->latestCompletedRun();
+        if (! $run) {
+            return response()->json([
+                'status' => 'unavailable',
+                'data' => null,
+                'reason' => $request->filled('run_id') ? 'completed_run_not_found' : 'no_completed_run',
+            ], $request->filled('run_id') ? 404 : 409);
         }
+        $months = $run->payload['revenue_by_month'] ?? [];
 
-        return response()->streamDownload(function () use ($snapshots): void {
+        return response()->streamDownload(function () use ($months): void {
             $output = fopen('php://output', 'wb');
             fwrite($output, "\xEF\xBB\xBF");
-            fputcsv($output, ['Tháng', 'Doanh thu khách thanh toán', 'Đơn hoàn tất', 'Commission', 'Doanh thu ròng nhà bán', 'Hoàn tiền', 'Tiền tệ']);
-            foreach ($snapshots as $row) {
+            fputcsv($output, ['Ky bao cao', 'Tien sach', 'Phi van chuyen', 'Phi dich vu', 'Tong thu tu khach', 'Don ghi nhan', 'Hoa hong san', 'Thu nhap nha ban', 'Hoan tien khach', 'Hoan hoa hong', 'Hoan thu nhap nha ban', 'Tien te']);
+            foreach ($months as $row) {
                 fputcsv($output, [
-                    $row->period_month->format('Y-m'), $row->gross_revenue, $row->completed_orders,
-                    $row->commission_amount, $row->vendor_net_amount, $row->refund_amount, $row->currency,
+                    $row['month'], $row['merchandise_revenue'], $row['shipping_revenue'], $row['service_fee_revenue'],
+                    $row['gross_revenue'], $row['completed_orders'], $row['commission_amount'], $row['vendor_net_amount'],
+                    $row['refund_amount'], $row['commission_reversal_amount'], $row['vendor_net_reversal_amount'], 'VND',
                 ]);
             }
             fclose($output);
         }, 'bao-cao-doanh-thu-24-thang.csv', ['Content-Type' => 'text/csv; charset=UTF-8']);
+    }
+
+    /** @return array<string, mixed> */
+    private function runMeta(RevenueReportRun $run): array
+    {
+        return [
+            'id' => $run->public_id,
+            'status' => $run->status,
+            'window_start' => $run->window_start?->toDateString(),
+            'window_end' => $run->window_end?->toDateString(),
+            'as_of_at' => $run->as_of_at?->toISOString(),
+            'completed_at' => $run->completed_at?->toISOString(),
+            'quality' => $run->quality,
+        ];
     }
 }

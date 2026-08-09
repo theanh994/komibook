@@ -234,15 +234,22 @@ class Phase2CheckoutSessionWritePathTest extends TestCase
         $this->assertIsInt($session->discount_amount);
         $this->assertIsInt($session->total_amount);
         $this->assertEquals(28000, $session->discount_amount);
-        $this->assertEquals(72000, $session->total_amount);
+        $this->assertEquals(87000, $session->total_amount);
 
         $this->assertIsInt($sessionOrder->discount_amount);
         $this->assertIsInt($sessionOrder->total_amount);
         $this->assertEquals(28000, $sessionOrder->discount_amount);
-        $this->assertEquals(72000, $sessionOrder->total_amount);
+        $this->assertEquals(87000, $sessionOrder->total_amount);
 
         // Verify coupon used_count incremented
         $this->assertEquals(1, $coupon->fresh()->used_count);
+        $this->assertSame($coupon->id, $sessionOrder->coupon_id);
+        $this->assertSame('product', $sessionOrder->coupon_type);
+        $this->assertSame('DISCOUNT20', $sessionOrder->coupon_code);
+        $this->assertSame(20000, $sessionOrder->coupon_discount_amount);
+        $this->assertSame(8000, $sessionOrder->membership_discount_amount);
+        $this->assertSame(15000, $sessionOrder->shipping_fee_amount);
+        $this->assertSame('compatibility-v1', $sessionOrder->pricing_policy_snapshot['version']);
     }
 
     /**

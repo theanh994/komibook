@@ -146,7 +146,7 @@ class OrderFulfillmentService
         ?string $operationKey = null
     ): Order {
         if ($newStatus !== 'shipped') {
-            throw new LogicException('Vendors are only allowed to update order status from processing to shipped.');
+            throw new LogicException('Vendors are only allowed to update order status to shipped.');
         }
 
         $orderId = is_object($orderOrId) ? $orderOrId->id : (int) $orderOrId;
@@ -157,7 +157,9 @@ class OrderFulfillmentService
 
             $this->assertActorAndVendorAuthorization($order, $actorType, $actorId, ['vendor']);
 
-            $fromState = 'processing';
+            $fromState = $order->status === 'shipped'
+                ? (OrderTransitionOperation::where('operation_key', $opKey)->first()?->from_state ?? $order->status)
+                : $order->status;
             $expectedMeta = [
                 'shipping_status' => 'pending_pickup',
             ];
@@ -175,8 +177,8 @@ class OrderFulfillmentService
                 throw new LogicException("State transition to 'shipped' for order ID {$order->id} is not backed by a valid transition operation.");
             }
 
-            if ($order->status !== 'processing') {
-                throw new LogicException("Cannot transition order ID {$order->id} from status '{$order->status}' to 'shipped'. Expected 'processing'.");
+            if (! in_array($order->status, ['pending', 'confirmed', 'processing'], true)) {
+                throw new LogicException("Cannot transition order ID {$order->id} from status '{$order->status}' to 'shipped'. Expected 'pending', 'confirmed', or 'processing'.");
             }
 
             $order->status = 'shipped';
