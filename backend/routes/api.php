@@ -469,6 +469,7 @@ Route::prefix('chat')->group(function () {
         Route::post('/sessions', [ChatController::class, 'createSession'])->middleware('throttle:30,1');
         Route::get('/sessions/{session}', [ChatController::class, 'showSession'])->middleware('throttle:120,1');
         Route::post('/sessions/{session}/messages', [ChatController::class, 'sendMessage'])->middleware('throttle:20,1');
+        Route::post('/sessions/{session}/external-ai-consent', [ChatController::class, 'updateExternalAiConsent'])->middleware('throttle:10,1');
         Route::get('/sessions/{session}/messages/{message}/attachment', [ChatController::class, 'attachment'])->middleware('throttle:120,1');
         Route::post('/sessions/{session}/messages/{message}/feedback', [ChatController::class, 'submitFeedback'])->middleware('throttle:20,1');
         Route::post('/sessions/{session}/request-human', [ChatController::class, 'requestHuman'])->middleware('throttle:10,1');

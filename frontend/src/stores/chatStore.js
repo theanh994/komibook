@@ -23,24 +23,33 @@ export const useChatStore = defineStore('chat', {
   }),
 
   getters: {
-    status: state => state.session?.status || 'open',
-    responderMode: state => state.session?.responder_mode || 'ai',
-    isAiActive() { return this.responderMode === 'ai' && this.status === 'open' },
-    isQueued() { return this.status === 'queued' },
-    isHumanActive() { return ['assigned', 'waiting_customer'].includes(this.status) },
-    isTerminal() { return ['resolved', 'closed'].includes(this.status) },
+    status: state => state.session?.status ?? null,
+    responderMode: state => state.session?.responder_mode ?? null,
+    isAiActive() { return Boolean(this.session) && this.status === 'open' && this.responderMode === 'ai' && this.session.assigned_user === null },
+    isQueued() { return Boolean(this.session) && this.status === 'queued' && this.responderMode === 'human' && this.session.assigned_user === null },
+    isHumanActive() { return Boolean(this.session) && ['assigned', 'waiting_customer'].includes(this.status) && this.responderMode === 'human' && this.session.assigned_user != null },
+    canSendMessage() { return Boolean(this.session) && (this.isAiActive || this.isHumanActive) },
+    isTerminal() { return Boolean(this.session) && ['resolved', 'closed'].includes(this.status) },
+    externalAi: state => state.session?.external_ai || { available: false, consented: false, required: true, scope: [] },
+    hasExternalAiConsent() { return this.externalAi.consented === true },
     lastMessageId: state => state.messages.reduce((max, message) => Math.max(max, Number(message.id) || 0), 0),
   },
 
   actions: {
-    resetChat() {
+    clearSessionState() {
       this.stopPolling()
-      this.isOpen = false
       this.session = null
       this.messages = []
+      this.sending = false
+      this.feedbackPending = {}
+      this.error = ''
+    },
+
+    resetChat() {
+      this.clearSessionState()
+      this.isOpen = false
       this.conversations = []
       this.showConversationList = false
-      this.error = ''
       this.targetType = 'platform'
       this.vendorId = null
       this.vendorName = null
@@ -155,12 +164,15 @@ export const useChatStore = defineStore('chat', {
         })
         this.applySession(response.data.session, false)
       } catch (error) {
-        if ([401, 403, 404].includes(error.response?.status)) this.stopPolling()
+        if ([401, 403, 404].includes(error.response?.status)) this.clearSessionState()
       }
     },
 
     applySession(session, replaceMessages) {
-      if (!session) return
+      if (!session) {
+        this.clearSessionState()
+        return
+      }
       const incoming = Array.isArray(session.messages) ? session.messages : []
       this.session = { ...session, messages: undefined }
       if (replaceMessages) {
@@ -173,7 +185,7 @@ export const useChatStore = defineStore('chat', {
 
     async sendMessage(text, image = null) {
       const message = text?.trim()
-      if ((!message && !image) || !this.session || this.sending || this.isTerminal) return false
+      if ((!message && !image) || !this.session || this.sending || !this.canSendMessage) return false
       this.sending = true
       this.error = ''
       try {
@@ -193,6 +205,28 @@ export const useChatStore = defineStore('chat', {
         return true
       } catch (error) {
         this.error = userSafeApiError(error, 'Không thể gửi tin nhắn. Vui lòng thử lại.')
+        return false
+      } finally {
+        this.sending = false
+      }
+    },
+
+    async setExternalAiConsent(consent) {
+      if (!this.session || this.sending) return false
+      const policyVersion = this.session.external_ai?.version
+      if (!policyVersion) return false
+      this.sending = true
+      this.error = ''
+      try {
+        const response = await apiClient.post(`/api/chat/sessions/${this.session.id}/external-ai-consent`, {
+          consent: Boolean(consent),
+          policy_version: policyVersion,
+        })
+        this.applySession(response.data.session, true)
+        await this.loadConversations()
+        return true
+      } catch (error) {
+        this.error = userSafeApiError(error, 'Không thể cập nhật lựa chọn Google Gemini lúc này.')
         return false
       } finally {
         this.sending = false
@@ -234,7 +268,7 @@ export const useChatStore = defineStore('chat', {
     },
 
     async resumeAi() {
-      if (!this.session || this.sending) return
+      if (!this.session || this.sending || !this.isQueued) return
       this.sending = true
       this.error = ''
       try {

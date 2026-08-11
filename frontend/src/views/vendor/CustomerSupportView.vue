@@ -4,7 +4,7 @@
       <div>
         <p class="text-sm font-bold text-secondary">{{ authStore.isAdmin ? 'KOMIBOOK SUPPORT' : 'HỖ TRỢ GIAN HÀNG' }}</p>
         <h1 class="mt-1 flex items-center gap-2 text-3xl font-black text-on-surface"><span class="material-symbols-outlined text-brand-green-strong" aria-hidden="true">support_agent</span>Hỗ trợ khách hàng</h1>
-        <p class="mt-2 max-w-3xl text-base text-on-surface-variant">Theo dõi cả hội thoại AI đang hỗ trợ và các phiên chờ người thật. Khi bạn tiếp nhận, AI sẽ dừng trong đúng cuộc trò chuyện đó. {{ authStore.isAdmin ? 'Bạn chỉ thấy hội thoại hỗ trợ của nền tảng KomiBook.' : 'Bạn chỉ thấy hội thoại được gửi đúng tới gian hàng của mình.' }}</p>
+        <p class="mt-2 max-w-3xl text-base text-on-surface-variant">Chỉ các phiên mà khách hàng đã chủ động yêu cầu gặp nhân viên mới xuất hiện ở đây. Khi bạn tiếp nhận, quyền hỗ trợ của nhân viên được giữ nguyên cho đến khi có một chuyển trạng thái được ủy quyền. {{ authStore.isAdmin ? 'Bạn chỉ thấy các phiên đã bàn giao cho hỗ trợ nền tảng KomiBook.' : 'Bạn chỉ thấy các phiên đã bàn giao đúng tới gian hàng của mình.' }}</p>
       </div>
       <button type="button" class="ui-btn ui-btn-secondary" :disabled="loading" @click="loadSessions"><i class="pi pi-refresh" :class="{ 'pi-spin': loading }" aria-hidden="true"></i>Làm mới</button>
     </header>
@@ -26,7 +26,7 @@
           </div>
 
           <div v-if="loading && !sessions.length" class="grid min-h-48 place-items-center" role="status"><div class="flex items-center gap-2 text-on-surface-variant"><i class="pi pi-spin pi-spinner" aria-hidden="true"></i>Đang tải hàng đợi…</div></div>
-          <div v-else-if="!sessions.length" class="grid min-h-48 place-items-center p-6 text-center"><div><span class="material-symbols-outlined text-4xl text-outline" aria-hidden="true">forum</span><p class="mt-2 font-bold text-on-surface">Chưa có phiên phù hợp</p><p class="mt-1 text-sm text-on-surface-variant">Hội thoại mới sẽ xuất hiện ngay khi khách bắt đầu nhắn tin.</p></div></div>
+          <div v-else-if="!sessions.length" class="grid min-h-48 place-items-center p-6 text-center"><div><span class="material-symbols-outlined text-4xl text-outline" aria-hidden="true">forum</span><p class="mt-2 font-bold text-on-surface">Chưa có phiên phù hợp</p><p class="mt-1 text-sm text-on-surface-variant">Phiên sẽ xuất hiện khi khách hàng chủ động yêu cầu gặp nhân viên.</p></div></div>
           <ul v-else class="min-h-0 flex-1 overflow-y-auto" aria-label="Các phiên hỗ trợ">
             <li v-for="session in sessions" :key="session.id" class="border-b border-outline-variant/60">
               <button type="button" class="w-full cursor-pointer p-4 text-left transition-colors hover:bg-brand-green-container/50 focus-visible:outline-none" :class="selected?.id === session.id ? 'border-l-4 border-brand-green-strong bg-brand-green-container/70' : ''" @click="selectSession(session)">
@@ -83,6 +83,19 @@
   </div>
 </template>
 
+<script>
+export const isStaffSessionAccessLoss = status => [401, 403, 404].includes(status)
+
+export const clearStaffSessionState = ({ selected, messages, replyText, selectedImage, actionLoading, replyFileInput }) => {
+  selected.value = null
+  messages.value = []
+  replyText.value = ''
+  selectedImage.value = null
+  actionLoading.value = false
+  if (replyFileInput.value) replyFileInput.value.value = ''
+}
+</script>
+
 <script setup>
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 import apiClient from '@/services/axios'
@@ -107,7 +120,6 @@ let pollTimer
 
 const filters = [
   { value: '', label: 'Tất cả trạng thái' },
-  { value: 'open', label: 'AI đang hỗ trợ' },
   { value: 'queued', label: 'Đang chờ' },
   { value: 'assigned', label: 'Đang hỗ trợ' },
   { value: 'waiting_customer', label: 'Chờ khách phản hồi' },
@@ -116,9 +128,9 @@ const filters = [
 
 const baseUrl = computed(() => `/api/chat/${authStore.isAdmin ? 'admin' : 'vendor'}`)
 const counts = computed(() => ({ queued: sessions.value.filter(session => session.status === 'queued').length, active: sessions.value.filter(session => ['assigned', 'waiting_customer'].includes(session.status)).length }))
-const canTakeover = computed(() => selected.value && !selected.value.assigned_user && !['resolved', 'closed'].includes(selected.value.status))
-const canReply = computed(() => selected.value?.assigned_user?.id === authStore.user?.id && !['resolved', 'closed'].includes(selected.value.status))
-const canClose = computed(() => selected.value?.assigned_user?.id === authStore.user?.id && !['resolved', 'closed'].includes(selected.value.status))
+const canTakeover = computed(() => selected.value?.status === 'queued' && selected.value?.responder_mode === 'human' && !selected.value?.assigned_user)
+const canReply = computed(() => selected.value?.responder_mode === 'human' && ['assigned', 'waiting_customer'].includes(selected.value?.status) && selected.value?.assigned_user?.id === authStore.user?.id)
+const canClose = computed(() => selected.value?.responder_mode === 'human' && ['assigned', 'waiting_customer'].includes(selected.value?.status) && selected.value?.assigned_user?.id === authStore.user?.id)
 const lastMessageId = computed(() => messages.value.reduce((max, message) => Math.max(max, Number(message.id) || 0), 0))
 
 const loadSessions = async () => {
@@ -130,8 +142,10 @@ const loadSessions = async () => {
     if (selected.value) {
       const summary = sessions.value.find(session => session.id === selected.value.id)
       if (summary) selected.value = { ...selected.value, ...summary }
+      else clearSelectedSession()
     }
   } catch (requestError) {
+    if (isStaffSessionAccessLoss(requestError.response?.status)) clearSelectedSession()
     error.value = userSafeApiError(requestError, 'Khu vực hỗ trợ đang được cập nhật. Vui lòng thử lại sau ít phút.')
   } finally {
     loading.value = false
@@ -162,6 +176,7 @@ const refreshSelected = async replace => {
     await nextTick()
     if (messagePanel.value) messagePanel.value.scrollTop = messagePanel.value.scrollHeight
   } catch (requestError) {
+    if (isStaffSessionAccessLoss(requestError.response?.status)) clearSelectedSession()
     error.value = userSafeApiError(requestError, 'Không thể tải phiên hỗ trợ.')
   } finally {
     detailLoading.value = false
@@ -178,6 +193,7 @@ const runAction = async (path, payload = {}) => {
     await loadSessions()
     return true
   } catch (requestError) {
+    if (isStaffSessionAccessLoss(requestError.response?.status)) clearSelectedSession()
     error.value = userSafeApiError(requestError, 'Thao tác chưa hoàn tất. Vui lòng thử lại.')
     return false
   } finally {
@@ -194,6 +210,9 @@ const resizeReply = () => {
 const clearSelectedImage = () => {
   selectedImage.value = null
   if (replyFileInput.value) replyFileInput.value.value = ''
+}
+const clearSelectedSession = () => {
+  clearStaffSessionState({ selected, messages, replyText, selectedImage, actionLoading, replyFileInput })
 }
 const handleImageSelection = event => {
   const file = event.target.files?.[0]
@@ -233,7 +252,6 @@ const statusMeta = status => ({
   waiting_customer: { label: 'Chờ khách', icon: 'hourglass_top', classes: 'bg-primary-fixed text-on-primary-fixed-variant' },
   resolved: { label: 'Hoàn tất', icon: 'task_alt', classes: 'bg-surface-container-high text-on-surface-variant' },
   closed: { label: 'Đã đóng', icon: 'block', classes: 'bg-surface-container-high text-on-surface-variant' },
-  open: { label: 'AI đang hỗ trợ', icon: 'smart_toy', classes: 'bg-surface-container-high text-on-surface-variant' },
 })[status] || { label: status, icon: 'info', classes: 'bg-surface-container-high text-on-surface-variant' }
 
 onMounted(async () => {

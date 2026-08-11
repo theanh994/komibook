@@ -31,6 +31,18 @@
           </div>
         </div>
         <div class="flex shrink-0 items-center gap-1">
+          <button
+            v-if="!chatStore.showConversationList && chatStore.session?.external_ai && (chatStore.externalAi.available || chatStore.hasExternalAiConsent)"
+            type="button"
+            class="flex h-11 w-11 cursor-pointer items-center justify-center rounded-lg text-white transition-colors hover:bg-white/15"
+            :aria-expanded="showGeminiSettings"
+            aria-controls="komibook-gemini-settings"
+            aria-label="Cài đặt Google Gemini"
+            title="Cài đặt Google Gemini"
+            @click="showGeminiSettings = !showGeminiSettings"
+          >
+            <span class="material-symbols-outlined" aria-hidden="true">privacy_tip</span>
+          </button>
           <button type="button" class="flex h-11 w-11 cursor-pointer items-center justify-center rounded-lg text-white transition-colors hover:bg-white/15" :aria-label="chatStore.showConversationList ? 'Quay lại cuộc trò chuyện' : 'Mở lịch sử trò chuyện'" @click="chatStore.showConversationList ? chatStore.openForTarget(chatStore.targetType, chatStore.vendorId, chatStore.vendorName, chatStore.contextBookId ? { id: chatStore.contextBookId, title: chatStore.contextBookName } : null) : chatStore.openConversationList()">
             <span class="material-symbols-outlined" aria-hidden="true">{{ chatStore.showConversationList ? 'arrow_back' : 'forum' }}</span>
           </button>
@@ -40,12 +52,66 @@
         </div>
       </header>
 
-      <div v-if="!chatStore.showConversationList" class="border-b border-outline-variant/50 bg-brand-green-container px-4 py-2 text-sm text-on-brand-green-container">
-        <div class="flex items-start gap-2">
-          <p class="min-w-0 flex-1 leading-5"><span class="font-bold">Thông báo:</span> Câu trả lời tự động được ghi nhãn “Trợ lý AI” và chỉ dựa trên nguồn KomiBook hiển thị kèm theo.</p>
-          <button v-if="chatStore.isAiActive" type="button" class="flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-secondary bg-surface-container-lowest text-secondary transition-colors hover:bg-secondary-fixed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-secondary disabled:cursor-not-allowed disabled:opacity-50" :disabled="chatStore.sending" aria-label="Gặp nhân viên hỗ trợ" title="Gặp nhân viên hỗ trợ" @click="chatStore.requestHumanSupport()"><span class="material-symbols-outlined" aria-hidden="true">support_agent</span></button>
+      <div
+        v-if="showGeminiSettings && !chatStore.showConversationList && chatStore.session?.external_ai"
+        id="komibook-gemini-settings"
+        class="border-b border-outline-variant bg-surface-container-low px-4 py-3 text-sm text-on-surface"
+      >
+        <div class="flex items-start gap-3">
+          <div class="min-w-0 flex-1">
+            <p class="font-bold">Google Gemini</p>
+            <p class="mt-1 leading-5 text-on-surface-variant">Chỉ câu hỏi hiện tại và ngữ cảnh công khai liên quan có thể được gửi. Lịch sử trò chuyện và hình ảnh không được gửi.</p>
+          </div>
+          <button type="button" class="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-on-surface-variant hover:bg-surface-container" aria-label="Đóng cài đặt Google Gemini" @click="showGeminiSettings = false">
+            <span class="material-symbols-outlined" aria-hidden="true">close</span>
+          </button>
         </div>
-        <span v-if="chatStore.contextBookName" class="mt-1 block truncate text-xs">Đang hỏi trong ngữ cảnh: {{ chatStore.contextBookName }}</span>
+        <button
+          v-if="chatStore.hasExternalAiConsent"
+          type="button"
+          class="mt-2 min-h-11 rounded-lg border border-error px-3 text-sm font-bold text-error transition-colors hover:bg-error-container disabled:opacity-50"
+          :disabled="chatStore.sending"
+          @click="chatStore.setExternalAiConsent(false)"
+        >Tắt Google Gemini</button>
+        <button
+          v-else-if="chatStore.externalAi.available"
+          type="button"
+          class="mt-2 min-h-11 rounded-lg border border-brand-green-strong px-3 text-sm font-bold text-brand-green-strong transition-colors hover:bg-brand-green-container disabled:opacity-50"
+          :disabled="chatStore.sending"
+          @click="chatStore.setExternalAiConsent(true)"
+        >Bật Google Gemini cho phiên này</button>
+      </div>
+
+      <div v-if="!chatStore.showConversationList && chatStore.session && chatStore.isAiActive && showNoticeBanner" class="border-b border-outline-variant/40 bg-brand-green-container px-3 py-1.5 text-xs text-on-brand-green-container transition-all">
+        <div class="flex items-center justify-between gap-2">
+          <div class="flex min-w-0 items-center gap-1.5 truncate">
+            <span class="material-symbols-outlined text-sm shrink-0 text-brand-green-strong">info</span>
+            <span class="truncate"><strong class="font-bold">Gợi ý AI tự động:</strong> dựa trên nguồn KomiBook</span>
+          </div>
+          <div class="flex shrink-0 items-center gap-1.5">
+            <button
+              v-if="chatStore.isAiActive"
+              type="button"
+              class="inline-flex items-center gap-1 rounded bg-surface-container-lowest px-2 py-0.5 font-bold text-secondary border border-secondary/40 text-[11px] hover:bg-secondary-fixed cursor-pointer transition-colors"
+              :disabled="chatStore.sending"
+              title="Gặp nhân viên hỗ trợ"
+              @click="chatStore.requestHumanSupport()"
+            >
+              <span class="material-symbols-outlined text-xs">support_agent</span>
+              <span>Gặp tư vấn viên</span>
+            </button>
+            <button
+              type="button"
+              class="flex h-5 w-5 items-center justify-center rounded text-on-brand-green-container/70 hover:bg-brand-green/20 hover:text-on-brand-green-container cursor-pointer"
+              aria-label="Ẩn thông báo"
+              title="Ẩn thông báo"
+              @click="showNoticeBanner = false"
+            >
+              <span class="material-symbols-outlined text-xs">close</span>
+            </button>
+          </div>
+        </div>
+        <span v-if="chatStore.contextBookName" class="mt-0.5 block truncate text-[11px] opacity-90">Đang hỏi trong ngữ cảnh: {{ chatStore.contextBookName }}</span>
       </div>
 
       <div v-if="chatStore.showConversationList" class="flex-1 overflow-y-auto bg-surface-container-low p-4">
@@ -80,7 +146,26 @@
               <a v-if="message.metadata?.attachment" :href="attachmentUrl(message)" target="_blank" rel="noopener" class="mb-2 block overflow-hidden rounded-xl border border-outline-variant/50 bg-surface-container-lowest">
                 <img :src="attachmentUrl(message)" :alt="message.metadata.attachment.original_name || 'Hình ảnh trong hội thoại'" class="max-h-64 w-full object-contain" loading="lazy" />
               </a>
-              <p class="whitespace-pre-wrap text-base leading-6">{{ message.message }}</p>
+              <p class="whitespace-pre-wrap text-base leading-6">
+                <template v-for="(part, idx) in parsedMessageParts(message)" :key="idx">
+                  <template v-if="part.type === 'text'">
+                    <template v-for="(seg, sIdx) in formatTextSegments(part.text)" :key="sIdx">
+                      <strong v-if="seg.isBold" class="font-bold text-on-surface">{{ seg.text }}</strong>
+                      <span v-else>{{ seg.text }}</span>
+                    </template>
+                  </template>
+                  <RouterLink
+                    v-else-if="part.type === 'citation'"
+                    :to="part.source.url"
+                    class="inline-flex items-center gap-0.5 mx-0.5 rounded border border-brand-green/40 bg-brand-green-container px-1.5 py-0.5 font-mono text-xs font-bold text-brand-green-strong no-underline transition-all hover:border-brand-green-strong hover:bg-brand-green/20 hover:shadow-xs align-baseline"
+                    :title="`${part.source.citation} · ${part.source.title}`"
+                    @click="chatStore.closeChat()"
+                  >
+                    <span>[{{ part.source.citation }}]</span>
+                    <span class="material-symbols-outlined text-[12px]" aria-hidden="true">open_in_new</span>
+                  </RouterLink>
+                </template>
+              </p>
 
               <div v-if="message.metadata?.recommended_books?.length" class="mt-3 space-y-2 border-t border-outline-variant/40 pt-3">
                 <p class="flex items-center gap-2 text-sm font-bold text-brand-green-strong"><span class="material-symbols-outlined text-lg" aria-hidden="true">menu_book</span>Sách trong catalog đang bán</p>
@@ -89,15 +174,63 @@
                     <img v-if="book.cover_image" :src="coverUrl(book.cover_image)" :alt="`Bìa sách ${book.title}`" class="h-full w-full object-cover" loading="lazy" width="48" height="64" />
                     <span v-else class="grid h-full place-items-center material-symbols-outlined text-outline" aria-hidden="true">book</span>
                   </div>
-                  <div class="min-w-0"><p class="line-clamp-2 text-sm font-bold">{{ book.title }}</p><p class="mt-1 truncate text-sm text-on-surface-variant">{{ book.author }}</p><p class="mt-1 text-sm font-bold text-brand-green-strong">{{ formatCurrency(book.display_price ?? book.sale_price ?? book.price) }}</p></div>
+                  <div class="min-w-0">
+                    <p class="line-clamp-2 text-sm font-bold">{{ book.title }}</p>
+                    <p class="mt-0.5 truncate text-xs text-on-surface-variant">{{ book.author }}</p>
+                    <div class="mt-1 flex items-center justify-between gap-2">
+                      <span class="text-sm font-bold text-brand-green-strong">{{ formatCurrency(book.display_price ?? book.sale_price ?? book.price) }}</span>
+                      <span v-if="book.rating_avg" class="inline-flex items-center gap-0.5 font-bold text-amber-700 text-xs bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200" :title="`Đánh giá trung bình ${book.rating_avg}/5 ⭐ (${book.review_count || 0} nhận xét)`">
+                        <span class="material-symbols-outlined text-[13px] fill-1 text-amber-500" aria-hidden="true">star</span>{{ book.rating_avg }}
+                      </span>
+                    </div>
+                  </div>
                 </RouterLink>
               </div>
 
-              <div v-if="message.metadata?.sources?.length" class="mt-3 border-t border-outline-variant/40 pt-3">
-                <p class="mb-2 text-sm font-bold text-on-surface">Nguồn tham khảo</p>
-                <div class="flex flex-wrap gap-2">
-                  <RouterLink v-for="source in message.metadata.sources" :key="`${source.type}-${source.id}`" :to="source.url" class="inline-flex min-h-11 items-center gap-1 rounded-lg border border-outline-variant bg-surface-container-lowest px-3 text-sm font-semibold text-primary no-underline hover:border-primary" @click="chatStore.closeChat()">
-                    <span class="material-symbols-outlined text-lg" aria-hidden="true">open_in_new</span>{{ source.citation }} · {{ source.title }}
+              <div v-if="message.metadata?.recommended_coupons?.length" class="mt-3 space-y-2 border-t border-outline-variant/40 pt-3">
+                <p class="flex items-center gap-2 text-sm font-bold text-amber-700"><span class="material-symbols-outlined text-lg" aria-hidden="true">confirmation_number</span>Mã giảm giá khả dụng</p>
+                <div v-for="coupon in message.metadata.recommended_coupons" :key="coupon.id" class="flex items-center justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50 p-2.5 text-on-surface">
+                  <div class="min-w-0">
+                    <p class="font-mono text-sm font-bold text-amber-900">Mã: {{ coupon.code }} (Giảm {{ coupon.discount_percent }}%)</p>
+                    <p class="text-xs text-amber-800">Đơn từ {{ formatCurrency(coupon.min_order_value || 0) }} · {{ coupon.vendor_name }}</p>
+                  </div>
+                  <RouterLink to="/cart" class="shrink-0 rounded-lg bg-amber-600 px-2.5 py-1.5 text-xs font-bold text-white no-underline hover:bg-amber-700" @click="chatStore.closeChat()">
+                    Dùng ngay
+                  </RouterLink>
+                </div>
+              </div>
+
+              <div v-if="message.metadata?.recommended_orders?.length" class="mt-3 space-y-2 border-t border-outline-variant/40 pt-3">
+                <p class="flex items-center gap-2 text-sm font-bold text-sky-800"><span class="material-symbols-outlined text-lg" aria-hidden="true">package_2</span>Đơn hàng gần nhất</p>
+                <div v-for="order in message.metadata.recommended_orders" :key="order.id" class="flex flex-col gap-1.5 rounded-xl border border-sky-300 bg-sky-50 p-2.5 text-on-surface">
+                  <div class="flex items-center justify-between gap-2">
+                    <p class="font-mono text-sm font-bold text-sky-900">#{{ order.order_code }}</p>
+                    <span class="rounded-full bg-sky-200 px-2 py-0.5 text-xs font-bold text-sky-900">{{ order.status_label }}</span>
+                  </div>
+                  <p class="truncate text-xs text-sky-800">{{ order.items_summary }}</p>
+                  <div class="flex items-center justify-between text-xs text-sky-900">
+                    <span class="font-bold">{{ formatCurrency(order.total_amount) }}</span>
+                    <RouterLink to="/profile?tab=orders" class="font-bold text-sky-700 underline" @click="chatStore.closeChat()">Chi tiết</RouterLink>
+                  </div>
+                </div>
+              </div>
+
+              <div v-if="uncitedSources(message).length" class="mt-2.5 border-t border-outline-variant/30 pt-2 text-xs">
+                <p class="mb-1.5 flex items-center gap-1 font-bold text-on-surface-variant text-[11px] uppercase tracking-wider">
+                  <span class="material-symbols-outlined text-sm text-brand-green-strong" aria-hidden="true">link</span>Nguồn tham khảo khác ({{ uncitedSources(message).length }})
+                </p>
+                <div class="flex flex-wrap gap-1.5">
+                  <RouterLink
+                    v-for="source in uncitedSources(message)"
+                    :key="`${source.type}-${source.id}`"
+                    :to="source.url"
+                    class="inline-flex max-w-[210px] items-center gap-1.5 rounded-lg border border-outline-variant/60 bg-surface-container-lowest px-2 py-1 text-xs font-medium text-brand-green-strong no-underline transition-all hover:border-brand-green-strong hover:bg-brand-green-container/40"
+                    :title="`${source.citation} · ${source.title}`"
+                    @click="chatStore.closeChat()"
+                  >
+                    <span class="rounded bg-brand-green-container px-1 py-0.2 font-mono text-[10px] font-bold text-brand-green-strong">{{ source.citation }}</span>
+                    <span class="truncate">{{ source.title }}</span>
+                    <span class="material-symbols-outlined text-xs shrink-0 text-outline" aria-hidden="true">open_in_new</span>
                   </RouterLink>
                 </div>
               </div>
@@ -130,11 +263,14 @@
           <span class="material-symbols-outlined text-lg" aria-hidden="true">image</span><span class="min-w-0 flex-1 truncate">{{ selectedImage.name }}</span>
           <button type="button" class="flex h-9 w-9 items-center justify-center rounded-lg hover:bg-brand-green/15" aria-label="Bỏ hình ảnh đã chọn" @click="clearSelectedImage"><span class="material-symbols-outlined text-lg" aria-hidden="true">close</span></button>
         </div>
-        <form class="flex items-end gap-2" @submit.prevent="handleSend">
-          <input ref="fileInput" type="file" class="sr-only" accept="image/jpeg,image/png,image/webp,image/gif" :disabled="chatStore.sending || chatStore.isTerminal" @change="handleImageSelection" />
-          <button type="button" class="flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-outline-variant text-on-surface-variant transition-colors hover:border-brand-green-strong hover:text-brand-green-strong disabled:cursor-not-allowed disabled:opacity-50" :disabled="chatStore.sending || chatStore.isTerminal" aria-label="Đính kèm hình ảnh" @click="fileInput?.click()"><span class="material-symbols-outlined" aria-hidden="true">add_photo_alternate</span></button>
-          <div class="min-w-0 flex-1"><label for="komibook-chat-message" class="sr-only">Tin nhắn</label><textarea id="komibook-chat-message" ref="input" v-model="inputMessage" rows="1" maxlength="2000" class="ui-field min-h-11 max-h-36 resize-none overflow-y-auto text-base" :disabled="chatStore.sending || chatStore.isTerminal" :placeholder="chatStore.isTerminal ? 'Phiên đã kết thúc' : 'Nhập câu hỏi của bạn…'" @input="resizeInput" @keydown.enter.exact.prevent="handleSend"></textarea></div>
-          <button type="submit" class="flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-lg bg-brand-green-strong text-white transition-colors hover:bg-commerce disabled:cursor-not-allowed disabled:opacity-50" :disabled="(!inputMessage.trim() && !selectedImage) || chatStore.sending || chatStore.isTerminal" aria-label="Gửi tin nhắn"><span class="material-symbols-outlined" aria-hidden="true">send</span></button>
+        <form class="rounded-2xl border border-outline-variant bg-surface-container-lowest p-2 transition-colors focus-within:border-brand-green-strong focus-within:ring-1 focus-within:ring-brand-green-strong" @submit.prevent="handleSend">
+          <input ref="fileInput" type="file" class="sr-only" accept="image/jpeg,image/png,image/webp,image/gif" :disabled="chatStore.sending || !chatStore.canSendMessage" @change="handleImageSelection" />
+          <label for="komibook-chat-message" class="sr-only">Tin nhắn</label>
+          <textarea id="komibook-chat-message" ref="input" v-model="inputMessage" rows="2" maxlength="2000" class="w-full resize-none border-0 bg-transparent px-2 pt-1 text-base text-on-surface placeholder:text-outline focus:outline-none focus:ring-0 min-h-[48px] max-h-36 overflow-y-auto" :disabled="chatStore.sending || !chatStore.canSendMessage" :placeholder="chatStore.isTerminal ? 'Phiên đã kết thúc' : chatStore.isQueued ? 'Đang chờ nhân viên tiếp nhận' : chatStore.canSendMessage ? 'Nhập câu hỏi của bạn…' : 'Phiên chưa sẵn sàng nhận tin nhắn'" @input="resizeInput" @keydown.enter.exact.prevent="handleSend"></textarea>
+          <div class="flex items-center justify-between px-1 pt-1 border-t border-outline-variant/30">
+            <button type="button" class="flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg text-on-surface-variant transition-colors hover:bg-brand-green-container hover:text-brand-green-strong disabled:cursor-not-allowed disabled:opacity-50" :disabled="chatStore.sending || !chatStore.canSendMessage" aria-label="Đính kèm hình ảnh" title="Đính kèm hình ảnh" @click="fileInput?.click()"><span class="material-symbols-outlined text-xl" aria-hidden="true">image</span></button>
+            <button type="submit" class="flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg text-brand-green-strong transition-colors hover:bg-brand-green-container disabled:cursor-not-allowed disabled:opacity-40" :disabled="(!inputMessage.trim() && !selectedImage) || chatStore.sending || !chatStore.canSendMessage" aria-label="Gửi tin nhắn" title="Gửi tin nhắn"><span class="material-symbols-outlined text-xl" aria-hidden="true">send</span></button>
+          </div>
         </form>
       </footer>
     </section>
@@ -155,6 +291,8 @@ const input = ref(null)
 const fileInput = ref(null)
 const selectedImage = ref(null)
 const messageContainer = ref(null)
+const showNoticeBanner = ref(true)
+const showGeminiSettings = ref(false)
 
 watch(
   () => authStore.user?.id || null,
@@ -166,27 +304,57 @@ const platformConversation = computed(() => chatStore.conversations.find(convers
 const vendorConversations = computed(() => chatStore.conversations.filter(conversation => conversation.target_type === 'vendor'))
 const statusText = computed(() => {
   if (chatStore.showConversationList) return 'Các cuộc trò chuyện đã lưu'
+  if (!chatStore.session) return 'Đang khởi tạo phiên hỗ trợ'
   if (chatStore.isTerminal) return 'Phiên đã hoàn tất'
   if (chatStore.isHumanActive) return 'Nhân viên đang hỗ trợ'
   if (chatStore.isQueued) return 'Đang chờ nhân viên tiếp nhận'
-  return 'Trợ lý AI tự động'
+  if (chatStore.isAiActive) return 'Trợ lý AI tự động'
+  return 'Trạng thái phiên chưa xác định'
 })
 const conversationStatus = conversation => {
-  if (['assigned', 'waiting_customer'].includes(conversation.status)) return 'Nhân viên đang hỗ trợ'
-  if (conversation.status === 'queued') return 'Đang chờ gian hàng tiếp nhận'
-  if (['resolved', 'closed'].includes(conversation.status)) return 'Đã hoàn tất · có thể mở lại'
-  return 'Trợ lý AI đang hỗ trợ'
+  if (!conversation) return 'Trạng thái phiên chưa xác định'
+  const unassigned = conversation.assigned_user === null
+  const assigned = conversation.assigned_user != null
+  if (conversation.status === 'open' && conversation.responder_mode === 'ai' && unassigned) return 'Trợ lý AI đang hỗ trợ'
+  if (conversation.status === 'queued' && conversation.responder_mode === 'human' && unassigned) return 'Đang chờ gian hàng tiếp nhận'
+  if (['assigned', 'waiting_customer'].includes(conversation.status) && conversation.responder_mode === 'human' && assigned) return 'Nhân viên đang hỗ trợ'
+  if (['resolved', 'closed'].includes(conversation.status) && conversation.responder_mode === 'human' && assigned) return 'Đã hoàn tất · có thể mở lại'
+  return 'Trạng thái phiên chưa xác định'
+}
+
+const scrollToBottom = async () => {
+  await nextTick()
+  if (messageContainer.value) {
+    messageContainer.value.scrollTop = messageContainer.value.scrollHeight
+  }
+  setTimeout(() => {
+    if (messageContainer.value) {
+      messageContainer.value.scrollTop = messageContainer.value.scrollHeight
+    }
+  }, 60)
 }
 
 watch(() => chatStore.isOpen, async isOpen => {
-  if (!isOpen) return
+  if (!isOpen) {
+    showGeminiSettings.value = false
+    return
+  }
   await nextTick()
   input.value?.focus()
+  await scrollToBottom()
+})
+
+watch(() => chatStore.session?.id, async () => {
+  showGeminiSettings.value = false
+  await scrollToBottom()
 })
 
 watch(() => chatStore.messages.length, async () => {
-  await nextTick()
-  if (messageContainer.value) messageContainer.value.scrollTop = messageContainer.value.scrollHeight
+  await scrollToBottom()
+})
+
+watch(() => chatStore.loading, async loading => {
+  if (!loading) await scrollToBottom()
 })
 
 const messageClass = message => message.sender_type === 'customer' ? 'flex flex-col items-end' : message.sender_type === 'system' ? 'flex flex-col items-center' : 'flex flex-col items-start'
@@ -202,6 +370,78 @@ const coverUrl = path => /^https?:\/\//i.test(path) || path.startsWith('/') ? pa
 const formatMessageTime = value => value ? new Intl.DateTimeFormat('vi-VN', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(value)) : ''
 const attachmentUrl = message => `/api/chat/sessions/${chatStore.session?.id}/messages/${message.id}/attachment`
 
+const cleanMarkdownText = text => {
+  if (!text) return ''
+  let cleaned = text.replace(/(^|\n)\s*[*|-]\s+/g, '$1• ')
+  cleaned = cleaned.replace(/(?<!\*)\*(?!\*)/g, '')
+  return cleaned
+}
+
+const formatTextSegments = text => {
+  if (!text) return []
+  const sanitized = cleanMarkdownText(text)
+  const regex = /\*\*(.*?)\*\*/g
+  const segments = []
+  let lastIndex = 0
+  let match
+
+  while ((match = regex.exec(sanitized)) !== null) {
+    if (match.index > lastIndex) {
+      segments.push({ isBold: false, text: sanitized.slice(lastIndex, match.index) })
+    }
+    segments.push({ isBold: true, text: match[1] })
+    lastIndex = regex.lastIndex
+  }
+
+  if (lastIndex < sanitized.length) {
+    segments.push({ isBold: false, text: sanitized.slice(lastIndex) })
+  }
+
+  return segments
+}
+
+const parsedMessageParts = message => {
+  const text = message.message || ''
+  const sources = message.metadata?.sources || []
+  if (!sources.length || !text) {
+    return [{ type: 'text', text }]
+  }
+
+  const sourceMap = new Map(sources.map(s => [s.citation, s]))
+  const regex = /\[(S\d+)\]/g
+  const parts = []
+  let lastIndex = 0
+  let match
+
+  while ((match = regex.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push({ type: 'text', text: text.slice(lastIndex, match.index) })
+    }
+    const citationKey = match[1]
+    const source = sourceMap.get(citationKey)
+    if (source) {
+      parts.push({ type: 'citation', citation: citationKey, source })
+    } else {
+      parts.push({ type: 'text', text: match[0] })
+    }
+    lastIndex = regex.lastIndex
+  }
+
+  if (lastIndex < text.length) {
+    parts.push({ type: 'text', text: text.slice(lastIndex) })
+  }
+
+  return parts
+}
+
+const uncitedSources = message => {
+  const sources = message.metadata?.sources || []
+  if (!sources.length) return []
+  const text = message.message || ''
+  const citedKeys = new Set((text.match(/\[S\d+\]/g) || []).map(m => m.replace(/[[\]]/g, '')))
+  return sources.filter(s => !citedKeys.has(s.citation))
+}
+
 const resizeInput = () => {
   if (!input.value) return
   input.value.style.height = 'auto'
@@ -214,6 +454,10 @@ const clearSelectedImage = () => {
 }
 
 const handleImageSelection = event => {
+  if (!chatStore.canSendMessage) {
+    clearSelectedImage()
+    return
+  }
   const file = event.target.files?.[0]
   if (!file) return
   if (!file.type.startsWith('image/') || file.size > 5 * 1024 * 1024) {
@@ -227,7 +471,7 @@ const handleImageSelection = event => {
 
 const handleSend = async () => {
   const text = inputMessage.value.trim()
-  if (!text && !selectedImage.value) return
+  if (!chatStore.canSendMessage || (!text && !selectedImage.value)) return
   if (await chatStore.sendMessage(text, selectedImage.value)) {
     inputMessage.value = ''
     clearSelectedImage()

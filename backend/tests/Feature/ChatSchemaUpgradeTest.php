@@ -61,6 +61,8 @@ class ChatSchemaUpgradeTest extends TestCase
             $migration->up();
             $persistentConversationMigration = require database_path('migrations/2026_08_03_050000_make_chat_conversations_persistent.php');
             $persistentConversationMigration->up();
+            $externalAiConsentMigration = require database_path('migrations/2026_08_09_000005_add_external_ai_consent_to_chat_sessions.php');
+            $externalAiConsentMigration->up();
 
             $this->assertTrue(Schema::hasColumns('chat_sessions', [
                 'target_type',
@@ -70,6 +72,10 @@ class ChatSchemaUpgradeTest extends TestCase
                 'guest_token_hash',
                 'conversation_key',
                 'last_message_at',
+                'external_ai_consent_version',
+                'external_ai_consent_scope',
+                'external_ai_consented_at',
+                'external_ai_consent_revoked_at',
             ]));
             $this->assertTrue(Schema::hasColumns('chat_messages', ['feedback', 'feedback_comment']));
             $this->assertDatabaseHas('chat_sessions', [
@@ -79,12 +85,25 @@ class ChatSchemaUpgradeTest extends TestCase
                 'status' => 'queued',
                 'guest_token_hash' => hash('sha256', 'legacy-guest-token'),
                 'conversation_key' => 'guest:'.hash('sha256', 'legacy-guest-token').':platform',
+                'external_ai_consent_version' => null,
+                'external_ai_consent_scope' => null,
+                'external_ai_consented_at' => null,
+                'external_ai_consent_revoked_at' => null,
             ]);
             $this->assertDatabaseHas('chat_messages', [
                 'chat_session_id' => $sessionId,
                 'sender_type' => 'customer',
                 'message' => 'Tôi cần hỗ trợ.',
             ]);
+            $externalAiConsentMigration->down();
+            $this->assertFalse(Schema::hasColumn('chat_sessions', 'external_ai_consent_version'));
+            $externalAiConsentMigration->up();
+            $this->assertTrue(Schema::hasColumns('chat_sessions', [
+                'external_ai_consent_version',
+                'external_ai_consent_scope',
+                'external_ai_consented_at',
+                'external_ai_consent_revoked_at',
+            ]));
         } finally {
             Schema::disableForeignKeyConstraints();
             Schema::dropIfExists('chat_messages');
@@ -95,6 +114,8 @@ class ChatSchemaUpgradeTest extends TestCase
             $canonicalMigration->up();
             $persistentConversationMigration = require database_path('migrations/2026_08_03_050000_make_chat_conversations_persistent.php');
             $persistentConversationMigration->up();
+            $externalAiConsentMigration = require database_path('migrations/2026_08_09_000005_add_external_ai_consent_to_chat_sessions.php');
+            $externalAiConsentMigration->up();
         }
     }
 }

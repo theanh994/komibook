@@ -55,11 +55,15 @@ return [
     ],
 
     'gemini' => [
-        'enabled' => env('GEMINI_ENABLED', (bool) env('GEMINI_API_KEY')),
-        'api_key' => env('GEMINI_API_KEY'),
-        'model' => env('GEMINI_MODEL', 'gemini-3.5-flash-lite'),
-        'fallback_model' => env('GEMINI_FALLBACK_MODEL', 'gemini-3.1-flash-lite'),
+        'enabled' => env('GEMINI_ENABLED', false),
+        'api_key' => env('GEMINI_API_KEY', ''),
+        'model' => env('GEMINI_MODEL', ''),
+        'fallback_model' => env('GEMINI_FALLBACK_MODEL', ''),
+        'allowed_models' => array_values(array_unique(array_filter(array_map('trim', explode(',', (string) env('GEMINI_ALLOWED_MODELS', '')))))),
+        'max_attempts' => env('GEMINI_MAX_ATTEMPTS', 1),
+        'connect_timeout' => env('GEMINI_CONNECT_TIMEOUT', 3),
         'timeout' => env('GEMINI_TIMEOUT', 12),
+        'max_output_tokens' => env('GEMINI_MAX_OUTPUT_TOKENS', 1200),
     ],
 
 ];

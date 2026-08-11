@@ -45,6 +45,10 @@ class ChatSession extends Model
         'subject',
         'category',
         'lock_version',
+        'external_ai_consent_version',
+        'external_ai_consent_scope',
+        'external_ai_consented_at',
+        'external_ai_consent_revoked_at',
         'last_message_at',
         'assigned_at',
         'resolved_at',
@@ -56,6 +60,9 @@ class ChatSession extends Model
     {
         return [
             'lock_version' => 'integer',
+            'external_ai_consent_scope' => 'array',
+            'external_ai_consented_at' => 'datetime',
+            'external_ai_consent_revoked_at' => 'datetime',
             'last_message_at' => 'datetime',
             'assigned_at' => 'datetime',
             'resolved_at' => 'datetime',
@@ -95,5 +102,18 @@ class ChatSession extends Model
     public function isTerminal(): bool
     {
         return in_array($this->status, [self::STATUS_RESOLVED, self::STATUS_CLOSED], true);
+    }
+
+    /** @param list<string> $scope */
+    public function hasActiveExternalAiConsent(string $policyVersion, array $scope, ?User $owner = null): bool
+    {
+        return $this->user_id !== null
+            && $owner !== null
+            && $owner->id === $this->user_id
+            && $owner->role === 'customer'
+            && $this->external_ai_consented_at !== null
+            && $this->external_ai_consent_revoked_at === null
+            && $this->external_ai_consent_version === $policyVersion
+            && $this->external_ai_consent_scope === $scope;
     }
 }
