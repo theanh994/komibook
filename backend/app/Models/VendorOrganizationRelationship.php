@@ -105,6 +105,7 @@ class VendorOrganizationRelationship extends Model
             && filled($this->last_review_reason)
             && $this->organization?->data_mode === 'demo'
             && $this->organization?->hasAuthoritativeAcceptance()
+            && Vendor::withoutGlobalScopes()->whereKey($this->vendor_id)->where('is_demo', true)->exists()
             && ($event = $this->latestEvent()->with('actor')->first()) !== null
             && $event->to_status === 'demo_accepted'
             && $event->actor_id === $this->reviewed_by

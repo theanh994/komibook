@@ -28,6 +28,7 @@ class VendorBookCreationAndWarehouseInvitationTest extends TestCase
     {
         Storage::fake('public');
         [$vendorUser, $vendor] = $this->vendor('integrated-book');
+        $vendor->update(['is_demo' => true]);
         $warehouse = $this->warehouse($vendor);
         $category = Category::create(['name' => 'Sách tích hợp', 'slug' => 'sach-tich-hop']);
         $organization = Organization::create([
@@ -327,6 +328,7 @@ class VendorBookCreationAndWarehouseInvitationTest extends TestCase
 
     private function configureAcceptedDemoSelfSupplier(Vendor $vendor): void
     {
+        $vendor->update(['is_demo' => true]);
         $organization = Organization::create([
             'legal_name' => 'Demo scope organization '.$vendor->id,
             'display_name' => 'Demo scope organization '.$vendor->id,

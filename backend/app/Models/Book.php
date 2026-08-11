@@ -244,6 +244,7 @@ class Book extends Model
                                 ->whereNotNull('authority_fingerprint')
                                 ->where(fn ($window) => $window->whereNull('effective_from')->orWhereDate('effective_from', '<=', today()))
                                 ->where(fn ($window) => $window->whereNull('effective_until')->orWhereDate('effective_until', '>=', today()))
+                                ->whereHas('vendor', fn ($vendor) => $vendor->withoutGlobalScopes()->where('is_demo', true))
                                 ->whereHas('latestEvent', fn ($event) => $event->where('to_status', 'demo_accepted')->whereColumn('actor_id', 'vendor_organization_relationships.reviewed_by')->whereColumn('reason', 'vendor_organization_relationships.last_review_reason')->whereColumn('reviewed_fingerprint', 'vendor_organization_relationships.authority_fingerprint')->whereHas('actor', fn ($actor) => $actor->where('role', 'admin')))
                                 ->whereHas('organization', function ($organization): void {
                                     $organization->where('status', 'demo_accepted')->where('data_mode', 'demo')->whereNull('verification_document')->whereNull('verified_at')->whereNotNull('verified_by')->whereNotNull('last_review_reason')->whereNotNull('authority_fingerprint')->whereNull('suspended_at')->whereNull('archived_at')

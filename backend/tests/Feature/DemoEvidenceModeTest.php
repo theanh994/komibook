@@ -166,7 +166,7 @@ class DemoEvidenceModeTest extends TestCase
         ]);
         OrganizationReviewEvent::create(['organization_id' => $organization->id, 'actor_id' => $admin->id, 'from_status' => 'pending_review', 'to_status' => 'demo_accepted', 'reason' => 'Demo evidence reviewed.', 'operation_key' => 'demo-org-predicate']);
         $vendorUser = User::factory()->create(['role' => 'vendor']);
-        $vendor = Vendor::withoutGlobalScopes()->create(['user_id' => $vendorUser->id, 'shop_name' => 'Predicate vendor', 'slug' => 'predicate-vendor', 'status' => 'active', 'onboarding_status' => 'approved']);
+        $vendor = Vendor::withoutGlobalScopes()->create(['user_id' => $vendorUser->id, 'shop_name' => 'Predicate vendor', 'slug' => 'predicate-vendor', 'status' => 'active', 'onboarding_status' => 'approved', 'is_demo' => true]);
         $relationship = VendorOrganizationRelationship::create([
             'vendor_id' => $vendor->id,
             'organization_id' => $organization->id,
