@@ -363,3 +363,10 @@
   min-width: 44px;
   min-height: 44px;
 }
+
+/* User account popup menu positioning: shift left to prevent overflowing right page boundary */
+#overlay_menu,
+#admin_user_menu {
+  transform: translateX(-40%);
+  max-width: calc(100vw - 2rem);
+}

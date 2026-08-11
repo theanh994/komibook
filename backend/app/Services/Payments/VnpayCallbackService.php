@@ -200,7 +200,7 @@ class VnpayCallbackService
                     // Kiểm tra trạng thái đơn hàng trước khi chuyển confirmed/paid
                     foreach ($orders as $ord) {
                         $pm = strtolower((string) $ord->payment_method);
-                        if ($ord->status !== 'pending' || $ord->payment_status !== 'unpaid' || ($pm !== 'online' && $pm !== 'vnpay')) {
+                        if (! in_array($ord->status, ['pending', 'draft'], true) || $ord->payment_status !== 'unpaid' || ($pm !== 'online' && $pm !== 'vnpay')) {
                             return ['RspCode' => '99', 'Message' => 'Unknown error'];
                         }
                     }

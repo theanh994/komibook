@@ -12,7 +12,8 @@ class EnsureVerifiedEmail
     {
         if (! $request->user()?->email_verified_at) {
             return response()->json([
-                'status' => 'error', 'code' => 'EMAIL_VERIFICATION_REQUIRED',
+                'status' => 'error',
+                'code' => 'EMAIL_VERIFICATION_REQUIRED',
                 'message' => 'Vui lòng xác thực email trước khi thực hiện thao tác nhạy cảm này.',
             ], 403);
         }

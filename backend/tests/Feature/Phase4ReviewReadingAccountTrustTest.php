@@ -13,6 +13,7 @@ use App\Models\Vendor;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
 class Phase4ReviewReadingAccountTrustTest extends TestCase
@@ -126,6 +127,33 @@ class Phase4ReviewReadingAccountTrustTest extends TestCase
         $this->actingAs($verified)->withHeader('Origin', 'https://komibook.id.vn')->withSession(['auth.password_confirmed_at' => 0])
             ->deleteJson('/api/profile/sessions/unknown')->assertStatus(423)
             ->assertJsonPath('code', 'RECENT_AUTHENTICATION_REQUIRED');
+    }
+
+    public function test_token_authenticated_sensitive_action_without_a_session_fails_recent_authentication(): void
+    {
+        $verified = User::factory()->create();
+        $token = $verified->createToken('recent-auth-test')->plainTextToken;
+
+        $this->withToken($token)
+            ->deleteJson('/api/profile/sessions/unknown')
+            ->assertStatus(423)
+            ->assertJsonPath('code', 'RECENT_AUTHENTICATION_REQUIRED');
+
+        Sanctum::actingAs($verified);
+        $this->deleteJson('/api/profile/sessions/unknown')
+            ->assertStatus(423)
+            ->assertJsonPath('code', 'RECENT_AUTHENTICATION_REQUIRED');
+    }
+
+    public function test_valid_recent_session_authentication_allows_sensitive_action(): void
+    {
+        $verified = User::factory()->create();
+
+        $this->actingAs($verified)
+            ->withHeader('Origin', 'https://komibook.id.vn')
+            ->withSession(['auth.password_confirmed_at' => time()])
+            ->deleteJson('/api/profile/sessions/unknown')
+            ->assertNotFound();
     }
 
     public function test_password_change_revokes_other_database_sessions_but_keeps_current(): void

@@ -77,7 +77,7 @@ class VnpayCallbackProcessingTest extends TestCase
             'author' => 'Author Name',
             'price' => $price,
             'stock' => $stock,
-            'type' => 'physical',
+            'type' => 'ebook',
             'status' => 'published',
         ]);
 

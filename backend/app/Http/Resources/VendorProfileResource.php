@@ -36,6 +36,7 @@ class VendorProfileResource extends JsonResource
                 'id' => $this->user->id,
                 'name' => $this->user->name,
                 'email' => $this->user->email,
+                'phone' => $this->user->phone,
             ]),
             'legal_name' => $this->when($private, $this->legal_name),
             'tax_code' => $this->when($private, $this->tax_code),

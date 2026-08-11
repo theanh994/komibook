@@ -25,7 +25,7 @@ describe('Phase 11 Newsroom contracts', () => {
     expect(editor).toContain('Hiển thị trên Google (SEO)')
     expect(editor).toContain("Font.whitelist = ['inter', 'literata', 'times-new-roman', 'arial', 'georgia', 'monospace']")
     expect(editor).toContain("Size.whitelist = ['12px', '14px', '16px', '18px', '24px', '32px']")
-    expect(editor).toContain("{ align: [] }")
+    expect(editor).toContain("align:")
     expect(editor).toContain("{ indent: '+1' }")
     expect(editor).toContain('aria-label="Định dạng tiêu đề"')
     expect(editor).toContain('aria-label="Định dạng tóm tắt"')

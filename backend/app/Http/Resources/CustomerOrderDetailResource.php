@@ -16,6 +16,11 @@ class CustomerOrderDetailResource extends JsonResource
      */
     public function toArray(Request $request): array
     {
+        $cancellationPreview = $this->resource->relationLoaded('buyerCancellationPreview')
+            ? $this->resource->getRelation('buyerCancellationPreview')
+            : null;
+        $canCancel = is_array($cancellationPreview) && ($cancellationPreview['eligible'] ?? false) === true;
+
         return [
             'id' => $this->id,
             'order_code' => $this->order_code,
@@ -27,6 +32,8 @@ class CustomerOrderDetailResource extends JsonResource
             'shipping_carrier' => $this->shipping_carrier,
             'shipping_tracking_code' => $this->shipping_tracking_code,
             'can_confirm_receipt' => $this->status === 'shipped' && $this->shipping_status === 'awaiting_customer_confirmation',
+            'can_cancel' => $canCancel,
+            'cancellation_scope' => $canCancel ? ($cancellationPreview['scope'] ?? null) : null,
             'shipping_address' => $this->shipping_address,
             'phone' => $this->phone,
             'created_at' => $this->created_at?->toISOString(),
@@ -43,6 +50,20 @@ class CustomerOrderDetailResource extends JsonResource
             'customer_name' => $this->user?->name,
             'customer_email' => $this->user?->email,
             'customer_phone' => $this->phone ?? $this->user?->phone,
+
+            // Vendor / Shop information
+            'vendor' => $this->whenLoaded('vendor', function () {
+                if (! $this->vendor) {
+                    return null;
+                }
+
+                return [
+                    'id' => $this->vendor->id,
+                    'shop_name' => $this->vendor->shop_name,
+                    'slug' => $this->vendor->slug,
+                    'logo' => PublicMediaUrl::storage($this->vendor->logo),
+                ];
+            }),
 
             // Order items (key: items)
             'items' => $this->orderItems->map(function ($item) {

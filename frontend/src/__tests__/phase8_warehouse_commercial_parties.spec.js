@@ -124,4 +124,15 @@ describe('Phase 8 warehouse and commercial-party surfaces', () => {
     expect(infoTip).toContain('!text-[16px]')
     expect(infoTip).not.toContain('h-11 w-11')
   })
+
+  it('integrates document cancellation and draft document editing into warehouse documents view', () => {
+    const documents = source('src/views/warehouse-manager/DocumentsView.vue')
+
+    expect(documents).toContain('Sửa phiếu nháp')
+    expect(documents).toContain('Hủy phiếu')
+    expect(documents).toContain('openEditDrawer')
+    expect(documents).toContain("requestTransition(selectedDocument, 'cancelled')")
+    expect(documents).toContain("pendingTransition?.toStatus === 'cancelled'")
+    expect(documents).toContain('Thao tác')
+  })
 })

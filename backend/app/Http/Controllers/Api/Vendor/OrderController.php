@@ -20,7 +20,9 @@ class OrderController extends Controller
      */
     public function index(Request $request)
     {
-        $query = Order::with(['user', 'orderItems.book'])->orderByDesc('created_at');
+        $query = Order::with(['user', 'orderItems.book', 'invoiceSnapshot'])
+            ->where('status', '!=', 'draft')
+            ->orderByDesc('created_at');
 
         // Lọc theo trạng thái
         if ($request->filled('status') && $request->status !== 'all') {
@@ -51,7 +53,7 @@ class OrderController extends Controller
      */
     public function show(Order $order): JsonResponse
     {
-        $order->load(['user', 'orderItems.book', 'transitionOperations']);
+        $order->load(['user', 'orderItems.book', 'invoiceSnapshot', 'transitionOperations']);
 
         return response()->json([
             'status' => 'success',

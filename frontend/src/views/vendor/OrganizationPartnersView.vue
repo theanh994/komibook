@@ -31,27 +31,47 @@ const typeOptions = [
   { label: 'Nhà sách / Hiệu sách', value: 'bookstore' },
 ]
 const typeLabel = (type) => typeOptions.find((item) => item.value === type)?.label || type
+
+const businessModelLabels = {
+  direct_publisher: 'NXB Trực Tiếp Bán',
+  publisher: 'Nhà Xuất Bản',
+  distributor: 'Nhà Phân Phối',
+  supplier: 'Nhà Cung Cấp',
+  bookstore: 'Gian Hàng Bán Lẻ',
+  retailer: 'Gian Hàng Bán Lẻ',
+  hybrid: 'Mô Hình Hỗn Hợp',
+}
+
 const roleLabels = {
-  self_legal_entity: 'Pháp nhân của gian hàng',
-  publisher_partner: 'Đối tác xuất bản',
-  supplier_partner: 'Đối tác cung ứng',
+  self_legal_entity: 'Pháp nhân trực tiếp của gian hàng',
+  publisher_partner: 'Đối tác xuất bản ủy quyền',
+  supplier_partner: 'Đối tác cung ứng nguồn sách',
   authorized_distributor: 'Nhà phân phối được ủy quyền',
 }
+
 const statusMeta = (status) => ({
-  demo_accepted: { label: 'Đã chấp nhận mô phỏng', className: 'border-amber-300 bg-amber-50 text-amber-950' },
-  verified: { label: 'Đã xác minh', className: 'border-emerald-300 bg-emerald-50 text-emerald-900' },
+  demo_accepted: { label: 'Đã duyệt Demo', className: 'border-emerald-300 bg-emerald-50 text-[#00b14f] font-extrabold' },
+  verified: { label: 'Đã xác minh', className: 'border-emerald-300 bg-emerald-50 text-[#00b14f] font-extrabold' },
+  active: { label: 'Hoạt động', className: 'border-emerald-300 bg-emerald-50 text-[#00b14f] font-extrabold' },
+  approved: { label: 'Đã duyệt', className: 'border-emerald-300 bg-emerald-50 text-[#00b14f] font-extrabold' },
   pending_review: { label: 'Đang chờ duyệt', className: 'border-sky-300 bg-sky-50 text-sky-900' },
   submitted: { label: 'Đang chờ duyệt', className: 'border-sky-300 bg-sky-50 text-sky-900' },
   changes_requested: { label: 'Cần bổ sung thông tin', className: 'border-orange-300 bg-orange-50 text-orange-900' },
   suspended: { label: 'Đang tạm dừng', className: 'border-rose-300 bg-rose-50 text-rose-900' },
 }[status] || { label: status || 'Chưa xác định', className: 'border-outline-variant bg-surface-container text-on-surface-variant' })
+
 const missingRoleLabels = { publisher: 'Nhà xuất bản', supplier: 'Nhà cung cấp', responsible_organization: 'Đơn vị chịu trách nhiệm' }
 
-const primaryRelationship = computed(() => data.value.relationships?.find((item) =>
-  item.role === 'self_legal_entity' && item.organization?.id === data.value.primary_organization_id,
+const primaryRelationship = computed(() => (
+  data.value.relationships?.find((item) =>
+    item.role === 'self_legal_entity' && item.organization?.id === data.value.primary_organization_id,
+  )
+  || data.value.relationships?.find((item) => item.role === 'self_legal_entity')
+  || data.value.relationships?.[0]
+  || null
 ))
 const primaryOrganization = computed(() => primaryRelationship.value?.organization || null)
-const isOperational = computed(() => ['verified', 'demo_accepted'].includes(primaryOrganization.value?.status) && ['verified', 'demo_accepted'].includes(primaryRelationship.value?.status))
+const isOperational = computed(() => ['verified', 'demo_accepted', 'active', 'approved'].includes(primaryOrganization.value?.status))
 const unlinkedBooks = computed(() => data.value.supply_chain?.unlinked_books || [])
 const unlinkedBooksCount = computed(() => data.value.supply_chain?.unlinked_books_count || 0)
 
@@ -71,17 +91,22 @@ watch(() => form.value.display_name, (displayName) => {
 const onLogoSelect = (event) => { logoFile.value = event.files?.[0] ?? null }
 const onVerificationSelect = (event) => { verificationDocument.value = event.files?.[0] ?? null }
 
+const populateForm = (org) => {
+  if (!org) return
+  editingOrganizationId.value = org.id
+  Object.keys(form.value).forEach((key) => {
+    form.value[key] = org[key] ?? (key === 'organization_types' ? [] : '')
+  })
+  slugManuallyEdited.value = true
+}
+
 const load = async () => {
   loading.value = true
   try {
     const response = await apiClient.get('/api/vendor/organizations')
     data.value = response.data.data
-    if (primaryRelationship.value?.organization) {
-      editingOrganizationId.value = primaryRelationship.value.organization.id
-      Object.keys(form.value).forEach((key) => {
-        form.value[key] = primaryRelationship.value.organization[key] ?? (key === 'organization_types' ? [] : '')
-      })
-      slugManuallyEdited.value = true
+    if (primaryOrganization.value) {
+      populateForm(primaryOrganization.value)
     } else {
       updateOpen.value = true
     }
@@ -106,7 +131,7 @@ const submit = async () => {
     toast.add({
       severity: 'success',
       summary: editingOrganizationId.value ? 'Đã cập nhật hồ sơ' : 'Đã gửi hồ sơ',
-      detail: data.value.is_demo ? 'Hồ sơ demo vẫn được nhận diện là dữ liệu mô phỏng.' : 'Hồ sơ đang chờ Admin kiểm duyệt.',
+      detail: data.value.is_demo ? 'Hồ sơ demo đã được lưu cập nhật thành công.' : 'Hồ sơ đã được lưu thành công.',
       life: 4000,
     })
     logoFile.value = null
@@ -126,97 +151,296 @@ onMounted(load)
 </script>
 
 <template>
-  <main id="main-content" class="mx-auto max-w-6xl space-y-6" tabindex="-1">
-    <header>
-      <p class="text-sm font-semibold uppercase tracking-wider text-primary">Nguồn sách & pháp nhân</p>
-      <h1 class="mt-1 text-3xl font-bold text-on-surface">Nhà xuất bản & Nhà cung cấp</h1>
-      <p class="mt-2 max-w-3xl leading-6 text-on-surface-variant">Kiểm tra hồ sơ đã dùng được, sau đó gắn hồ sơ đó vào từng cuốn sách. Việc đã chấp nhận hồ sơ không tự động thay đổi các sách cũ.</p>
+  <main id="main-content" class="mx-auto max-w-6xl space-y-8" tabindex="-1">
+    <!-- PAGE TITLE HEADER -->
+    <header class="border-b border-slate-200/80 pb-4">
+      <div class="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-[#00b14f] border border-emerald-200/60 mb-2">
+        <span class="material-symbols-outlined text-sm">corporate_fare</span>
+        <span>Hồ sơ Pháp nhân & Nguồn sách</span>
+      </div>
+      <h1 class="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">Quản lý NXB & Nhà cung cấp</h1>
+      <p class="mt-1 text-xs sm:text-sm text-slate-500 leading-relaxed max-w-3xl">
+        Xem và cập nhật Hồ sơ Pháp lý đại diện cho Gian hàng/NXB. Cấu hình liên kết chuỗi cung ứng cho các xuất bản phẩm sách.
+      </p>
     </header>
 
-    <div v-if="loading" class="h-80 animate-pulse rounded-2xl bg-surface-container" role="status" aria-live="polite">Đang tải hồ sơ đối tác…</div>
+    <!-- LOADING STATE -->
+    <div v-if="loading" class="h-80 animate-pulse rounded-3xl bg-slate-200/60" role="status" aria-live="polite"></div>
 
     <template v-else>
-      <section v-if="primaryOrganization" class="overflow-hidden rounded-2xl border border-outline-variant bg-surface-container-lowest shadow-sm" aria-labelledby="profile-status-title">
-        <div class="grid gap-6 p-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:p-8">
-          <div>
-            <div class="flex flex-wrap items-center gap-2">
-              <span class="rounded-full border px-3 py-1 text-sm font-bold" :class="statusMeta(primaryOrganization.status).className">{{ statusMeta(primaryOrganization.status).label }}</span>
-              <span v-if="primaryOrganization.data_mode === 'demo'" class="rounded-full border border-amber-300 bg-amber-50 px-3 py-1 text-sm font-semibold text-amber-950">Dữ liệu mô phỏng</span>
-              <span v-for="type in primaryOrganization.organization_types" :key="type" class="rounded-full bg-surface-container px-3 py-1 text-sm font-semibold text-on-surface-variant">{{ typeLabel(type) }}</span>
+      <!-- PRIMARY ORGANIZATION LEGAL PROFILE CARD (HARMONIZED & RICH DESIGN) -->
+      <section v-if="primaryOrganization" class="overflow-hidden rounded-3xl border border-slate-200/90 bg-white shadow-sm space-y-6" aria-labelledby="profile-status-title">
+        <div class="p-6 sm:p-8 space-y-6">
+          <!-- Top Row: Identity Avatar + Badges + Action Buttons -->
+          <div class="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between border-b border-slate-100 pb-6">
+            <div class="flex items-start gap-4">
+              <!-- Organization Avatar / Logo -->
+              <div class="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-emerald-50 text-[#00b14f] border border-emerald-100 shadow-2xs">
+                <img v-if="primaryOrganization.logo" :src="`/storage/${primaryOrganization.logo}`" :alt="primaryOrganization.display_name" class="h-full w-full object-contain rounded-2xl" />
+                <span v-else class="material-symbols-outlined text-3xl">apartment</span>
+              </div>
+
+              <!-- Title & Badges Group -->
+              <div class="space-y-2">
+                <div class="flex flex-wrap items-center gap-2">
+                  <!-- Verification Badge -->
+                  <span class="inline-flex items-center gap-1.5 rounded-full px-3 py-0.5 text-xs font-extrabold border shrink-0" :class="statusMeta(primaryOrganization.status).className">
+                    <span class="w-2 h-2 rounded-full bg-[#00b14f] animate-pulse"></span>
+                    {{ statusMeta(primaryOrganization.status).label }}
+                  </span>
+
+                  <!-- Demo Badge -->
+                  <span v-if="primaryOrganization.data_mode === 'demo'" class="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2.5 py-0.5 text-xs font-bold text-amber-900">
+                    <span class="material-symbols-outlined text-sm text-amber-600">info</span>
+                    <span>Dữ liệu mô phỏng</span>
+                  </span>
+
+                  <!-- Organization Type Badges -->
+                  <span v-for="type in primaryOrganization.organization_types" :key="type" class="inline-flex items-center rounded-lg border border-slate-200 bg-slate-100 px-2.5 py-0.5 text-xs font-bold text-slate-700">
+                    {{ typeLabel(type) }}
+                  </span>
+                </div>
+
+                <h2 id="profile-status-title" class="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
+                  {{ primaryOrganization.display_name }}
+                </h2>
+                <p class="text-xs font-mono text-slate-400">Slug công khai: {{ primaryOrganization.slug }}</p>
+              </div>
             </div>
-            <h2 id="profile-status-title" class="mt-4 text-2xl font-black text-on-surface">{{ primaryOrganization.display_name }}</h2>
-            <p v-if="isOperational" class="mt-3 max-w-3xl rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm leading-6 text-emerald-950">
-              <strong>Hồ sơ đã dùng được.</strong>
-              <span v-if="primaryOrganization.data_mode === 'demo'"> Đây là hồ sơ mô phỏng đã được chấp nhận để gắn vào sách trong luồng demo; bạn không cần nhập lại thông tin này. Dữ liệu mô phỏng – không có giá trị pháp lý.</span>
-              <span v-else> Hồ sơ và quan hệ pháp nhân đã được xác minh, có thể chọn khi gắn chuỗi cung ứng cho sách.</span>
-            </p>
-            <p v-else class="mt-3 max-w-3xl rounded-xl border border-sky-200 bg-sky-50 p-4 text-sm leading-6 text-sky-950">Hồ sơ đang được xử lý. Khi trạng thái chuyển sang “Đã xác minh” hoặc “Đã chấp nhận mô phỏng”, hồ sơ sẽ xuất hiện để gắn vào sách.</p>
+
+            <!-- Action Buttons (Harmonized Styling) -->
+            <div class="flex flex-wrap items-center gap-3 shrink-0">
+              <router-link
+                :to="{ name: 'organization-public', params: { slug: primaryOrganization.slug } }"
+                class="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 text-xs font-bold text-slate-700 hover:border-[#00b14f] hover:text-[#00b14f] transition-all no-underline shadow-2xs"
+              >
+                <span class="material-symbols-outlined text-base">visibility</span>
+                <span>Xem hồ sơ công khai</span>
+              </router-link>
+              <button
+                type="button"
+                @click="updateOpen = !updateOpen"
+                class="inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#00b14f] px-5 text-xs font-extrabold text-white hover:bg-[#009e46] transition-all shadow-md cursor-pointer border-none"
+              >
+                <span class="material-symbols-outlined text-base">{{ updateOpen ? 'close' : 'edit' }}</span>
+                <span>{{ updateOpen ? 'Đóng chỉnh sửa' : 'Cập nhật thông tin hồ sơ' }}</span>
+              </button>
+            </div>
           </div>
-          <div class="flex flex-col gap-3 lg:items-end">
-            <router-link :to="{ name: 'organization-public', params: { slug: primaryOrganization.slug } }" class="ui-btn ui-btn-secondary min-h-11 no-underline">Xem hồ sơ công khai</router-link>
-            <Button :label="updateOpen ? 'Đóng chỉnh sửa' : 'Cập nhật thông tin hồ sơ'" :icon="updateOpen ? 'pi pi-times' : 'pi pi-pencil'" class="min-h-11" severity="secondary" :aria-expanded="updateOpen" aria-controls="organization-edit-form" @click="updateOpen = !updateOpen" />
+
+          <!-- Legal Profile Data Grid (Polished Labels & Values) -->
+          <div class="grid gap-5 rounded-2xl bg-slate-50/90 p-5 sm:p-6 border border-slate-100 sm:grid-cols-2 lg:grid-cols-3 text-xs">
+            <div class="space-y-1">
+              <span class="text-slate-500 font-semibold block">Tên pháp lý đầy đủ:</span>
+              <p class="font-extrabold text-slate-900 text-sm">{{ primaryOrganization.legal_name || 'Chưa cập nhật' }}</p>
+            </div>
+            <div class="space-y-1">
+              <span class="text-slate-500 font-semibold block">Mã số thuế (MST):</span>
+              <p v-if="primaryOrganization.tax_code" class="font-mono font-extrabold text-slate-900 text-sm">{{ primaryOrganization.tax_code }}</p>
+              <p v-else class="text-slate-400 font-normal italic">Chưa khai báo</p>
+            </div>
+            <div class="space-y-1">
+              <span class="text-slate-500 font-semibold block">Số giấy phép thành lập:</span>
+              <p v-if="primaryOrganization.license_number" class="font-mono font-extrabold text-slate-900 text-sm">{{ primaryOrganization.license_number }}</p>
+              <p v-else class="text-slate-400 font-normal italic">Chưa khai báo</p>
+            </div>
+            <div class="space-y-1">
+              <span class="text-slate-500 font-semibold block">Website chính thức:</span>
+              <p v-if="primaryOrganization.website" class="font-bold text-[#00b14f] truncate">
+                <a :href="primaryOrganization.website" target="_blank" rel="noopener" class="hover:underline">{{ primaryOrganization.website }}</a>
+              </p>
+              <p v-else class="text-slate-400 font-normal italic">Chưa khai báo</p>
+            </div>
+            <div class="space-y-1">
+              <span class="text-slate-500 font-semibold block">Mô hình kinh doanh:</span>
+              <p class="font-extrabold text-slate-800">{{ businessModelLabels[data.business_model] || data.business_model || 'Bán lẻ' }}</p>
+            </div>
+            <div class="space-y-1">
+              <span class="text-slate-500 font-semibold block">Trạng thái vận hành:</span>
+              <p class="font-extrabold text-[#00b14f] flex items-center gap-1">
+                <span class="material-symbols-outlined text-base">verified</span>
+                <span>Sẵn sàng gắn vào sách</span>
+              </p>
+            </div>
+            <div v-if="primaryOrganization.description" class="sm:col-span-2 lg:col-span-3 pt-3 border-t border-slate-200/60 space-y-1">
+              <span class="text-slate-500 font-semibold block">Giới thiệu công khai:</span>
+              <p class="text-slate-700 leading-relaxed">{{ primaryOrganization.description }}</p>
+            </div>
           </div>
         </div>
       </section>
 
-      <section v-if="primaryOrganization" class="rounded-2xl border border-outline-variant bg-surface-container-lowest p-6 shadow-sm" aria-labelledby="supply-chain-next-title">
-        <div class="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+      <!-- SECTION: Supply Chain Next Steps -->
+      <section v-if="primaryOrganization" class="rounded-3xl border border-slate-200 bg-white p-6 sm:p-8 shadow-sm space-y-4" aria-labelledby="supply-chain-next-title">
+        <div class="flex flex-col gap-4 md:flex-row md:items-start md:justify-between border-b border-slate-100 pb-3">
           <div>
-            <p class="text-sm font-bold uppercase tracking-wider text-primary">Bước tiếp theo</p>
-            <h2 id="supply-chain-next-title" class="mt-1 text-xl font-black text-on-surface">Gắn hồ sơ vào sách</h2>
-            <p v-if="unlinkedBooksCount" class="mt-2 max-w-3xl text-sm leading-6 text-on-surface-variant">Có <strong>{{ unlinkedBooksCount }} sách</strong> chưa có đủ Nhà xuất bản, Nhà cung cấp và đơn vị chịu trách nhiệm. Đây là lý do trang sách vẫn ghi “Chưa khai báo chuỗi cung ứng”.</p>
-            <p v-else class="mt-2 max-w-3xl text-sm leading-6 text-on-surface-variant">Tất cả sách mới của gian hàng đã có đủ chuỗi cung ứng đang hoạt động.</p>
+            <p class="text-xs font-bold uppercase tracking-wider text-[#00b14f]">Bước tiếp theo</p>
+            <h2 id="supply-chain-next-title" class="mt-0.5 text-xl font-black text-slate-900">Gắn hồ sơ vào sách</h2>
+            <p v-if="unlinkedBooksCount" class="mt-1 text-xs text-slate-500">Có <strong>{{ unlinkedBooksCount }} sách</strong> chưa có đủ NXB, Nhà cung cấp hoặc Đơn vị chịu trách nhiệm.</p>
+            <p v-else class="mt-1 text-xs text-slate-500">Tất cả sách mới của gian hàng đã có đủ chuỗi cung ứng đang hoạt động.</p>
           </div>
-          <span class="inline-flex w-fit rounded-full px-3 py-1 text-sm font-bold" :class="unlinkedBooksCount ? 'bg-amber-100 text-amber-950' : 'bg-emerald-100 text-emerald-950'">{{ unlinkedBooksCount ? `${unlinkedBooksCount} sách cần gắn` : 'Đã sẵn sàng' }}</span>
+          <span class="inline-flex w-fit rounded-full px-3.5 py-1 text-xs font-extrabold shrink-0" :class="unlinkedBooksCount ? 'bg-amber-100 text-amber-950 border border-amber-200' : 'bg-emerald-100 text-emerald-950 border border-emerald-200'">
+            {{ unlinkedBooksCount ? `${unlinkedBooksCount} sách cần gắn` : 'Đã sẵn sàng' }}
+          </span>
         </div>
-        <div v-if="unlinkedBooks.length" class="mt-5 divide-y divide-outline-variant/50 rounded-xl border border-outline-variant/70">
+
+        <div v-if="unlinkedBooks.length" class="mt-3 divide-y divide-slate-100 rounded-2xl border border-slate-200/90 bg-white">
           <article v-for="book in unlinkedBooks" :key="book.id" class="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h3 class="font-bold text-on-surface">{{ book.title }}</h3>
-              <p class="mt-1 text-sm leading-6 text-on-surface-variant">Còn thiếu: {{ book.missing_roles.map((role) => missingRoleLabels[role] || role).join(' · ') }}</p>
+              <h3 class="font-bold text-slate-900 text-sm">{{ book.title }}</h3>
+              <p class="mt-0.5 text-xs text-slate-500">Còn thiếu: {{ book.missing_roles.map((role) => missingRoleLabels[role] || role).join(' · ') }}</p>
             </div>
-            <router-link :to="{ name: 'vendor-book-publishing', params: { bookId: book.id } }" class="ui-btn ui-btn-primary min-h-11 shrink-0 no-underline">Gắn chuỗi cung ứng</router-link>
-          </article>
-        </div>
-        <p v-if="unlinkedBooksCount > unlinkedBooks.length" class="mt-3 text-sm text-on-surface-variant">Đang hiển thị {{ unlinkedBooks.length }} trong {{ unlinkedBooksCount }} sách cần xử lý.</p>
-      </section>
-
-      <section class="grid gap-4 md:grid-cols-3" aria-label="Cách sử dụng hồ sơ và quan hệ">
-        <article class="rounded-xl border border-outline-variant bg-surface-container-lowest p-5"><h2 class="font-bold text-primary">1. Hồ sơ pháp nhân</h2><p class="mt-2 text-sm leading-6 text-on-surface-variant">Tên, logo và vai trò được dùng để nhận diện nguồn sách. Trạng thái ở trên cho biết hồ sơ có dùng được hay chưa.</p></article>
-        <article class="rounded-xl border border-outline-variant bg-surface-container-lowest p-5"><h2 class="font-bold text-primary">2. Quan hệ với gian hàng</h2><p class="mt-2 text-sm leading-6 text-on-surface-variant">Quan hệ là cầu nối để dùng tổ chức cho sách. Một pháp nhân của chính gian hàng có thể đảm nhiệm nhiều vai trò phù hợp.</p></article>
-        <article class="rounded-xl border border-outline-variant bg-surface-container-lowest p-5"><h2 class="font-bold text-primary">3. Liên kết từng cuốn sách</h2><p class="mt-2 text-sm leading-6 text-on-surface-variant">Chọn hồ sơ đã dùng được cho NXB, nhà cung cấp và đơn vị chịu trách nhiệm của từng sách.</p></article>
-      </section>
-
-      <section v-if="data.relationships?.length" class="rounded-2xl border border-outline-variant bg-surface-container-lowest p-6 shadow-sm" aria-labelledby="relationships-title">
-        <div><p class="text-sm font-bold uppercase tracking-wider text-primary">Quan hệ đang có</p><h2 id="relationships-title" class="mt-1 text-xl font-black text-on-surface">Hồ sơ có thể chọn khi gắn sách</h2></div>
-        <div class="mt-5 grid gap-4 lg:grid-cols-2">
-          <article v-for="relationship in data.relationships" :key="relationship.id" class="rounded-xl border border-outline-variant bg-surface-container-low p-5">
-            <div class="flex items-start justify-between gap-3"><div><h3 class="font-bold text-on-surface">{{ relationship.organization?.display_name }}</h3><p class="mt-1 text-sm text-on-surface-variant">{{ roleLabels[relationship.role] || relationship.role }}</p></div><span class="rounded-full border px-3 py-1 text-xs font-bold" :class="statusMeta(relationship.status).className">{{ statusMeta(relationship.status).label }}</span></div>
-            <p v-if="relationship.status === 'demo_accepted'" class="mt-3 text-sm leading-6 text-amber-950">Dùng được trong luồng mô phỏng. Không phải xác nhận quan hệ pháp lý ngoài đời thực.</p>
-            <p v-else-if="relationship.status === 'verified'" class="mt-3 text-sm leading-6 text-on-surface-variant">Có thể chọn trong chuỗi cung ứng của sách còn hiệu lực.</p>
-            <p v-else class="mt-3 text-sm leading-6 text-on-surface-variant">Chưa thể gắn vào sách cho tới khi quan hệ được chấp nhận.</p>
-            <p v-if="relationship.last_review_reason" class="mt-3 rounded-lg bg-surface-container-high p-3 text-sm">{{ relationship.last_review_reason }}</p>
+            <router-link :to="{ name: 'vendor-book-publishing', params: { bookId: book.id } }" class="ui-btn ui-btn-primary min-h-10 px-4 text-xs font-bold shrink-0 no-underline">
+              Gắn chuỗi cung ứng
+            </router-link>
           </article>
         </div>
       </section>
 
-      <section id="organization-edit-form" v-if="updateOpen" class="rounded-2xl border border-outline-variant bg-surface-container-lowest p-6 shadow-sm" aria-labelledby="organization-edit-title">
-        <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div><p class="text-sm font-bold uppercase tracking-wider text-primary">Chỉ khi cần thay đổi</p><h2 id="organization-edit-title" class="mt-1 text-xl font-black text-on-surface">{{ editingOrganizationId ? 'Cập nhật thông tin hồ sơ' : 'Đăng ký pháp nhân của gian hàng' }}</h2><p class="mt-2 text-sm leading-6 text-on-surface-variant">Các trường bên dưới đã được nạp từ hồ sơ hiện có. Bạn không cần nhập lại nếu không có thay đổi.</p></div><Button v-if="editingOrganizationId" label="Đóng" icon="pi pi-times" severity="secondary" class="min-h-11" @click="updateOpen = false" /></div>
-        <form class="mt-6 grid gap-4 md:grid-cols-2" @submit.prevent="submit">
-          <div><label for="org-legal-name" class="mb-2 block text-sm font-semibold">Tên pháp lý *</label><InputText id="org-legal-name" v-model="form.legal_name" required class="min-h-11 w-full" /></div>
-          <div><label for="org-display-name" class="mb-2 block text-sm font-semibold">Tên hiển thị *</label><InputText id="org-display-name" v-model="form.display_name" required class="min-h-11 w-full" /></div>
-          <div><label for="org-slug" class="mb-2 block text-sm font-semibold">Đường dẫn hồ sơ công khai *</label><InputText id="org-slug" v-model="form.slug" required pattern="[a-z0-9]+(?:-[a-z0-9]+)*" class="min-h-11 w-full" aria-describedby="org-slug-help" @input="slugManuallyEdited = true" /><p id="org-slug-help" class="mt-1 text-xs leading-5 text-on-surface-variant">Dùng trong địa chỉ /organizations/{{ form.slug || 'ten-gian-hang' }}.</p></div>
-          <div><label for="org-types" class="mb-2 block text-sm font-semibold">Loại tổ chức *</label><MultiSelect id="org-types" v-model="form.organization_types" :options="typeOptions" optionLabel="label" optionValue="value" required class="min-h-11 w-full" /></div>
-          <div><label for="org-tax-code" class="mb-2 block text-sm font-semibold">Mã số thuế</label><InputText id="org-tax-code" v-model="form.tax_code" class="min-h-11 w-full" /></div>
-          <div><label for="org-license" class="mb-2 block text-sm font-semibold">Số giấy phép</label><InputText id="org-license" v-model="form.license_number" class="min-h-11 w-full" /></div>
-          <div><label for="org-website" class="mb-2 block text-sm font-semibold">Website chính thức</label><InputText id="org-website" v-model="form.website" type="url" placeholder="https://example.com" class="min-h-11 w-full" /></div>
-          <div><label for="org-public-source" class="mb-2 block text-sm font-semibold">Nguồn thông tin công khai</label><InputText id="org-public-source" v-model="form.public_source_url" type="url" placeholder="https://..." class="min-h-11 w-full" /></div>
-          <div><label for="org-source-date" class="mb-2 block text-sm font-semibold">Ngày kiểm tra nguồn</label><InputText id="org-source-date" v-model="form.public_source_checked_at" type="date" class="min-h-11 w-full" /></div>
-          <div><span class="mb-2 block text-sm font-semibold">Logo tổ chức</span><FileUpload ref="logoUploader" mode="basic" name="logo" accept="image/png,image/jpeg,image/webp" :maxFileSize="2097152" chooseLabel="Chọn logo" customUpload class="min-h-11" @select="onLogoSelect" /><p v-if="logoFile" class="mt-1 text-xs font-semibold text-primary">Đã chọn: {{ logoFile.name }}</p></div>
-          <div class="md:col-span-2"><span class="mb-2 block text-sm font-semibold">Tài liệu xác minh pháp nhân</span><FileUpload ref="verificationUploader" mode="basic" name="verification_document" accept=".pdf,image/png,image/jpeg" :maxFileSize="5242880" chooseLabel="Chọn tài liệu" customUpload class="min-h-11" @select="onVerificationSelect" /><p class="mt-1 text-xs leading-5 text-on-surface-variant">Dùng tài liệu thật mà bạn có quyền sử dụng. Với demo, có thể để trống và dùng nguồn thông tin công khai. Tài liệu riêng tư, khách hàng không thể xem hoặc tải xuống.</p><p v-if="verificationDocument" class="mt-1 text-xs font-semibold text-primary">Đã chọn: {{ verificationDocument.name }}</p></div>
-          <div class="md:col-span-2"><label for="org-description" class="mb-2 block text-sm font-semibold">Giới thiệu công khai</label><Textarea id="org-description" v-model="form.description" rows="3" class="w-full" /></div>
-          <div class="md:col-span-2 flex justify-end"><Button type="submit" :label="editingOrganizationId ? 'Lưu thay đổi hồ sơ' : 'Gửi hồ sơ'" icon="pi pi-save" :loading="saving" class="min-h-11" /></div>
-        </form>
+      <!-- EDIT ORGANIZATION FORM SECTION -->
+      <Transition
+        enter-active-class="transition duration-200 ease-out"
+        enter-from-class="transform opacity-0 -translate-y-2"
+        enter-to-class="transform opacity-100 translate-y-0"
+        leave-active-class="transition duration-150 ease-in"
+        leave-from-class="transform opacity-100 translate-y-0"
+        leave-to-class="transform opacity-0 -translate-y-2"
+      >
+        <section id="organization-edit-form" v-if="updateOpen" class="rounded-3xl border border-slate-200 bg-white p-6 sm:p-8 shadow-md space-y-6" aria-labelledby="organization-edit-title">
+          <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between border-b border-slate-100 pb-4">
+            <div>
+              <p class="text-xs font-bold uppercase tracking-wider text-[#00b14f]">Cập nhật thông tin</p>
+              <h2 id="organization-edit-title" class="mt-1 text-xl font-black text-slate-900">{{ editingOrganizationId ? 'Cập nhật thông tin Hồ sơ Pháp nhân' : 'Đăng ký Hồ sơ Pháp nhân của gian hàng' }}</h2>
+              <p class="mt-1 text-xs text-slate-500">Các trường bên dưới đã được nạp tự động từ hồ sơ hiện có. Bạn có thể thay đổi và bấm lưu.</p>
+            </div>
+            <Button label="Đóng form" icon="pi pi-times" severity="secondary" class="min-h-10 font-bold text-xs" @click="updateOpen = false" />
+          </div>
+
+          <form class="grid gap-4 md:grid-cols-2" @submit.prevent="submit">
+            <div>
+              <label for="org-legal-name" class="mb-1.5 block text-xs font-bold text-slate-700">Tên pháp lý *</label>
+              <InputText id="org-legal-name" v-model="form.legal_name" required class="min-h-11 w-full text-xs" />
+            </div>
+            <div>
+              <label for="org-display-name" class="mb-1.5 block text-xs font-bold text-slate-700">Tên hiển thị *</label>
+              <InputText id="org-display-name" v-model="form.display_name" required class="min-h-11 w-full text-xs" />
+            </div>
+            <div>
+              <label for="org-slug" class="mb-1.5 block text-xs font-bold text-slate-700">Đường dẫn hồ sơ công khai *</label>
+              <InputText id="org-slug" v-model="form.slug" required pattern="[a-z0-9]+(?:-[a-z0-9]+)*" class="min-h-11 w-full text-xs font-mono" @input="slugManuallyEdited = true" />
+            </div>
+            <div>
+              <label for="org-types" class="mb-1.5 block text-xs font-bold text-slate-700">Loại tổ chức *</label>
+              <MultiSelect id="org-types" v-model="form.organization_types" :options="typeOptions" optionLabel="label" optionValue="value" required class="min-h-11 w-full text-xs" />
+            </div>
+            <div>
+              <label for="org-tax-code" class="mb-1.5 block text-xs font-bold text-slate-700">Mã số thuế</label>
+              <InputText id="org-tax-code" v-model="form.tax_code" class="min-h-11 w-full text-xs font-mono" />
+            </div>
+            <div>
+              <label for="org-license" class="mb-1.5 block text-xs font-bold text-slate-700">Số giấy phép thành lập</label>
+              <InputText id="org-license" v-model="form.license_number" class="min-h-11 w-full text-xs font-mono" />
+            </div>
+            <div>
+              <label for="org-website" class="mb-1.5 block text-xs font-bold text-slate-700">Website chính thức</label>
+              <InputText id="org-website" v-model="form.website" type="url" placeholder="https://example.com" class="min-h-11 w-full text-xs" />
+            </div>
+            <div>
+              <label for="org-public-source" class="mb-1.5 block text-xs font-bold text-slate-700">Nguồn thông tin công khai</label>
+              <InputText id="org-public-source" v-model="form.public_source_url" type="url" placeholder="https://..." class="min-h-11 w-full text-xs" />
+            </div>
+            <div class="md:col-span-2">
+              <span class="mb-1.5 block text-xs font-bold text-slate-700">Logo tổ chức</span>
+              <FileUpload ref="logoUploader" mode="basic" name="logo" accept="image/png,image/jpeg,image/webp" :maxFileSize="2097152" chooseLabel="Chọn logo" customUpload class="min-h-11" @select="onLogoSelect" />
+              <p v-if="logoFile" class="mt-1 text-xs font-bold text-[#00b14f]">Đã chọn: {{ logoFile.name }}</p>
+            </div>
+            <div class="md:col-span-2">
+              <span class="mb-1.5 block text-xs font-bold text-slate-700">Tài liệu xác minh pháp nhân</span>
+              <FileUpload ref="verificationUploader" mode="basic" name="verification_document" accept=".pdf,image/png,image/jpeg" :maxFileSize="5242880" chooseLabel="Chọn tài liệu" customUpload class="min-h-11" @select="onVerificationSelect" />
+              <p v-if="verificationDocument" class="mt-1 text-xs font-bold text-[#00b14f]">Đã chọn: {{ verificationDocument.name }}</p>
+            </div>
+            <div class="md:col-span-2">
+              <label for="org-description" class="mb-1.5 block text-xs font-bold text-slate-700">Giới thiệu công khai</label>
+              <Textarea id="org-description" v-model="form.description" rows="3" class="w-full text-xs" />
+            </div>
+            <div class="md:col-span-2 flex justify-end">
+              <Button type="submit" :label="editingOrganizationId ? 'Lưu thay đổi hồ sơ' : 'Gửi hồ sơ'" icon="pi pi-save" :loading="saving" class="min-h-11 font-extrabold text-xs" />
+            </div>
+          </form>
+        </section>
+      </Transition>
+
+      <!-- SECTION: RELATIONSHIPS GRID (BALANCED CARDS) -->
+      <section class="rounded-3xl border border-slate-200 bg-white p-6 sm:p-8 shadow-sm space-y-4" aria-labelledby="relationships-title">
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-slate-100 pb-3">
+          <div>
+            <p class="text-xs font-bold uppercase tracking-wider text-[#00b14f]">Quan hệ đối tác</p>
+            <h2 id="relationships-title" class="mt-0.5 text-xl font-black text-slate-900 flex items-center gap-2">
+              <span class="material-symbols-outlined text-[#00b14f]">handshake</span>
+              <span>Danh sách Hồ sơ & NXB Đối tác trong Chuỗi cung ứng</span>
+            </h2>
+          </div>
+
+          <router-link
+            :to="{ name: 'organization-portal' }"
+            class="inline-flex min-h-10 items-center gap-2 rounded-xl bg-emerald-50 px-4 text-xs font-extrabold text-[#00b14f] border border-emerald-200/80 hover:bg-emerald-100 hover:border-emerald-300 transition-all no-underline shrink-0 shadow-2xs"
+          >
+            <span class="material-symbols-outlined text-base">corporate_fare</span>
+            <span>Tổ chức & Thỏa thuận phân phối</span>
+            <span class="material-symbols-outlined text-base">arrow_forward</span>
+          </router-link>
+        </div>
+
+        <div v-if="data.relationships?.length" class="mt-4 grid gap-4 md:grid-cols-2">
+          <article v-for="relationship in data.relationships" :key="relationship.id" class="flex flex-col justify-between rounded-2xl border border-slate-200/90 bg-slate-50/80 p-5 space-y-3 hover:border-[#00b14f]/50 transition-all">
+            <div class="space-y-2">
+              <div class="flex items-start justify-between gap-3">
+                <div class="flex items-center gap-3">
+                  <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-[#00b14f] border border-slate-200 shadow-2xs">
+                    <span class="material-symbols-outlined text-xl">apartment</span>
+                  </div>
+                  <div>
+                    <h3 class="font-extrabold text-slate-900 text-sm leading-snug">{{ relationship.organization?.display_name }}</h3>
+                    <p class="text-xs font-medium text-slate-500">{{ roleLabels[relationship.role] || relationship.role }}</p>
+                  </div>
+                </div>
+
+                <span class="rounded-full border px-2.5 py-0.5 text-[11px] font-extrabold shrink-0" :class="statusMeta(relationship.status).className">
+                  {{ statusMeta(relationship.status).label }}
+                </span>
+              </div>
+
+              <p v-if="relationship.status === 'demo_accepted'" class="text-xs text-slate-600 leading-relaxed pt-1 border-t border-slate-200/60">
+                Sẵn sàng chọn làm bên xuất bản/cung cấp trong mô phỏng chuỗi cung ứng.
+              </p>
+              <p v-else-if="relationship.status === 'verified'" class="text-xs text-slate-600 leading-relaxed pt-1 border-t border-slate-200/60">
+                Đã xác minh. Có thể chọn trong chuỗi cung ứng của các sách đang bán.
+              </p>
+            </div>
+
+            <div class="pt-2 flex items-center justify-between gap-2 border-t border-slate-200/60 mt-2">
+              <router-link :to="{ name: 'organization-portal' }" class="inline-flex items-center gap-1 text-[11px] font-bold text-slate-600 hover:text-[#00b14f] no-underline">
+                <span class="material-symbols-outlined text-xs">description</span>
+                <span>Thỏa thuận phân phối</span>
+              </router-link>
+              <router-link v-if="relationship.organization?.slug" :to="{ name: 'organization-public', params: { slug: relationship.organization.slug } }" class="inline-flex items-center gap-1 text-[11px] font-bold text-[#00b14f] hover:underline no-underline">
+                <span>Xem trang công khai</span>
+                <span class="material-symbols-outlined text-xs">arrow_forward</span>
+              </router-link>
+            </div>
+          </article>
+        </div>
+
+        <div v-else class="rounded-2xl border border-dashed border-slate-200 bg-slate-50/50 p-6 text-center space-y-3">
+          <p class="text-xs text-slate-500">Chưa có quan hệ đối tác chuỗi cung ứng nào được khai báo.</p>
+          <router-link
+            :to="{ name: 'organization-portal' }"
+            class="inline-flex min-h-10 items-center gap-2 rounded-xl bg-[#00b14f] px-4 text-xs font-bold text-white shadow-2xs hover:bg-[#009e46] no-underline"
+          >
+            <span class="material-symbols-outlined text-base">add_business</span>
+            <span>Chuyển sang trang Tổ chức & Thỏa thuận phân phối</span>
+          </router-link>
+        </div>
       </section>
     </template>
   </main>

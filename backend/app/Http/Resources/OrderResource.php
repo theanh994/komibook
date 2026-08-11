@@ -16,6 +16,11 @@ class OrderResource extends JsonResource
      */
     public function toArray(Request $request): array
     {
+        $cancellationPreview = $this->resource->relationLoaded('buyerCancellationPreview')
+            ? $this->resource->getRelation('buyerCancellationPreview')
+            : null;
+        $canCancel = is_array($cancellationPreview) && ($cancellationPreview['eligible'] ?? false) === true;
+
         return [
             'id' => $this->id,
             'order_code' => $this->order_code,
@@ -28,10 +33,37 @@ class OrderResource extends JsonResource
             'shipping_carrier' => $this->shipping_carrier,
             'shipping_tracking_code' => $this->shipping_tracking_code,
             'can_confirm_receipt' => $this->status === 'shipped' && $this->shipping_status === 'awaiting_customer_confirmation',
+            'can_cancel' => $canCancel,
+            'cancellation_scope' => $canCancel ? ($cancellationPreview['scope'] ?? null) : null,
             'shipping_address' => $this->shipping_address,
             'phone' => $this->phone,
             'created_at' => $this->created_at->toISOString(),
             'shipping_events' => $this->whenLoaded('transitionOperations', fn () => ShippingTimeline::forOrder($this->resource)),
+
+            'subtotal_amount' => $this->invoiceSnapshot?->subtotal_amount ?? ($this->relationLoaded('orderItems') ? (int) $this->orderItems->sum(fn ($i) => (int) $i->price * (int) $i->quantity) : (int) $this->total_amount),
+            'shipping_fee_amount' => $this->invoiceSnapshot?->shipping_fee_amount ?? 0,
+            'coupon_discount_amount' => $this->invoiceSnapshot?->coupon_discount_amount ?? 0,
+            'membership_discount_amount' => $this->invoiceSnapshot?->membership_discount_amount ?? 0,
+            'discount_amount' => ($this->invoiceSnapshot?->coupon_discount_amount ?? 0) + ($this->invoiceSnapshot?->membership_discount_amount ?? 0),
+            'invoice' => $this->whenLoaded('invoiceSnapshot', function () {
+                if (! $this->invoiceSnapshot) {
+                    return null;
+                }
+
+                return [
+                    'invoice_number' => $this->invoiceSnapshot->invoice_number,
+                    'issued_at' => $this->invoiceSnapshot->issued_at?->toISOString(),
+                    'currency' => $this->invoiceSnapshot->currency,
+                    'subtotal_amount' => $this->invoiceSnapshot->subtotal_amount,
+                    'shipping_fee_amount' => $this->invoiceSnapshot->shipping_fee_amount,
+                    'coupon_discount_amount' => $this->invoiceSnapshot->coupon_discount_amount,
+                    'membership_discount_amount' => $this->invoiceSnapshot->membership_discount_amount,
+                    'total_amount' => $this->invoiceSnapshot->total_amount,
+                    'buyer' => $this->invoiceSnapshot->buyer_snapshot,
+                    'seller' => $this->invoiceSnapshot->seller_snapshot,
+                    'line_items' => $this->invoiceSnapshot->line_items,
+                ];
+            }),
 
             // Thông tin người mua (Eager Loaded)
             'user' => $this->whenLoaded('user', function () {
@@ -49,8 +81,10 @@ class OrderResource extends JsonResource
                         $bookData = [
                             'id' => $item->book->id,
                             'title' => $item->book->title,
+                            'author' => $item->book->author,
                             'cover_image' => PublicMediaUrl::storage($item->book->cover_image),
                             'type' => $item->book->type,
+                            'is_physical' => $item->book->type === 'physical',
                             'provenance' => $item->product_taxonomy_snapshot['provenance'] ?? $item->book->provenance,
                         ];
                     }

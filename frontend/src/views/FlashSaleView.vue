@@ -243,7 +243,10 @@ const addToCart = (book) => {
     sale_price: book.sale_price,
     type: book.type,
     vendor: book.vendor,
-    vendor_id: book.vendor?.id
+    vendor_id: book.vendor?.id,
+    category: book.category,
+    categories: book.categories,
+    ...(Object.prototype.hasOwnProperty.call(book, 'category_id') ? { category_id: book.category_id } : {})
   })
   toast.add({ severity: 'success', summary: 'Thành công', detail: `Đã thêm "${book.title}" vào giỏ hàng!`, life: 3000 })
 }

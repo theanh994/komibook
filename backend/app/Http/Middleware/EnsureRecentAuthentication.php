@@ -15,7 +15,8 @@ class EnsureRecentAuthentication
             : 0;
         if ($confirmedAt < now()->subMinutes(15)->timestamp) {
             return response()->json([
-                'status' => 'error', 'code' => 'RECENT_AUTHENTICATION_REQUIRED',
+                'status' => 'error',
+                'code' => 'RECENT_AUTHENTICATION_REQUIRED',
                 'message' => 'Vui lòng đăng nhập lại để thực hiện thao tác nhạy cảm này.',
             ], 423);
         }

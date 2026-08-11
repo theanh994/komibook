@@ -11,7 +11,6 @@ import InputText from 'primevue/inputtext'
 import Select from 'primevue/select'
 import MultiSelect from 'primevue/multiselect'
 import Tag from 'primevue/tag'
-import ConfirmDialog from 'primevue/confirmdialog'
 import { useConfirm } from 'primevue/useconfirm'
 import Skeleton from 'primevue/skeleton'
 import Menu from 'primevue/menu'
@@ -328,7 +327,6 @@ onMounted(() => {
 
 <template>
   <div class="vendor-books">
-    <ConfirmDialog />
 
     <!-- Page Header -->
     <div class="page-header">

@@ -95,8 +95,13 @@ class VnpayPaymentService
                         throw new HttpException(422, 'Checkout is not configured for online payment.');
                     }
 
-                    if ($sOrder->status !== 'pending' || $sOrder->payment_status !== 'unpaid') {
-                        throw new HttpException(422, 'Order is not in pending unpaid state.');
+                    if (! in_array($sOrder->status, ['draft', 'pending'], true) || $sOrder->payment_status !== 'unpaid') {
+                        throw new HttpException(422, 'Order is not in a valid state for payment.');
+                    }
+
+                    if ($sOrder->status === 'draft') {
+                        $sOrder->status = 'pending';
+                        $sOrder->saveQuietly();
                     }
                 }
 

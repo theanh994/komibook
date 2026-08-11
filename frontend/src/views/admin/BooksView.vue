@@ -10,7 +10,6 @@ import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
 import Select from 'primevue/select'
 import Tag from 'primevue/tag'
-import ConfirmDialog from 'primevue/confirmdialog'
 
 const toast = useToast()
 const confirm = useConfirm()
@@ -185,7 +184,6 @@ onMounted(() => {
 
 <template>
   <div class="admin-books space-y-6">
-    <ConfirmDialog />
 
     <!-- ═══ PAGE HEADER ═══ -->
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">

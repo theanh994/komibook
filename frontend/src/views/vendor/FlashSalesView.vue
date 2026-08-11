@@ -23,6 +23,7 @@ const flashForm = reactive({
 })
 const couponForm = reactive({
   code: '',
+  coupon_type: 'product',
   discount_percent: 10,
   min_order_value: 0,
   max_discount_amount: 50000,
@@ -217,12 +218,26 @@ onMounted(load)
     <template v-else>
       <div class="grid min-w-0 items-start gap-6 2xl:grid-cols-[minmax(0,1fr)_360px]">
         <form class="ui-panel min-w-0 space-y-5" @submit.prevent="submitCoupon">
-          <div><h2 class="text-xl font-bold text-primary">Tạo mã giảm giá gian hàng</h2><p class="mt-1 text-sm text-on-surface-variant">Chọn phạm vi rõ ràng; mã mới sẽ chờ Admin duyệt trước khi sử dụng.</p></div>
-          <div class="grid gap-4 sm:grid-cols-2"><label class="block font-bold">Mã voucher<input v-model.trim="couponForm.code" class="ui-field mt-2 uppercase" required maxlength="40" placeholder="KOMI10" /></label><label class="block font-bold">Giảm (%)<input v-model.number="couponForm.discount_percent" class="ui-field mt-2" type="number" min="1" max="90" required /></label></div>
+          <div><h2 class="text-xl font-bold text-primary">Tạo mã giảm giá gian hàng</h2><p class="mt-1 text-sm text-on-surface-variant">Chọn loại khuyến mãi và phạm vi áp dụng; mã mới sẽ chờ Admin duyệt trước khi sử dụng.</p></div>
+          
+          <fieldset class="space-y-3">
+            <legend class="font-bold">Loại voucher</legend>
+            <div class="grid gap-3 md:grid-cols-2">
+              <label v-for="option in [{ value: 'product', label: '🏷️ Giảm giá sản phẩm (Sách)' }, { value: 'shipping', label: '🚚 Giảm phí vận chuyển (Freeship)' }]" :key="option.value" class="flex min-h-14 cursor-pointer items-center gap-3 rounded-xl border border-outline-variant/40 p-3" :class="{ 'border-primary bg-primary-container': couponForm.coupon_type === option.value }">
+                <input v-model="couponForm.coupon_type" type="radio" :value="option.value" />
+                <strong>{{ option.label }}</strong>
+              </label>
+            </div>
+          </fieldset>
+
+          <div class="grid gap-4 sm:grid-cols-2">
+            <label class="block font-bold">Mã voucher<input v-model.trim="couponForm.code" class="ui-field mt-2 uppercase" required maxlength="40" placeholder="Ví dụ: VENDOR10 hoặc FREESHIP100" /></label>
+            <label class="block font-bold">{{ couponForm.coupon_type === 'shipping' ? 'Giảm phí ship (%)' : 'Giảm (%)' }}<input v-model.number="couponForm.discount_percent" class="ui-field mt-2" type="number" min="1" max="100" required /></label>
+          </div>
           <div class="grid gap-4 sm:grid-cols-2"><label class="block font-bold">Đơn tối thiểu<input v-model.number="couponForm.min_order_value" class="ui-field mt-2" type="number" min="0" /></label><label class="block font-bold">Giảm tối đa<input v-model.number="couponForm.max_discount_amount" class="ui-field mt-2" type="number" min="0" /></label></div>
           <div class="grid gap-4 sm:grid-cols-2"><label class="block font-bold">Bắt đầu<input v-model="couponForm.start_time" class="ui-field mt-2" type="datetime-local" required /></label><label class="block font-bold">Kết thúc<input v-model="couponForm.end_time" class="ui-field mt-2" type="datetime-local" required /></label></div>
 
-          <fieldset class="space-y-3">
+          <fieldset v-if="couponForm.coupon_type !== 'shipping'" class="space-y-3">
             <legend class="font-bold">Phạm vi áp dụng</legend>
             <div class="grid gap-3 md:grid-cols-3">
               <label v-for="option in [{ value: 'store', label: 'Toàn gian hàng' }, { value: 'category', label: 'Theo thể loại' }, { value: 'books', label: 'Sách cụ thể' }]" :key="option.value" class="flex min-h-14 cursor-pointer items-center gap-3 rounded-xl border border-outline-variant/40 p-3" :class="{ 'border-primary bg-primary-container': couponForm.scope_type === option.value }"><input v-model="couponForm.scope_type" type="radio" :value="option.value" /><strong>{{ option.label }}</strong></label>
@@ -241,7 +256,27 @@ onMounted(load)
           <button class="ui-btn ui-btn-primary" type="submit" :disabled="saving">{{ saving ? 'Đang tạo…' : 'Tạo và gửi duyệt voucher' }}</button>
         </form>
 
-        <aside class="ui-panel 2xl:sticky 2xl:top-24"><h2 class="text-lg font-bold text-primary">Voucher của gian hàng</h2><div v-if="!coupons.length" class="mt-4 text-sm text-on-surface-variant">Chưa có voucher.</div><ul v-else class="mt-4 space-y-3"><li v-for="item in coupons" :key="item.id" class="rounded-lg border border-outline-variant/40 p-3"><div class="flex justify-between gap-3"><strong class="font-mono text-primary">{{ item.code }}</strong><span class="text-sm font-bold text-secondary">{{ statusLabel(item.status) }}</span></div><p class="mt-1 text-sm text-on-surface-variant">{{ scopeLabel(item) }} · giảm {{ item.discount_percent }}%</p><p class="mt-1 text-xs text-on-surface-variant">Đến {{ formatDate(item.end_time) }}</p></li></ul></aside>
+        <aside class="ui-panel 2xl:sticky 2xl:top-24">
+          <h2 class="text-lg font-bold text-primary">Voucher của gian hàng</h2>
+          <div v-if="!coupons.length" class="mt-4 text-sm text-on-surface-variant">Chưa có voucher.</div>
+          <ul v-else class="mt-4 space-y-3">
+            <li v-for="item in coupons" :key="item.id" class="rounded-lg border border-outline-variant/40 p-3">
+              <div class="flex justify-between gap-3">
+                <div class="flex items-center gap-2">
+                  <strong class="font-mono text-primary">{{ item.code }}</strong>
+                  <span class="rounded px-1.5 py-0.5 text-[11px] font-bold" :class="item.coupon_type === 'shipping' ? 'bg-amber-100 text-amber-800' : 'bg-blue-100 text-blue-800'">
+                    {{ item.coupon_type === 'shipping' ? '🚚 Freeship' : '🏷️ Sách' }}
+                  </span>
+                </div>
+                <span class="text-sm font-bold text-secondary">{{ statusLabel(item.status) }}</span>
+              </div>
+              <p class="mt-1 text-sm text-on-surface-variant">
+                {{ item.coupon_type === 'shipping' ? 'Giảm phí vận chuyển đơn gian hàng' : scopeLabel(item) }} · giảm {{ item.discount_percent }}%
+              </p>
+              <p class="mt-1 text-xs text-on-surface-variant">Đến {{ formatDate(item.end_time) }}</p>
+            </li>
+          </ul>
+        </aside>
       </div>
     </template>
   </section>

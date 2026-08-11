@@ -33,14 +33,14 @@ const types = [
 const statusLabel = (value) => statuses.find(([key]) => key === value)?.[1] || value
 const typeLabel = (value) => types.find(([key]) => key === value)?.[1] || 'Tin tức'
 const statusTone = (value) => ({
-  published: 'bg-emerald-100 text-emerald-800',
-  approved: 'bg-blue-100 text-blue-800',
-  scheduled: 'bg-violet-100 text-violet-800',
-  submitted: 'bg-amber-100 text-amber-900',
-  under_review: 'bg-amber-100 text-amber-900',
-  changes_requested: 'bg-rose-100 text-rose-800',
-  rejected: 'bg-rose-100 text-rose-800',
-}[value] || 'bg-surface-container text-on-surface-variant')
+  published: 'text-emerald-600 font-bold',
+  approved: 'text-blue-600 font-bold',
+  scheduled: 'text-violet-600 font-bold',
+  submitted: 'text-amber-600 font-bold',
+  under_review: 'text-amber-600 font-bold',
+  changes_requested: 'text-rose-600 font-bold',
+  rejected: 'text-rose-600 font-bold',
+}[value] || 'text-on-surface-variant font-bold')
 
 const load = async () => {
   loading.value = true
@@ -210,7 +210,7 @@ onMounted(load)
             </td>
             <td class="p-4 text-sm">{{ typeLabel(article.article_type) }}</td>
             <td class="p-4 text-sm">{{ article.vendor?.shop_name || article.creator?.name || 'KomiBook' }}</td>
-            <td class="p-4"><span class="inline-flex rounded-full px-3 py-1 text-xs font-bold" :class="statusTone(article.status)">{{ statusLabel(article.status) }}</span></td>
+            <td class="p-4"><span class="text-sm font-semibold" :class="statusTone(article.status)">{{ statusLabel(article.status) }}</span></td>
             <td class="p-4 text-sm text-on-surface-variant">{{ formatDate(article.updated_at) }}</td>
             <td class="p-4">
               <div class="flex max-w-xs flex-wrap gap-2">

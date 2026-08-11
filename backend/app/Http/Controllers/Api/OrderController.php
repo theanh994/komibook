@@ -8,6 +8,7 @@ use App\Http\Resources\OrderResource;
 use App\Models\EbookEntitlement;
 use App\Models\EbookVersion;
 use App\Models\Order;
+use App\Services\BuyerCancellationEligibilityService;
 use App\Services\CheckoutSessionLifecycleService;
 use App\Services\EbookAccessService;
 use App\Services\OrderFulfillmentService;
@@ -22,9 +23,11 @@ class OrderController extends Controller
     public function myOrders(Request $request)
     {
         $orders = Order::where('user_id', $request->user()->id)
-            ->with(['orderItems.book', 'transitionOperations'])
+            ->where('status', '!=', 'draft')
+            ->with(['orderItems.book', 'invoiceSnapshot', 'transitionOperations'])
             ->orderBy('created_at', 'desc')
             ->get();
+        $this->attachCancellationPreviews($orders, (int) $request->user()->id);
 
         return OrderResource::collection($orders)->additional([
             'status' => 'success',
@@ -36,7 +39,7 @@ class OrderController extends Controller
         $order = Order::withoutGlobalScopes()
             ->where('user_id', $request->user()->id)
             ->where('id', $orderId)
-            ->with(['user', 'orderItems.book', 'invoiceSnapshot', 'transitionOperations'])
+            ->with(['user', 'vendor', 'orderItems.book', 'invoiceSnapshot', 'transitionOperations'])
             ->first();
 
         if (! $order) {
@@ -45,6 +48,8 @@ class OrderController extends Controller
                 'message' => 'Đơn hàng không tồn tại.',
             ], 404);
         }
+
+        $this->attachCancellationPreviews(collect([$order]), (int) $request->user()->id);
 
         return response()->json([
             'status' => 'success',
@@ -105,8 +110,17 @@ class OrderController extends Controller
         foreach ($orders as $order) {
             foreach ($order->orderItems as $item) {
                 if ($item->book && ! in_array($item->book_id, $seenBookIds)) {
-                    $seenBookIds[] = $item->book_id;
                     $book = $item->book;
+
+                    // Bỏ qua đơn draft chưa xác nhận
+                    if ($order->status === 'draft') {
+                        continue;
+                    }
+
+                    // Đối với sách giấy: Không hiển thị sách từ đơn đã bị HỦY (cancelled)
+                    if ($book->type === 'physical' && $order->status === 'cancelled') {
+                        continue;
+                    }
 
                     $validOrder = null;
                     if ($book->type === 'ebook') {
@@ -119,6 +133,9 @@ class OrderController extends Controller
                             ->with('purchaseVersion')
                             ->first()
                         : null;
+
+                    $seenBookIds[] = $item->book_id;
+
                     $versions = $entitlement
                         ? EbookVersion::where('book_id', $book->id)
                             ->where('version', '>=', $entitlement->purchaseVersion->version)
@@ -135,10 +152,10 @@ class OrderController extends Controller
                         : collect();
 
                     $libraryItems[] = [
-                        'order_id' => $book->type === 'ebook' ? ($validOrder?->id) : $order->id,
+                        'order_id' => $book->type === 'ebook' ? ($validOrder?->id ?? ($entitlement ? $order->id : null)) : $order->id,
                         'status' => $order->status,
                         'purchased_at' => $order->created_at?->toISOString(),
-                        'has_access' => $book->type === 'ebook' ? ($validOrder !== null) : false,
+                        'has_access' => $book->type === 'ebook' ? ($validOrder !== null || $entitlement !== null) : true,
                         'purchase_version_id' => $entitlement?->purchase_version_id,
                         'purchase_version' => $entitlement?->purchaseVersion?->version,
                         'latest_version_id' => $versions->first()['id'] ?? null,
@@ -348,6 +365,21 @@ class OrderController extends Controller
                 'status' => 'error',
                 'message' => 'Đơn hàng không tồn tại hoặc không thể hủy',
             ], 404);
+        }
+    }
+
+    /**
+     * @param iterable<int, Order> $orders
+     */
+    private function attachCancellationPreviews(iterable $orders, int $userId): void
+    {
+        $orders = collect($orders);
+        $previews = app(BuyerCancellationEligibilityService::class)->previewsForOrders($orders, $userId);
+
+        foreach ($orders as $order) {
+            if ($order instanceof Order) {
+                $order->setRelation('buyerCancellationPreview', $previews[(int) $order->id] ?? null);
+            }
         }
     }
 }

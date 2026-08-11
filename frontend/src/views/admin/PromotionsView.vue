@@ -144,6 +144,7 @@ const saveCoupon = async () => {
 const editCoupon = (c) => {
   coupon.value = {
     ...c,
+    coupon_type: c.coupon_type || 'product',
     start_time: c.start_time ? new Date(c.start_time) : null,
     end_time: c.end_time ? new Date(c.end_time) : null
   }
@@ -174,6 +175,7 @@ const openNew = () => {
   if (activeTab.value === 'vouchers') {
     coupon.value = {
       code: '',
+      coupon_type: 'product',
       discount_percent: 10,
       min_order_value: 0,
       max_discount_amount: null,
@@ -386,6 +388,12 @@ onMounted(() => {
             </template>
           </Column>
 
+          <Column header="Loại mã" style="min-width: 140px">
+            <template #body="{ data }">
+              <Tag :severity="data.coupon_type === 'shipping' ? 'warn' : 'info'" :value="data.coupon_type === 'shipping' ? '🚚 Phí vận chuyển' : '🏷️ Giá sản phẩm'" />
+            </template>
+          </Column>
+
           <Column header="Giảm giá" style="min-width: 100px">
             <template #body="{ data }">
               <Tag severity="success" :value="data.discount_percent + '%'" />
@@ -394,11 +402,12 @@ onMounted(() => {
 
           <Column header="Áp dụng cho" style="min-width: 150px">
             <template #body="{ data }">
-              <span v-if="data.category" class="text-sm text-blue-700 bg-blue-50 px-2 py-0.5 rounded">
+              <span v-if="data.coupon_type === 'shipping'" class="text-sm text-amber-700 bg-amber-50 px-2 py-0.5 rounded font-medium">Toàn bộ phí ship</span>
+              <span v-else-if="data.category" class="text-sm text-blue-700 bg-blue-50 px-2 py-0.5 rounded">
                 <i class="pi pi-tag mr-1 text-xs"></i>
                 {{ data.category.name }}
               </span>
-              <span v-else class="text-sm text-on-surface-variant">Toàn sàn</span>
+              <span v-else class="text-sm text-on-surface-variant">Toàn sản phẩm</span>
             </template>
           </Column>
 
@@ -525,13 +534,29 @@ onMounted(() => {
       <div class="flex flex-col gap-4">
         <div>
           <label for="code" class="font-bold text-sm block mb-1">Mã Code</label>
-          <InputText id="code" v-model.trim="coupon.code" required="true" autofocus :class="{ 'p-invalid': submitted && !coupon.code }" placeholder="Ví dụ: FLASH10" />
+          <InputText id="code" v-model.trim="coupon.code" required="true" autofocus :class="{ 'p-invalid': submitted && !coupon.code }" placeholder="Ví dụ: FLASH10 hoặc FREESHIP100" />
           <small class="p-error" v-if="submitted && !coupon.code">Bắt buộc nhập mã code.</small>
+        </div>
+
+        <div>
+          <label for="coupon_type" class="font-bold text-sm block mb-1">Loại khuyến mãi</label>
+          <Select
+            id="coupon_type"
+            v-model="coupon.coupon_type"
+            :options="[
+              { label: '🏷️ Giảm giá sản phẩm (Sách)', value: 'product' },
+              { label: '🚚 Giảm phí vận chuyển (Freeship)', value: 'shipping' }
+            ]"
+            optionLabel="label"
+            optionValue="value"
+          />
         </div>
 
         <div class="grid grid-cols-2 gap-4">
           <div>
-            <label for="discount" class="font-bold text-sm block mb-1">Phần trăm giảm (%)</label>
+            <label for="discount" class="font-bold text-sm block mb-1">
+              {{ coupon.coupon_type === 'shipping' ? 'Giảm phí ship (%)' : 'Phần trăm giảm (%)' }}
+            </label>
             <InputNumber id="discount" v-model="coupon.discount_percent" :min="0" :max="100" suffix="%" />
           </div>
           <div>
@@ -540,7 +565,7 @@ onMounted(() => {
           </div>
         </div>
 
-        <div>
+        <div v-if="coupon.coupon_type !== 'shipping'">
           <label for="category" class="font-bold text-sm block mb-1">Danh mục áp dụng</label>
           <Select id="category" v-model="coupon.category_id" :options="categoryOptions" optionLabel="label" optionValue="value" placeholder="Chọn danh mục" />
         </div>

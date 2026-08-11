@@ -1,9 +1,10 @@
 <script setup>
 import { computed, ref, onMounted } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import apiClient from '@/services/axios'
 
 const route = useRoute()
+const router = useRouter()
 const orderId = route.params.id
 
 const order = ref(null)
@@ -40,7 +41,7 @@ const formatDate = (dateString) => {
   return dateString.split('T')[0]
 }
 
-const closeWindow = () => window.close()
+const goBack = () => router.push('/orders')
 const printInvoice = () => window.print()
 
 onMounted(() => {
@@ -64,8 +65,8 @@ onMounted(() => {
       <h1 class="text-xl font-bold text-slate-900">Không thể tải thông tin đơn hàng</h1>
       <p class="text-sm text-slate-600 leading-relaxed">{{ error || 'Đơn hàng không tồn tại hoặc bạn không có quyền xem.' }}</p>
       <div class="pt-2 flex justify-center gap-3">
-        <button class="min-h-11 px-4 py-2 bg-slate-200 text-slate-700 text-sm font-semibold rounded-lg hover:bg-slate-300 transition-colors border-none cursor-pointer" @click="closeWindow">
-          Đóng tab
+        <button class="min-h-11 px-4 py-2 bg-slate-200 text-slate-700 text-sm font-semibold rounded-lg hover:bg-slate-300 transition-colors border-none cursor-pointer" @click="goBack">
+          Quay về đơn hàng
         </button>
         <button class="min-h-11 px-4 py-2 bg-indigo-700 text-white text-sm font-semibold rounded-lg hover:bg-indigo-800 transition-colors border-none cursor-pointer" @click="fetchOrderDetails">
           Thử lại
@@ -177,8 +178,8 @@ onMounted(() => {
 
       <!-- Print controls (Hidden on print) -->
       <div class="no-print flex justify-end gap-3 border-t border-slate-100 pt-4 mt-auto">
-        <button class="min-h-11 px-4 py-2 border border-slate-350 text-slate-700 rounded text-sm font-semibold hover:bg-slate-50 border-none cursor-pointer" @click="closeWindow">
-          Đóng tab
+        <button class="min-h-11 px-4 py-2 border border-slate-350 text-slate-700 rounded text-sm font-semibold hover:bg-slate-50 border-none cursor-pointer" @click="goBack">
+          Quay về đơn hàng
         </button>
         <button class="min-h-11 px-5 py-2 bg-indigo-700 text-white rounded text-sm font-semibold hover:bg-indigo-800 flex items-center gap-1.5 border-none cursor-pointer" @click="printInvoice">
           <i class="pi pi-print"></i> In đơn hàng

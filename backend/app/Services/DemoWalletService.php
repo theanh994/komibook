@@ -55,15 +55,45 @@ class DemoWalletService
         ?PaymentTransaction $transaction,
         Order $order,
         int $amount,
-        int $returnRequestId
+        ?int $returnRequestId = null
     ): DemoWalletLedgerEntry {
         return DB::transaction(function () use ($user, $transaction, $order, $amount, $returnRequestId) {
-            $operationKey = "komibook-wallet:refund:{$returnRequestId}:credit";
-            if ($existing = DemoWalletLedgerEntry::where('operation_key', $operationKey)->first()) {
-                return $existing;
+            if ($amount < 0) {
+                throw new LogicException('Số tiền hoàn Ví KomiBook không hợp lệ.');
+            }
+            $opId = $returnRequestId ? "return:{$returnRequestId}" : "order:{$order->id}";
+            $operationKey = "komibook-wallet:refund:{$opId}:credit";
+            $expectedAccount = $this->lockActiveAccount($user);
+            $keys = [$operationKey];
+            if ($returnRequestId) {
+                $keys[] = "komibook-wallet:refund:{$returnRequestId}:credit";
+            }
+            $existing = DemoWalletLedgerEntry::whereIn('operation_key', $keys)->lockForUpdate()->get();
+            $allReturnCredits = $returnRequestId
+                ? DemoWalletLedgerEntry::where('return_request_id', $returnRequestId)->where('entry_type', 'refund_credit')->lockForUpdate()->get()
+                : collect();
+            if ($returnRequestId && ($allReturnCredits->count() !== $existing->count() || $allReturnCredits->count() > 1)) {
+                throw new LogicException('Bằng chứng hoàn Ví KomiBook có khóa tùy ý hoặc bị nhân bản.');
+            }
+            if ($existing->count() > 1) {
+                throw new LogicException('Phát hiện hai bằng chứng hoàn Ví KomiBook trùng lặp giữa khóa hiện hành và khóa lịch sử.');
+            }
+            if ($existing->isNotEmpty()) {
+                $entry = $existing->sole();
+                if ((int) $entry->demo_wallet_account_id !== (int) $expectedAccount->id
+                    || (int) $entry->payment_transaction_id !== (int) ($transaction?->id ?? 0)
+                    || (int) $entry->order_id !== (int) $order->id
+                    || (int) $entry->return_request_id !== (int) ($returnRequestId ?? 0)
+                    || $entry->entry_type !== 'refund_credit'
+                    || (int) $entry->amount !== $amount) {
+                    throw new LogicException('Bằng chứng idempotency hoàn Ví KomiBook không nhất quán.');
+                }
+                $this->assertRefundCreditApplied($entry, $expectedAccount, $amount);
+
+                return $entry;
             }
 
-            return $this->creditAccount($this->lockActiveAccount($user), max(0, $amount), [
+            return $this->creditAccount($expectedAccount, $amount, [
                 'payment_transaction_id' => $transaction?->id,
                 'order_id' => $order->id,
                 'return_request_id' => $returnRequestId,
@@ -103,24 +133,51 @@ class DemoWalletService
     public function debitVendorRefund(Vendor $vendor, Order $order, int $amount, int $returnRequestId): DemoWalletLedgerEntry
     {
         return DB::transaction(function () use ($vendor, $order, $amount, $returnRequestId) {
-            $operationKey = "komibook-wallet:vendor-refund:{$returnRequestId}:debit";
-            if ($existing = DemoWalletLedgerEntry::where('operation_key', $operationKey)->first()) {
-                return $existing;
+            if ($amount < 0) {
+                throw new LogicException('Số tiền khấu trừ hoàn trả của nhà bán không hợp lệ.');
             }
-
+            $operationKey = "komibook-wallet:vendor-refund:{$returnRequestId}:debit";
+            $returnDebits = DemoWalletLedgerEntry::where('return_request_id', $returnRequestId)
+                ->where('entry_type', 'vendor_refund_debit')->lockForUpdate()->get();
+            if ($returnDebits->count() > 1) {
+                throw new LogicException('Bằng chứng khấu trừ hoàn trả của nhà bán có khóa tùy ý hoặc bị nhân bản.');
+            }
             $lockedVendor = Vendor::withoutGlobalScopes()->whereKey($vendor->id)->lockForUpdate()->firstOrFail();
             $user = User::whereKey($lockedVendor->user_id)->firstOrFail();
             $account = $this->ensureVendorProjectionImported($lockedVendor, $this->lockActiveAccount($user));
-            $debit = min(max(0, $amount), (int) $account->balance);
-            $entry = $this->debitAccount($account, $debit, [
+            if ($returnDebits->isNotEmpty()) {
+                $existing = $returnDebits->sole();
+                $this->assertVendorRefundDebitEvidence(
+                    $existing,
+                    $lockedVendor,
+                    $account,
+                    $order,
+                    $amount,
+                    $returnRequestId,
+                );
+
+                return $existing;
+            }
+            if (DemoWalletLedgerEntry::where('operation_key', $operationKey)->lockForUpdate()->exists()) {
+                throw new LogicException('Bằng chứng idempotency khấu trừ hoàn trả của nhà bán không nhất quán.');
+            }
+            if ((int) $account->balance < $amount || (int) $lockedVendor->balance < $amount) {
+                throw new LogicException('Số dư Ví KomiBook hoặc số dư nhà bán không đủ để hoàn trả đầy đủ.');
+            }
+            $vendorBalanceBefore = (int) $lockedVendor->balance;
+            $entry = $this->debitAccount($account, $amount, [
                 'order_id' => $order->id,
                 'vendor_id' => $lockedVendor->id,
                 'return_request_id' => $returnRequestId,
                 'entry_type' => 'vendor_refund_debit',
                 'operation_key' => $operationKey,
-                'metadata' => ['requested_amount' => max(0, $amount)],
+                'metadata' => [
+                    'requested_amount' => $amount,
+                    'vendor_balance_before' => $vendorBalanceBefore,
+                    'vendor_balance_after' => $vendorBalanceBefore - $amount,
+                ],
             ]);
-            $lockedVendor->balance = max(0, (int) $lockedVendor->balance - $debit);
+            $lockedVendor->balance = $vendorBalanceBefore - $amount;
             $lockedVendor->save();
 
             return $entry;
@@ -194,6 +251,37 @@ class DemoWalletService
     public function completeWithdrawal(User $user, PayoutRequest $payout, ?Vendor $vendor = null): DemoWalletLedgerEntry
     {
         return $this->settleWithdrawal($user, $payout, false, $vendor);
+    }
+
+    public function assertVendorRefundDebitEvidence(
+        DemoWalletLedgerEntry $entry,
+        Vendor $vendor,
+        DemoWalletAccount $account,
+        Order $order,
+        int $amount,
+        int $returnRequestId,
+    ): void {
+        $metadata = $entry->metadata;
+        if ((int) $account->user_id !== (int) $vendor->user_id
+            || $account->status !== 'active'
+            || $account->currency !== 'VND'
+            || (int) $entry->demo_wallet_account_id !== (int) $account->id
+            || (int) $entry->vendor_id !== (int) $vendor->id
+            || (int) $entry->order_id !== (int) $order->id
+            || (int) $entry->return_request_id !== $returnRequestId
+            || $entry->entry_type !== 'vendor_refund_debit'
+            || $entry->operation_key !== "komibook-wallet:vendor-refund:{$returnRequestId}:debit"
+            || (int) $entry->amount !== $amount
+            || ! is_array($metadata)
+            || ! array_key_exists('requested_amount', $metadata)
+            || ! array_key_exists('vendor_balance_before', $metadata)
+            || ! array_key_exists('vendor_balance_after', $metadata)
+            || (int) ($metadata['requested_amount'] ?? -1) !== $amount
+            || (int) ($metadata['vendor_balance_before'] ?? -1) - $amount !== (int) ($metadata['vendor_balance_after'] ?? -1)) {
+            throw new LogicException('Bằng chứng khấu trừ hoàn trả của nhà bán không nhất quán.');
+        }
+        $this->assertVendorRefundDebitApplied($entry, $account, $amount);
+        $this->assertVendorBalanceProjection($vendor, $account);
     }
 
     private function settleWithdrawal(User $user, PayoutRequest $payout, bool $release, ?Vendor $vendor): DemoWalletLedgerEntry
@@ -298,5 +386,153 @@ class DemoWalletService
             'balance_before' => $before,
             'balance_after' => $account->balance,
         ]);
+    }
+
+    private function assertRefundCreditApplied(
+        DemoWalletLedgerEntry $entry,
+        DemoWalletAccount $account,
+        int $amount
+    ): void {
+        if ((int) $entry->balance_before + $amount !== (int) $entry->balance_after) {
+            throw new LogicException('Bằng chứng hoàn Ví KomiBook chưa chứng minh số dư đã được cộng chính xác.');
+        }
+
+        $this->assertAccountLedgerProjection($account);
+    }
+
+    private function assertVendorRefundDebitApplied(
+        DemoWalletLedgerEntry $entry,
+        DemoWalletAccount $account,
+        int $amount
+    ): void {
+        if ((int) $entry->balance_before - $amount !== (int) $entry->balance_after) {
+            throw new LogicException('Bằng chứng khấu trừ hoàn trả của nhà bán chưa chứng minh số dư đã được trừ chính xác.');
+        }
+
+        $this->assertAccountLedgerProjection($account);
+    }
+
+    private function assertVendorBalanceProjection(Vendor $vendor, DemoWalletAccount $account): void
+    {
+        $entries = DemoWalletLedgerEntry::where('vendor_id', $vendor->id)->orderBy('id')->lockForUpdate()->get();
+        if ($entries->isEmpty()) {
+            throw new LogicException('Projection số dư nhà bán không có chuỗi sổ cái để xác minh.');
+        }
+
+        $expectedBalance = 0;
+        $seenImport = false;
+        $payouts = [];
+        $earningOrders = [];
+        $refundReturns = [];
+        foreach ($entries as $index => $ledgerEntry) {
+            if ((int) $ledgerEntry->demo_wallet_account_id !== (int) $account->id || (int) $ledgerEntry->amount < 0) {
+                throw new LogicException('Projection số dư nhà bán có bằng chứng sổ cái không nhất quán.');
+            }
+            $metadata = $ledgerEntry->metadata;
+            if (! is_array($metadata)) {
+                throw new LogicException('Projection số dư nhà bán có metadata sổ cái không nhất quán.');
+            }
+
+            switch ($ledgerEntry->entry_type) {
+                case 'vendor_balance_import':
+                    if ($seenImport || $index !== 0
+                        || $ledgerEntry->operation_key !== "komibook-wallet:vendor:{$vendor->id}:runtime-balance-import"
+                        || ($metadata['source'] ?? null) !== 'vendors.balance'
+                        || ($metadata['runtime_compatibility'] ?? null) !== true) {
+                        throw new LogicException('Projection số dư nhà bán có import lịch sử không nhất quán.');
+                    }
+                    $seenImport = true;
+                    $expectedBalance += (int) $ledgerEntry->amount;
+
+                    break;
+
+                case 'vendor_earning_credit':
+                    $orderId = (int) $ledgerEntry->order_id;
+                    if ($orderId <= 0 || isset($earningOrders[$orderId])
+                        || $ledgerEntry->operation_key !== "komibook-wallet:vendor-earning:{$ledgerEntry->order_id}:credit"
+                        || ($metadata['source'] ?? null) !== 'completed_order') {
+                        throw new LogicException('Projection số dư nhà bán có doanh thu không nhất quán.');
+                    }
+                    $earningOrders[$orderId] = true;
+                    $expectedBalance += (int) $ledgerEntry->amount;
+
+                    break;
+
+                case 'vendor_refund_debit':
+                    $returnId = (int) $ledgerEntry->return_request_id;
+                    if (! $ledgerEntry->order_id || $returnId <= 0 || isset($refundReturns[$returnId])
+                        || $ledgerEntry->operation_key !== "komibook-wallet:vendor-refund:{$ledgerEntry->return_request_id}:debit"
+                        || ! array_key_exists('requested_amount', $metadata)
+                        || ! array_key_exists('vendor_balance_before', $metadata)
+                        || ! array_key_exists('vendor_balance_after', $metadata)
+                        || (int) $metadata['requested_amount'] !== (int) $ledgerEntry->amount
+                        || (int) $metadata['vendor_balance_before'] - (int) $ledgerEntry->amount !== (int) $metadata['vendor_balance_after']) {
+                        throw new LogicException('Projection số dư nhà bán có hoàn trả không nhất quán.');
+                    }
+                    $refundReturns[$returnId] = true;
+                    $expectedBalance -= (int) $ledgerEntry->amount;
+
+                    break;
+
+                case 'payout_reservation':
+                    $payoutId = (int) $ledgerEntry->payout_request_id;
+                    $reserved = (int) ($metadata['vendor_projection_reserved'] ?? -1);
+                    if ($payoutId <= 0 || isset($payouts[$payoutId])
+                        || $ledgerEntry->operation_key !== "komibook-wallet:payout:{$payoutId}:reserve"
+                        || ! array_key_exists('reserved_balance_after', $metadata)
+                        || $reserved < 0 || $reserved > (int) $ledgerEntry->amount) {
+                        throw new LogicException('Projection số dư nhà bán có khoản giữ chi trả không nhất quán.');
+                    }
+                    $payouts[$payoutId] = ['amount' => (int) $ledgerEntry->amount, 'reserved' => $reserved, 'settled' => false];
+                    $expectedBalance -= $reserved;
+
+                    break;
+
+                case 'payout_release':
+                case 'payout_completed':
+                    $payoutId = (int) $ledgerEntry->payout_request_id;
+                    $payout = $payouts[$payoutId] ?? null;
+                    $action = $ledgerEntry->entry_type === 'payout_release' ? 'release' : 'complete';
+                    if (! $payout || $payout['settled']
+                        || $ledgerEntry->operation_key !== "komibook-wallet:payout:{$payoutId}:{$action}"
+                        || ! array_key_exists('reserved_balance_after', $metadata)
+                        || (int) $ledgerEntry->amount !== $payout['amount']) {
+                        throw new LogicException('Projection số dư nhà bán có đối soát chi trả không nhất quán.');
+                    }
+                    $payouts[$payoutId]['settled'] = true;
+                    if ($action === 'release') {
+                        $expectedBalance += $payout['reserved'];
+                    }
+
+                    break;
+
+                default:
+                    throw new LogicException('Projection số dư nhà bán có loại bằng chứng chưa được xác minh.');
+            }
+        }
+
+        if ((int) $vendor->balance !== $expectedBalance) {
+            throw new LogicException('Projection số dư nhà bán hiện tại không khớp chuỗi sổ cái.');
+        }
+    }
+
+    private function assertAccountLedgerProjection(DemoWalletAccount $account): void
+    {
+        $entries = DemoWalletLedgerEntry::where('demo_wallet_account_id', $account->id)
+            ->orderBy('id')->lockForUpdate()->get();
+        if ($entries->isEmpty()) {
+            throw new LogicException('Ví KomiBook không có chuỗi sổ cái để xác minh số dư.');
+        }
+
+        $previousAfter = null;
+        foreach ($entries as $entry) {
+            if ($previousAfter !== null && $previousAfter !== (int) $entry->balance_before) {
+                throw new LogicException('Chuỗi sổ cái Ví KomiBook không liên tục.');
+            }
+            $previousAfter = (int) $entry->balance_after;
+        }
+        if ($previousAfter === null || (int) $account->balance !== $previousAfter) {
+            throw new LogicException('Số dư Ví KomiBook không khớp với sổ cái.');
+        }
     }
 }

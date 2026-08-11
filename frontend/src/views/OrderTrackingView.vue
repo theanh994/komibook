@@ -38,6 +38,10 @@
             <span class="material-symbols-outlined text-[20px]">arrow_back</span>
             Danh sách đơn
           </button>
+          <button type="button" @click="$router.push(`/orders/invoice/${order?.id}`)" class="min-h-11 flex-1 lg:flex-none px-8 py-3 rounded-xl bg-primary text-on-primary font-bold text-sm hover:bg-primary/90 transition-colors flex items-center justify-center gap-3 cursor-pointer shadow-sm" v-if="order">
+            <span class="material-symbols-outlined text-[20px]">print</span>
+            In hóa đơn
+          </button>
         </div>
       </div>
 
@@ -81,6 +85,19 @@
             <h2 class="text-2xl font-bold text-on-surface mb-14 tracking-tight">
               Dự kiến giao hàng: <span class="text-primary italic">{{ estimatedDelivery }}</span>
             </h2>
+
+            <!-- E-book Notification Banner -->
+            <div v-if="hasEbookItems" class="mb-10 rounded-2xl bg-primary/5 border border-primary/20 p-5 flex items-start gap-4">
+              <div class="w-10 h-10 bg-primary/10 text-primary rounded-xl flex items-center justify-center shrink-0">
+                <span class="material-symbols-outlined text-[24px]">auto_stories</span>
+              </div>
+              <div class="space-y-1">
+                <p class="text-sm font-bold text-on-surface">Đơn hàng chứa sản phẩm Sách điện tử (E-book)</p>
+                <p class="text-xs text-on-surface-variant font-medium leading-relaxed">
+                  Quyền đọc E-book được cấp tự động vào Thư viện số KomiBook của bạn ngay khi đơn hàng hoàn tất thanh toán. Bạn có thể đọc trực tuyến trực tiếp trên mọi thiết bị.
+                </p>
+              </div>
+            </div>
 
             <div v-if="journeyException" class="mb-10 rounded-2xl border border-rose-200 bg-rose-50 p-5 text-sm font-semibold text-rose-700">
               {{ journeyException }}
@@ -243,6 +260,21 @@
               Yêu cầu trả hàng / hoàn tiền
             </router-link>
 
+            <div v-if="canCancelOrder(order)" class="rounded-3xl border border-error/20 bg-error/5 p-5 mt-4">
+              <div class="flex items-start gap-3">
+                <span class="material-symbols-outlined text-error">cancel</span>
+                <div>
+                  <p class="font-bold text-error">Hủy đơn hàng này</p>
+                  <p class="mt-1 text-sm leading-relaxed text-on-surface-variant">
+                    Bạn có thể hủy đơn hàng này trước khi gian hàng/đơn vị vận chuyển lấy hàng.
+                  </p>
+                </div>
+              </div>
+              <button type="button" class="mt-4 min-h-11 w-full rounded-xl bg-error px-5 py-3 text-sm font-bold text-on-error hover:bg-error/90 transition-all border-none cursor-pointer disabled:opacity-50" :disabled="cancelling" @click="openCancelModal">
+                Hủy đơn hàng
+              </button>
+            </div>
+
             <button
               disabled
               title="Chưa có thông tin liên hệ tài xế cho đơn hàng này."
@@ -253,34 +285,149 @@
             </button>
           </div>
 
+          <!-- Modal Xác nhận Hủy Đơn -->
+          <div v-if="showCancelModal && canCancelOrder(order)" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+            <div class="bg-surface rounded-3xl p-6 max-w-md w-full shadow-2xl border border-outline-variant/20 space-y-4">
+              <div class="flex items-center gap-3 text-error">
+                <span class="material-symbols-outlined text-[32px]">warning</span>
+                <h3 class="text-lg font-bold text-on-surface">Xác nhận Hủy Đơn Hàng</h3>
+              </div>
+              <p class="text-sm text-on-surface-variant leading-relaxed">
+                Bạn có chắc chắn muốn hủy đơn hàng <strong class="text-on-surface">#{{ order.order_code || order.id }}</strong> không?
+                <span v-if="order.cancellation_scope" class="block mt-2">
+                  Phạm vi hủy gồm {{ order.cancellation_scope.count }} đơn: {{ formatCancellationScope(order.cancellation_scope) }}.
+                </span>
+                <span v-if="order.cancellation_scope?.type === 'checkout_session'" class="block mt-2 font-semibold text-error">
+                  Thao tác này áp dụng cho toàn bộ đơn hàng trong cùng phiên thanh toán.
+                </span>
+              </p>
+              <div class="flex items-center justify-end gap-3 pt-2">
+                <button @click="showCancelModal = false" class="px-4 py-2 rounded-xl border border-outline-variant/30 text-xs font-bold text-on-surface hover:bg-surface-container-high transition-all cursor-pointer">
+                  Bỏ qua
+                </button>
+                <button @click="confirmCancelOrder" :disabled="cancelling" class="px-4 py-2 rounded-xl bg-error text-on-error hover:bg-error/90 text-xs font-bold transition-all border-none cursor-pointer flex items-center gap-1 disabled:opacity-50">
+                  <span v-if="cancelling" class="w-4 h-4 border-2 border-on-error/20 border-t-on-error rounded-full animate-spin"></span>
+                  <span>Xác nhận Hủy</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Order Detail Info Card -->
+          <div class="bg-surface-container-lowest/60 backdrop-blur-xl rounded-3xl p-6 md:p-8 border border-outline-variant/20 shadow-xl space-y-6">
+            <h3 class="text-xl font-bold text-on-surface tracking-tight flex items-center gap-3">
+              <span class="material-symbols-outlined text-primary text-[28px]">receipt_long</span>
+              Thông tin đơn hàng
+            </h3>
+
+            <!-- Vendor / Shop Info -->
+            <div v-if="order.vendor || order.invoice?.seller" class="p-4 bg-surface-container-high/40 rounded-2xl border border-outline-variant/10">
+              <p class="text-[10px] font-bold text-outline uppercase tracking-[0.2em] mb-2">Gian hàng cung cấp</p>
+              <div class="flex items-center justify-between gap-3">
+                <div class="flex items-center gap-3 min-w-0">
+                  <div class="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center text-primary font-bold shrink-0">
+                    <img v-if="order.vendor?.logo" :src="order.vendor.logo" alt="Logo Gian hàng" class="w-full h-full object-cover rounded-xl" />
+                    <span v-else class="material-symbols-outlined text-[20px]">storefront</span>
+                  </div>
+                  <div class="min-w-0">
+                    <p class="text-sm font-bold text-on-surface truncate">{{ order.vendor?.shop_name || order.invoice?.seller?.shop_name || 'KomiBook Official Store' }}</p>
+                    <span class="text-[10px] text-outline font-medium">Đối tác đã xác thực</span>
+                  </div>
+                </div>
+                <router-link
+                  v-if="order.vendor?.slug"
+                  :to="`/shops/${order.vendor.slug}`"
+                  class="px-3 py-1.5 rounded-xl bg-primary/10 text-primary text-xs font-bold hover:bg-primary hover:text-on-primary transition-all flex items-center gap-1 cursor-pointer no-underline shrink-0"
+                >
+                  Ghé Shop
+                  <span class="material-symbols-outlined text-[14px]">chevron_right</span>
+                </router-link>
+              </div>
+            </div>
+
+            <div class="space-y-6">
+              <div class="flex justify-between items-center">
+                <span class="text-sm text-on-surface-variant font-medium">Trạng thái đơn</span>
+                <span :class="['px-3 py-1.5 rounded-lg text-xs font-bold tracking-wide', getOrderStatusBadgeStyle(order)]">
+                  {{ getOrderStatusBadgeText(order) }}
+                </span>
+              </div>
+              <div class="h-px bg-outline-variant/10"></div>
+              <div class="flex justify-between items-center">
+                <span class="text-sm text-on-surface-variant font-medium">Thanh toán</span>
+                <span :class="['px-3 py-1.5 rounded-lg text-xs font-bold tracking-wide', getPaymentBadgeStyle(order.payment_status)]">
+                  {{ getPaymentBadgeText(order.payment_status) }}
+                </span>
+              </div>
+              <div class="h-px bg-outline-variant/10"></div>
+              <div class="flex justify-between items-center">
+                <span class="text-sm text-on-surface-variant font-medium">Phương thức</span>
+                <span class="text-sm font-bold text-on-surface">{{ getPaymentMethodLabel(order.payment_method) }}</span>
+              </div>
+              <div class="h-px bg-outline-variant/10"></div>
+              <div class="flex justify-between items-center">
+                <span class="text-sm text-on-surface-variant font-medium">Địa chỉ giao</span>
+                <span class="text-sm font-bold text-on-surface text-right max-w-[200px] leading-relaxed">{{ order.shipping_address || '—' }}</span>
+              </div>
+            </div>
+          </div>
+
           <!-- Order Summary Mini Card -->
           <div class="bg-surface-container-lowest/60 backdrop-blur-xl rounded-3xl p-6 md:p-8 border border-outline-variant/20 shadow-xl">
             <h3 class="text-xl font-bold text-on-surface mb-8 tracking-tight">Kiện hàng ({{ order.items?.length || 0 }})</h3>
-            <div class="space-y-6 max-h-[400px] overflow-y-auto no-scrollbar pr-2">
-              <div v-for="item in order.items" :key="item.id" class="flex gap-5 items-center group cursor-pointer">
-                <div class="w-16 h-24 overflow-hidden shrink-0 shadow-lg border border-outline-variant/10">
-                  <img v-if="item.book?.cover_image" :src="getCoverUrl(item.book.cover_image)" :alt="`Bìa sách ${item.book.title}`" class="w-full h-full object-contain" />
-                  <div v-else class="w-full h-full flex items-center justify-center text-outline/30 bg-surface-container-high">
-                    <span class="material-symbols-outlined text-2xl">book</span>
+            <div class="space-y-6 max-h-[500px] overflow-y-auto no-scrollbar pr-2">
+              <div v-for="item in order.items" :key="item.id" class="flex gap-4 items-center justify-between group">
+                <div class="flex gap-4 items-center min-w-0">
+                  <div class="w-16 h-24 overflow-hidden shrink-0 shadow-lg border border-outline-variant/10">
+                    <img v-if="item.book?.cover_image" :src="getCoverUrl(item.book.cover_image)" :alt="`Bìa sách ${item.book.title}`" class="w-full h-full object-contain" />
+                    <div v-else class="w-full h-full flex items-center justify-center text-outline/30 bg-surface-container-high">
+                      <span class="material-symbols-outlined text-2xl">book</span>
+                    </div>
+                  </div>
+                  <div class="min-w-0 space-y-1">
+                    <p class="text-sm font-bold text-on-surface truncate leading-tight group-hover:text-primary transition-colors">{{ item.book?.title }}</p>
+                    <div class="flex items-center gap-2 flex-wrap">
+                      <span class="text-[10px] font-black px-1.5 py-0.5 rounded border" :class="item.book?.type === 'ebook' ? 'bg-primary/10 text-primary border-primary/20' : 'bg-surface-container-high text-outline border-outline-variant/20'">
+                        {{ item.book?.type === 'ebook' ? 'E-book' : 'Sách giấy' }}
+                      </span>
+                      <span class="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">SL: {{ item.quantity }}</span>
+                      <span class="text-[11px] font-bold text-primary">{{ formatCurrency(item.price) }}</span>
+                    </div>
                   </div>
                 </div>
-                <div class="min-w-0 space-y-1">
-                  <p class="text-sm font-bold text-on-surface truncate leading-tight group-hover:text-primary transition-colors">{{ item.book?.title }}</p>
-                  <div class="flex items-center gap-3">
-                     <span class="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">SL: {{ item.quantity }}</span>
-                     <div class="w-1 h-1 rounded-full bg-outline-variant/30"></div>
-                     <span class="text-[11px] font-bold text-primary">{{ formatCurrency(item.price) }}</span>
-                  </div>
-                </div>
+                <button
+                  v-if="item.book?.type === 'ebook' && order.status === 'completed'"
+                  @click="$router.push(`/reader/${order.id}/${item.book.id}`)"
+                  class="shrink-0 px-3 py-2 rounded-xl bg-primary/10 text-primary hover:bg-primary hover:text-on-primary transition-all border-none cursor-pointer flex items-center gap-1 text-xs font-bold shadow-xs"
+                >
+                  <span class="material-symbols-outlined text-[16px]">auto_stories</span>
+                  Đọc ngay
+                </button>
               </div>
             </div>
             
-            <div class="mt-10 pt-8 border-t border-outline-variant/10 flex justify-between items-end">
-               <div>
-                  <p class="text-[10px] font-bold text-outline uppercase tracking-widest mb-1">Tổng giá trị</p>
-                  <p class="text-2xl font-bold text-on-surface tracking-tighter">{{ formatCurrency(order.grand_total || order.total_amount) }}</p>
-               </div>
-               <span v-if="order.shipping_fee === 0 || order.is_freeship" class="text-[10px] font-bold text-emerald-600 uppercase tracking-widest px-3 py-1 bg-emerald-50 rounded-lg border border-emerald-100">Freeship</span>
+            <!-- Financial Breakdown Table -->
+            <div class="mt-8 pt-6 border-t border-outline-variant/10 space-y-3">
+              <div class="flex justify-between text-xs text-on-surface-variant font-medium">
+                <span>Tạm tính ({{ order.items?.length || 0 }} sản phẩm)</span>
+                <span class="font-bold text-on-surface">{{ formatCurrency(subtotalAmount) }}</span>
+              </div>
+              <div class="flex justify-between text-xs text-on-surface-variant font-medium">
+                <span>Phí vận chuyển</span>
+                <span v-if="shippingFeeAmount === 0 || isEbookOnly" class="font-bold text-emerald-600">Miễn phí (Freeship)</span>
+                <span v-else class="font-bold text-on-surface">{{ formatCurrency(shippingFeeAmount) }}</span>
+              </div>
+              <div v-if="discountAmount > 0" class="flex justify-between text-xs text-emerald-600 font-medium">
+                <span>Giảm giá Voucher / Thành viên</span>
+                <span class="font-bold">-{{ formatCurrency(discountAmount) }}</span>
+              </div>
+              <div class="pt-3 border-t border-outline-variant/10 flex justify-between items-end">
+                <div>
+                  <p class="text-[10px] font-bold text-outline uppercase tracking-widest mb-1">Tổng thanh toán</p>
+                  <p class="text-2xl font-black text-primary tracking-tight">{{ formatCurrency(grandTotalAmount) }}</p>
+                </div>
+                <span v-if="shippingFeeAmount === 0 || isEbookOnly" class="text-[10px] font-bold text-emerald-600 uppercase tracking-widest px-3 py-1 bg-emerald-50 rounded-lg border border-emerald-100">Freeship</span>
+              </div>
             </div>
           </div>
         </div>
@@ -313,6 +460,7 @@ import { useToast } from 'primevue/usetoast'
 import Dialog from 'primevue/dialog'
 import apiClient from '@/services/axios'
 import { operationKey } from '@/services/returnWorkflow'
+import { canCancelOrder, formatCancellationScope } from '@/utils/buyerCancellation'
 
 const route = useRoute()
 const toast = useToast()
@@ -321,20 +469,70 @@ const loading = ref(true)
 const error = ref(null)
 const confirmingReceipt = ref(false)
 const confirmDialogVisible = ref(false)
+const showCancelModal = ref(false)
+const cancelling = ref(false)
 
-const trackingSteps = [
-  { label: 'Đã đặt hàng', icon: 'check_circle' },
-  { label: 'Đang xử lý', icon: 'pending' },
-  { label: 'Giao cho ĐVVC', icon: 'local_shipping' },
-  { label: 'Đang giao', icon: 'route' },
-  { label: 'Chờ bạn xác nhận', icon: 'fact_check' },
-  { label: 'Hoàn tất', icon: 'verified' }
-]
+const openCancelModal = () => {
+  if (!canCancelOrder(order.value) || cancelling.value) return
+  showCancelModal.value = true
+}
+
+const confirmCancelOrder = async () => {
+  if (!canCancelOrder(order.value) || cancelling.value) return
+  cancelling.value = true
+  try {
+    const res = await apiClient.post(`/api/orders/${order.value.id}/cancel`)
+    toast.add({ severity: 'success', summary: 'Thành công', detail: res.data?.message || 'Hủy đơn hàng thành công.', life: 4000 })
+    showCancelModal.value = false
+    await fetchOrder()
+  } catch (err) {
+    const errorMsg = err.response?.data?.message || 'Không thể hủy đơn hàng này.'
+    toast.add({ severity: 'error', summary: 'Lỗi', detail: errorMsg, life: 4000 })
+  } finally {
+    cancelling.value = false
+  }
+}
+
+const hasEbookItems = computed(() => {
+  return order.value?.items?.some(item => item.book?.type === 'ebook')
+})
+
+const isEbookOnly = computed(() => {
+  return (order.value?.items?.length || 0) > 0 && order.value.items.every(item => item.book?.type === 'ebook')
+})
+
+const trackingSteps = computed(() => {
+  if (isEbookOnly.value) {
+    return [
+      { label: 'Đã đặt hàng', icon: 'check_circle' },
+      { label: 'Xác nhận thanh toán', icon: 'payments' },
+      { label: 'Cấp quyền Thư viện', icon: 'verified_user' },
+      { label: 'Sẵn sàng đọc', icon: 'auto_stories' }
+    ]
+  }
+  return [
+    { label: 'Đã đặt hàng', icon: 'check_circle' },
+    { label: 'Đang xử lý', icon: 'pending' },
+    { label: 'Giao cho ĐVVC', icon: 'local_shipping' },
+    { label: 'Đang giao', icon: 'route' },
+    { label: 'Chờ bạn xác nhận', icon: 'fact_check' },
+    { label: 'Hoàn tất', icon: 'verified' }
+  ]
+})
 
 const currentStepIndex = computed(() => {
   if (!order.value) return 0
-  const sStatus = order.value.shipping_status
   const status = order.value.status
+  const sStatus = order.value.shipping_status
+
+  if (isEbookOnly.value) {
+    if (status === 'cancelled') return 0
+    if (status === 'completed' || order.value.payment_status === 'paid') return 3
+    if (status === 'processing') return 2
+    if (order.value.payment_status === 'unpaid') return 0
+    return 1
+  }
+
   if (status === 'cancelled' || sStatus === 'failed') return 0
   if (status === 'completed' || sStatus === 'delivered') return 5
   if (sStatus === 'awaiting_customer_confirmation') return 4
@@ -346,15 +544,30 @@ const currentStepIndex = computed(() => {
   return 0
 })
 
-const journeyException = computed(() => {
-  if (order.value?.status === 'cancelled') return 'Đơn hàng đã bị hủy; hành trình giao hàng không tiếp tục.'
-  if (order.value?.shipping_status === 'failed') return 'Việc giao hàng đã thất bại. Vui lòng liên hệ bộ phận hỗ trợ.'
-  return null
+const progressWidth = computed(() => {
+  const steps = trackingSteps.value.length - 1
+  return steps > 0 ? `${(currentStepIndex.value / steps) * 100}%` : '0%'
 })
 
-const progressWidth = computed(() => {
-  const steps = trackingSteps.length - 1
-  return `${(currentStepIndex.value / steps) * 100}%`
+const subtotalAmount = computed(() => {
+  if (order.value?.invoice?.subtotal_amount != null) return order.value.invoice.subtotal_amount
+  return (order.value?.items || []).reduce((acc, item) => acc + ((item.price || 0) * (item.quantity || 1)), 0)
+})
+
+const shippingFeeAmount = computed(() => {
+  if (order.value?.invoice?.shipping_fee_amount != null) return order.value.invoice.shipping_fee_amount
+  return order.value?.shipping_fee || 0
+})
+
+const discountAmount = computed(() => {
+  if (!order.value?.invoice) return 0
+  const coupon = order.value.invoice.coupon_discount_amount || 0
+  const member = order.value.invoice.membership_discount_amount || 0
+  return coupon + member
+})
+
+const grandTotalAmount = computed(() => {
+  return order.value?.invoice?.total_amount || order.value?.grand_total || order.value?.total_amount || 0
 })
 
 const estimatedDelivery = computed(() => {
@@ -467,6 +680,42 @@ const getStatusStyle = (orderData) => {
     cancelled: 'bg-rose-500 text-white shadow-rose-500/20'
   }
   return map[status] || 'bg-outline text-white'
+}
+
+// Helpers cho card Thông tin đơn hàng
+const getOrderStatusBadgeText = (orderData) => {
+  const map = { pending: 'Chờ xử lý', processing: 'Đang xử lý', shipped: 'Đang vận chuyển', completed: 'Hoàn thành', cancelled: 'Đã hủy' }
+  return map[orderData.status] || orderData.status
+}
+
+const getOrderStatusBadgeStyle = (orderData) => {
+  const map = {
+    pending: 'bg-amber-100 text-amber-700 border border-amber-200',
+    processing: 'bg-blue-100 text-blue-700 border border-blue-200',
+    shipped: 'bg-indigo-100 text-indigo-700 border border-indigo-200',
+    completed: 'bg-emerald-100 text-emerald-700 border border-emerald-200',
+    cancelled: 'bg-error-container text-error border border-error/20'
+  }
+  return map[orderData.status] || 'bg-surface-container-high text-on-surface-variant'
+}
+
+const getPaymentBadgeText = (status) => {
+  const map = { unpaid: 'Chưa thanh toán', paid: 'Đã thanh toán', refunded: 'Đã hoàn tiền' }
+  return map[status] || status
+}
+
+const getPaymentBadgeStyle = (status) => {
+  const map = {
+    unpaid: 'bg-rose-100 text-rose-700 border border-rose-200',
+    paid: 'bg-emerald-100 text-emerald-700 border border-emerald-200',
+    refunded: 'bg-blue-100 text-blue-700 border border-blue-200'
+  }
+  return map[status] || 'bg-surface-container-high text-on-surface-variant'
+}
+
+const getPaymentMethodLabel = (method) => {
+  const map = { cod: 'COD (Thanh toán khi nhận)', online: 'Online (VNPAY)', vnpay: 'Online (VNPAY)', VNPAY: 'Online (VNPAY)' }
+  return map[method] || method
 }
 
 onMounted(() => {

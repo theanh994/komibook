@@ -12,16 +12,45 @@ use Illuminate\Support\Str;
 
 class VendorApprovalController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        $vendors = Vendor::withoutGlobalScopes()->with('user')->whereIn('onboarding_status', [
-            VendorOnboardingStatus::Submitted->value,
-            VendorOnboardingStatus::Resubmitted->value,
-            VendorOnboardingStatus::UnderReview->value,
-        ])->get();
+        $query = Vendor::withoutGlobalScopes()->with('user');
+
+        $status = $request->query('status');
+        if ($status && $status !== 'all') {
+            $statuses = explode(',', $status);
+            $query->whereIn('onboarding_status', $statuses);
+        } elseif (! $status || $status === 'pending') {
+            $query->whereIn('onboarding_status', [
+                VendorOnboardingStatus::Submitted->value,
+                VendorOnboardingStatus::Resubmitted->value,
+                VendorOnboardingStatus::UnderReview->value,
+            ]);
+        }
+
+        $vendors = $query->orderBy('updated_at', 'desc')->get();
+
+        $allCounts = Vendor::withoutGlobalScopes()
+            ->selectRaw('onboarding_status, COUNT(*) as aggregate')
+            ->groupBy('onboarding_status')
+            ->pluck('aggregate', 'onboarding_status');
+
+        $pendingCount = (int) ($allCounts->get(VendorOnboardingStatus::Submitted->value, 0)
+            + $allCounts->get(VendorOnboardingStatus::Resubmitted->value, 0)
+            + $allCounts->get(VendorOnboardingStatus::UnderReview->value, 0));
+        $changesRequestedCount = (int) $allCounts->get(VendorOnboardingStatus::ChangesRequested->value, 0);
+        $approvedCount = (int) $allCounts->get(VendorOnboardingStatus::Approved->value, 0);
+        $rejectedCount = (int) $allCounts->get(VendorOnboardingStatus::Rejected->value, 0);
 
         return response()->json(['status' => 'success', 'data' => [
             'vendors' => VendorProfileResource::collection($vendors),
+            'stats' => [
+                'pending' => $pendingCount,
+                'changes_requested' => $changesRequestedCount,
+                'approved' => $approvedCount,
+                'rejected' => $rejectedCount,
+                'total' => (int) $allCounts->sum(),
+            ],
         ]]);
     }
 

@@ -790,8 +790,9 @@ class CheckoutSessionLifecycleTest extends TestCase
 
         $session = CheckoutSession::first();
 
-        // Mark order confirmed & paid
+        // Mark order paid in a buyer-cancellable-looking pre-shipment state.
         $orders[0]->status = 'confirmed';
+        $orders[0]->shipping_status = 'pending_pickup';
         $orders[0]->payment_status = 'paid';
         $orders[0]->save();
 
@@ -802,7 +803,7 @@ class CheckoutSessionLifecycleTest extends TestCase
             $lifecycleService->cancelByBuyer($orders[0]->id, $user->id);
             $this->fail('Expected LogicException on confirmed online order cancelByBuyer');
         } catch (LogicException $e) {
-            $this->assertStringContainsString('status', $e->getMessage());
+            $this->assertStringContainsString('return/refund workflow', $e->getMessage());
         }
 
         // 2. expireSession fails closed after expiration time

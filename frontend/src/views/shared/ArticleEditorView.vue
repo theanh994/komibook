@@ -1,5 +1,5 @@
 <script setup>
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import DOMPurify from 'dompurify'
 import Quill from 'quill'
@@ -18,6 +18,7 @@ const props = defineProps({ role: { type: String, required: true } })
 const route = useRoute()
 const router = useRouter()
 const editorElement = ref()
+const editorPanelRef = ref()
 const coverInput = ref()
 const inlineImageInput = ref()
 const loading = ref(false)
@@ -25,6 +26,12 @@ const loadingArticle = ref(false)
 const message = ref('')
 const error = ref('')
 const previewOpen = ref(false)
+const openPreview = () => {
+  if (quill) {
+    form.body = quill.root.innerHTML
+  }
+  previewOpen.value = true
+}
 const dirty = ref(false)
 const books = ref([])
 const series = ref([])
@@ -45,6 +52,14 @@ const draftKey = computed(() => `komibook-newsroom:${props.role}:${articleId.val
 let quill
 let autosaveTimer
 let inlineImageRange = null
+
+// Floating Selection Toolbar State (Trình chỉnh sửa khi bôi đen)
+const selectionToolbar = reactive({
+  visible: false,
+  top: 0,
+  left: 0,
+  formats: {},
+})
 
 const defaultTitleFormat = { font: 'inter', size: '40', align: 'left', weight: 'bold', style: 'normal' }
 const defaultExcerptFormat = { font: 'inter', size: '16', align: 'left', weight: 'normal', style: 'normal' }
@@ -103,6 +118,111 @@ const toggleFormat = (format, key, activeValue) => {
 }
 
 const markDirty = () => { dirty.value = true }
+
+const resizeTextareaElement = (el) => {
+  if (!el) return
+  el.style.height = 'auto'
+  el.style.height = `${Math.max(el.scrollHeight, 60)}px`
+}
+
+const autoResizeTextarea = (event) => {
+  resizeTextareaElement(event.target)
+  markDirty()
+}
+
+const resizeAllTextareas = () => {
+  nextTick(() => {
+    requestAnimationFrame(() => {
+      ['article-title', 'article-excerpt'].forEach((id) => {
+        const el = document.getElementById(id)
+        if (el) resizeTextareaElement(el)
+      })
+    })
+  })
+}
+
+watch(
+  [
+    () => form.title,
+    () => form.excerpt,
+    () => form.title_format.size,
+    () => form.title_format.font,
+    () => form.excerpt_format.size,
+    () => form.excerpt_format.font,
+  ],
+  () => {
+    resizeAllTextareas()
+  },
+  { immediate: true, deep: true }
+)
+
+// Floating Selection Toolbar Controls (Khi bôi đen chữ)
+const updateSelectionToolbar = () => {
+  if (!quill || !editorPanelRef.value) return
+  const range = quill.getSelection()
+  if (!range || range.length === 0) {
+    selectionToolbar.visible = false
+    return
+  }
+
+  // Get active formats at selection
+  selectionToolbar.formats = quill.getFormat(range)
+
+  // Bounds relative to Quill container
+  const bounds = quill.getBounds(range.index, range.length)
+  const panelRect = editorPanelRef.value.getBoundingClientRect()
+
+  // Height of fixed main Quill toolbar at the top is approx 44px
+  const mainToolbarHeight = 48
+
+  // Calculate top (~52px above selection top)
+  let computedTop = bounds.top - 52
+
+  // Prevent overlap with main fixed toolbar: if near top or if computedTop < mainToolbarHeight, place BELOW selection
+  if (bounds.top < 65 || computedTop < mainToolbarHeight) {
+    computedTop = bounds.bottom + 8
+  }
+
+  // Double check that computedTop never overlaps the main toolbar
+  if (computedTop < mainToolbarHeight) {
+    computedTop = mainToolbarHeight + 4
+  }
+
+  // Center horizontally over selection
+  let computedLeft = bounds.left + (bounds.width / 2) - 170
+  if (computedLeft < 10) computedLeft = 10
+  if (computedLeft > panelRect.width - 360) {
+    computedLeft = Math.max(10, panelRect.width - 360)
+  }
+
+  selectionToolbar.top = computedTop
+  selectionToolbar.left = computedLeft
+  selectionToolbar.visible = true
+}
+
+const formatSelection = (format, value) => {
+  if (!quill) return
+  const range = quill.getSelection()
+  if (range && range.length > 0) {
+    quill.formatText(range.index, range.length, format, value, 'user')
+  } else {
+    quill.format(format, value, 'user')
+  }
+  form.body = quill.root.innerHTML
+  markDirty()
+  nextTick(updateSelectionToolbar)
+}
+
+const cleanSelection = () => {
+  if (!quill) return
+  const range = quill.getSelection()
+  if (range && range.length > 0) {
+    quill.removeFormat(range.index, range.length, 'user')
+  }
+  form.body = quill.root.innerHTML
+  markDirty()
+  nextTick(updateSelectionToolbar)
+}
 
 const loadBooks = async () => {
   try {
@@ -278,12 +398,24 @@ const rememberCoverSize = (event) => {
     : ''
 }
 
-const chooseInlineImage = () => {
-  if (!articleId.value) {
-    error.value = 'Hãy lưu bản nháp lần đầu trước khi chèn ảnh vào nội dung.'
-    return
-  }
+const chooseInlineImage = async () => {
+  error.value = ''
   inlineImageRange = quill?.getSelection(true) || { index: quill?.getLength() || 0, length: 0 }
+
+  if (!articleId.value) {
+    if (!form.title.trim()) {
+      error.value = 'Vui lòng nhập tiêu đề bài viết trước khi chèn ảnh vào nội dung.'
+      return
+    }
+    const saved = await save()
+    if (!saved || !articleId.value) {
+      if (!error.value) {
+        error.value = 'Chưa thể tạo bản nháp bài viết để tải ảnh. Vui lòng kiểm tra lại thông tin.'
+      }
+      return
+    }
+  }
+
   inlineImageInput.value?.click()
 }
 
@@ -310,12 +442,26 @@ const uploadInlineImage = async () => {
     payload.append('alt_text', inlineImageAlt.value.trim())
     const response = await apiClient.post(`${baseUrl.value}/${articleId.value}/media`, payload)
     const range = inlineImageRange || { index: quill.getLength(), length: 0 }
-    quill.insertEmbed(range.index, 'image', response.data.data.url, 'user')
-    quill.setSelection(range.index + 1, 0, 'silent')
+    const imageUrl = response.data.data.url
+    const altText = inlineImageAlt.value.trim()
+
+    // 1. Insert image embed
+    quill.insertEmbed(range.index, 'image', imageUrl, 'user')
+    // 2. Automatically center the image line
+    quill.formatLine(range.index, 1, 'align', 'center', 'user')
+
+    // 3. Insert description text right below the image, centered and formatted (NO "Chú thích ảnh:" prefix)
+    if (altText) {
+      quill.insertText(range.index + 1, `\n${altText}\n`, 'user')
+      quill.formatLine(range.index + 1, 1, 'align', 'center', 'user')
+      quill.formatLine(range.index + 1, 1, 'italic', true, 'user')
+    }
+
+    quill.setSelection(range.index + (altText ? altText.length + 3 : 2), 0, 'silent')
     form.body = quill.root.innerHTML
     markDirty()
     cancelInlineImage()
-    message.value = 'Đã chèn ảnh đúng tỷ lệ gốc vào nội dung. Hãy lưu bài viết để hoàn tất.'
+    message.value = 'Đã chèn ảnh tự động căn giữa (70% khung) kèm mô tả vào bài viết.'
   } catch (requestError) {
     error.value = requestError.response?.data?.message || 'Không thể tải ảnh nội dung.'
   } finally {
@@ -324,7 +470,7 @@ const uploadInlineImage = async () => {
 }
 
 const restoreLocal = () => {
-    const local = localStorage.getItem(draftKey.value)
+  const local = localStorage.getItem(draftKey.value)
   if (!local) return
   Object.assign(form, JSON.parse(local))
   quill?.clipboard.dangerouslyPasteHTML(form.body || '')
@@ -341,22 +487,41 @@ onMounted(async () => {
   quill = new Quill(editorElement.value, {
     theme: 'snow',
     placeholder: 'Bắt đầu viết nội dung bài báo...',
-    modules: { toolbar: { container: [
-      [{ font: Font.whitelist }, { size: Size.whitelist }],
-      [{ header: [1, 2, 3, false] }],
-      ['bold', 'italic', 'underline', 'strike'],
-      [{ color: [] }, { background: [] }],
-      [{ script: 'sub' }, { script: 'super' }],
-      [{ list: 'ordered' }, { list: 'bullet' }, { indent: '-1' }, { indent: '+1' }],
-      [{ align: [] }],
-      ['blockquote', 'link', 'image'],
-      ['clean'],
-    ], handlers: { image: chooseInlineImage } } },
+    modules: {
+      toolbar: {
+        container: [
+          [{ font: Font.whitelist }, { size: Size.whitelist }],
+          [{ header: [1, 2, 3, false] }],
+          ['bold', 'italic', 'underline', 'strike'],
+          [{ color: [] }, { background: [] }],
+          [{ script: 'sub' }, { script: 'super' }],
+          [{ list: 'ordered' }, { list: 'bullet' }, { indent: '-1' }, { indent: '+1' }],
+          [{ align: '' }, { align: 'center' }, { align: 'right' }, { align: 'justify' }],
+          ['blockquote', 'link', 'image'],
+          ['clean'],
+        ],
+        handlers: { image: chooseInlineImage }
+      }
+    },
   })
+
   quill.on('text-change', () => {
     form.body = quill.root.innerHTML
     markDirty()
+    const range = quill.getSelection()
+    if (range && range.length > 0) {
+      updateSelectionToolbar()
+    }
   })
+
+  quill.on('selection-change', (range) => {
+    if (range && range.length > 0) {
+      updateSelectionToolbar()
+    } else {
+      selectionToolbar.visible = false
+    }
+  })
+
   await loadBooks()
   await Promise.all([loadSeries(), loadArticle()])
   autosaveTimer = window.setInterval(() => {
@@ -381,7 +546,7 @@ onBeforeUnmount(() => window.clearInterval(autosaveTimer))
         <p class="mt-2 text-on-surface-variant">Bản nháp được lưu cục bộ mỗi 15 giây; lịch sử chỉ tạo khi bạn bấm lưu.</p>
       </div>
       <div class="flex flex-wrap gap-2">
-        <button class="ui-btn ui-btn-secondary" type="button" @click="previewOpen = true">Xem trước</button>
+        <button class="ui-btn ui-btn-secondary" type="button" @click="openPreview">Xem trước</button>
         <button class="ui-btn ui-btn-primary" type="button" :disabled="loading" @click="save">{{ loading ? 'Đang lưu…' : (form.status === 'published' ? 'Lưu bản hiệu chỉnh' : 'Lưu bản nháp') }}</button>
         <button v-if="!isAdmin && ['draft', 'changes_requested'].includes(form.status)" class="ui-btn ui-btn-commerce" type="button" :disabled="loading" @click="submitForReview">Gửi duyệt</button>
       </div>
@@ -393,6 +558,7 @@ onBeforeUnmount(() => window.clearInterval(autosaveTimer))
 
     <div v-show="!loadingArticle" class="grid min-w-0 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
       <div class="min-w-0 space-y-5">
+        <!-- Title Panel -->
         <div class="ui-panel">
           <label class="block font-bold text-on-surface" for="article-title">Tiêu đề bài viết</label>
           <div class="typography-toolbar mt-3" role="toolbar" aria-label="Định dạng tiêu đề">
@@ -433,10 +599,170 @@ onBeforeUnmount(() => window.clearInterval(autosaveTimer))
               </button>
             </div>
           </div>
-          <textarea id="article-title" v-model="form.title" class="mt-3 min-h-24 w-full resize-y border-0 bg-transparent p-0 leading-tight text-primary outline-none" :style="typographyStyle(form.title_format)" maxlength="255" rows="3" placeholder="Nhập tiêu đề rõ ràng, hấp dẫn…" @input="markDirty"></textarea>
+          <textarea id="article-title" v-model="form.title" class="mt-3 min-h-[60px] w-full resize-none overflow-hidden border-0 bg-transparent p-0 leading-tight text-primary outline-none" :style="typographyStyle(form.title_format)" maxlength="255" rows="1" placeholder="Nhập tiêu đề rõ ràng, hấp dẫn…" @input="autoResizeTextarea"></textarea>
           <p class="mt-3 text-sm text-on-surface-variant">Đường dẫn: /blog/{{ slugPreview || 'duong-dan-bai-viet' }}</p>
         </div>
-        <div class="ui-panel p-0">
+
+        <!-- Body Editor Panel with Sticky Toolbar and Floating Selection Bubble Toolbar -->
+        <div ref="editorPanelRef" class="ui-panel p-0 relative">
+          <!-- Floating Selection Bubble Toolbar (Trình chỉnh sửa nổi xuất hiện khi BÔI ĐEN chữ) -->
+          <Transition
+            enter-active-class="transition duration-150 ease-out"
+            enter-from-class="opacity-0 translate-y-1 scale-95"
+            enter-to-class="opacity-100 translate-y-0 scale-100"
+            leave-active-class="transition duration-100 ease-in"
+            leave-from-class="opacity-100 translate-y-0 scale-100"
+            leave-to-class="opacity-0 translate-y-1 scale-95"
+          >
+            <div
+              v-if="selectionToolbar.visible"
+              class="floating-selection-bubble absolute z-50 flex items-center gap-1 rounded-2xl border border-slate-700 bg-slate-900/95 p-1.5 text-white shadow-2xl backdrop-blur-md"
+              :style="{ top: `${selectionToolbar.top}px`, left: `${selectionToolbar.left}px` }"
+              @mousedown.prevent
+            >
+              <!-- Alignment Buttons Group -->
+              <div class="flex items-center gap-0.5 border-r border-slate-700/80 pr-1.5">
+                <button
+                  type="button"
+                  class="bubble-btn"
+                  :class="{ 'is-active': !selectionToolbar.formats.align || selectionToolbar.formats.align === 'left' }"
+                  title="Căn trái"
+                  @click="formatSelection('align', false)"
+                >
+                  <span class="material-symbols-outlined text-[17px]">format_align_left</span>
+                </button>
+
+                <button
+                  type="button"
+                  class="bubble-btn"
+                  :class="{ 'is-active': selectionToolbar.formats.align === 'center' }"
+                  title="Căn giữa"
+                  @click="formatSelection('align', 'center')"
+                >
+                  <span class="material-symbols-outlined text-[17px]">format_align_center</span>
+                </button>
+
+                <button
+                  type="button"
+                  class="bubble-btn"
+                  :class="{ 'is-active': selectionToolbar.formats.align === 'right' }"
+                  title="Căn phải"
+                  @click="formatSelection('align', 'right')"
+                >
+                  <span class="material-symbols-outlined text-[17px]">format_align_right</span>
+                </button>
+
+                <button
+                  type="button"
+                  class="bubble-btn"
+                  :class="{ 'is-active': selectionToolbar.formats.align === 'justify' }"
+                  title="Căn đều"
+                  @click="formatSelection('align', 'justify')"
+                >
+                  <span class="material-symbols-outlined text-[17px]">format_align_justify</span>
+                </button>
+              </div>
+
+              <!-- Text Styles Group -->
+              <div class="flex items-center gap-0.5 border-r border-slate-700/80 px-1">
+                <button
+                  type="button"
+                  class="bubble-btn"
+                  :class="{ 'is-active': selectionToolbar.formats.bold }"
+                  title="In đậm (Bold)"
+                  @click="formatSelection('bold', !selectionToolbar.formats.bold)"
+                >
+                  <span class="material-symbols-outlined text-[17px]">format_bold</span>
+                </button>
+
+                <button
+                  type="button"
+                  class="bubble-btn"
+                  :class="{ 'is-active': selectionToolbar.formats.italic }"
+                  title="In nghiêng (Italic)"
+                  @click="formatSelection('italic', !selectionToolbar.formats.italic)"
+                >
+                  <span class="material-symbols-outlined text-[17px]">format_italic</span>
+                </button>
+
+                <button
+                  type="button"
+                  class="bubble-btn"
+                  :class="{ 'is-active': selectionToolbar.formats.underline }"
+                  title="Gạch chân (Underline)"
+                  @click="formatSelection('underline', !selectionToolbar.formats.underline)"
+                >
+                  <span class="material-symbols-outlined text-[17px]">format_underlined</span>
+                </button>
+
+                <button
+                  type="button"
+                  class="bubble-btn"
+                  :class="{ 'is-active': selectionToolbar.formats.strike }"
+                  title="Gạch ngang (Strikethrough)"
+                  @click="formatSelection('strike', !selectionToolbar.formats.strike)"
+                >
+                  <span class="material-symbols-outlined text-[17px]">strikethrough_s</span>
+                </button>
+              </div>
+
+              <!-- Size & Font Group -->
+              <div class="flex items-center gap-1 border-r border-slate-700/80 px-1">
+                <select
+                  :value="selectionToolbar.formats.size || '16px'"
+                  class="bubble-select max-w-[72px]"
+                  title="Cỡ chữ"
+                  @change="formatSelection('size', $event.target.value)"
+                >
+                  <option value="12px">12px</option>
+                  <option value="14px">14px</option>
+                  <option value="16px">16px</option>
+                  <option value="18px">18px</option>
+                  <option value="24px">24px</option>
+                  <option value="32px">32px</option>
+                </select>
+
+                <select
+                  :value="selectionToolbar.formats.font || 'inter'"
+                  class="bubble-select max-w-[90px]"
+                  title="Phông chữ"
+                  @change="formatSelection('font', $event.target.value)"
+                >
+                  <option v-for="[val, lbl] in fontOptions" :key="val" :value="val">{{ lbl }}</option>
+                </select>
+              </div>
+
+              <!-- Color, Image Upload & Clear Group -->
+              <div class="flex items-center gap-1 pl-1">
+                <input
+                  type="color"
+                  :value="selectionToolbar.formats.color || '#000000'"
+                  class="h-6 w-6 cursor-pointer rounded border-0 bg-transparent p-0"
+                  title="Đổi màu chữ"
+                  @change="formatSelection('color', $event.target.value)"
+                />
+
+                <button
+                  type="button"
+                  class="bubble-btn text-emerald-400 hover:bg-emerald-900/50"
+                  title="Chèn ảnh vào vị trí con trỏ"
+                  @click="chooseInlineImage"
+                >
+                  <span class="material-symbols-outlined text-[17px]">image</span>
+                </button>
+
+                <button
+                  type="button"
+                  class="bubble-btn text-rose-400 hover:bg-rose-900/50"
+                  title="Xóa định dạng"
+                  @click="cleanSelection"
+                >
+                  <span class="material-symbols-outlined text-[17px]">format_clear</span>
+                </button>
+              </div>
+            </div>
+          </Transition>
+
           <div ref="editorElement" class="min-h-[520px] bg-white" aria-label="Nội dung bài viết"></div>
           <input ref="inlineImageInput" class="sr-only" type="file" accept="image/*" @change="prepareInlineImage" />
           <div v-if="pendingInlineImage" class="border-t border-outline-variant/40 bg-surface-container-low p-4">
@@ -445,6 +771,8 @@ onBeforeUnmount(() => window.clearInterval(autosaveTimer))
             <div class="mt-3 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-end"><label class="text-sm font-semibold">Nội dung ảnh<input v-model="inlineImageAlt" class="ui-field mt-2" maxlength="500" /></label><button class="ui-btn ui-btn-secondary" type="button" @click="cancelInlineImage">Hủy</button><button class="ui-btn ui-btn-primary" type="button" :disabled="uploadingInlineImage || !inlineImageAlt.trim()" @click="uploadInlineImage">{{ uploadingInlineImage ? 'Đang tải…' : 'Chèn ảnh' }}</button></div>
           </div>
         </div>
+
+        <!-- Excerpt Panel -->
         <div class="ui-panel">
           <label class="block font-bold" for="article-excerpt">Tóm tắt dùng trên danh sách tin</label>
           <p class="mt-1 text-sm leading-6 text-on-surface-variant">Phần này chỉ dùng cho thẻ tin và kết quả tìm kiếm, không tự chèn vào nội dung bài đọc.</p>
@@ -486,17 +814,21 @@ onBeforeUnmount(() => window.clearInterval(autosaveTimer))
               </button>
             </div>
           </div>
-          <textarea id="article-excerpt" v-model="form.excerpt" class="ui-field mt-3 min-h-28" :style="typographyStyle(form.excerpt_format)" maxlength="1000" placeholder="Viết 2–3 câu giúp độc giả quyết định có mở bài hay không." @input="markDirty"></textarea>
+          <textarea id="article-excerpt" v-model="form.excerpt" class="mt-3 min-h-[60px] w-full resize-none overflow-hidden border-0 bg-transparent p-0 leading-relaxed text-on-surface outline-none" :style="typographyStyle(form.excerpt_format)" maxlength="500" rows="1" placeholder="Viết 1–2 câu tóm tắt để người đọc nắm nhanh ý chính…" @input="autoResizeTextarea"></textarea>
         </div>
       </div>
 
-      <aside class="min-w-0 space-y-5" aria-label="Thiết lập xuất bản">
+      <!-- Right Sidebar Settings -->
+      <aside class="space-y-5">
         <div class="ui-panel space-y-4">
           <h2 class="text-lg font-bold text-primary">Thiết lập bài viết</h2>
           <label class="block text-sm font-semibold">Loại bài
-            <select v-model="form.article_type" class="ui-field mt-2" @change="markDirty"><option v-for="[value, label] in typeOptions" :key="value" :value="value">{{ label }}</option></select>
+            <select v-model="form.article_type" class="ui-field mt-2" @change="markDirty">
+              <option v-for="[value, label] in typeOptions" :key="value" :value="value">{{ label }}</option>
+            </select>
           </label>
-          <div class="rounded-lg bg-surface-container p-3 text-sm">
+
+          <div class="rounded-xl border border-outline-variant/40 bg-surface-container p-3 text-xs">
             <strong class="text-primary">Chuyên mục và thẻ được gợi ý tự động</strong>
             <p class="mt-1 text-on-surface-variant">Hệ thống lấy từ thể loại của sản phẩm đã chọn: {{ derivedTaxonomy.join(', ') || 'chưa có dữ liệu' }}.</p>
           </div>
@@ -507,7 +839,7 @@ onBeforeUnmount(() => window.clearInterval(autosaveTimer))
         <div class="ui-panel">
           <h2 class="text-lg font-bold text-primary">Ảnh đại diện</h2>
           <button class="mt-3 flex min-h-44 w-full items-center justify-center overflow-hidden rounded-xl border border-dashed border-outline bg-surface-container-low p-3" type="button" @click="coverInput.click()">
-            <img v-if="form.cover_url" :src="form.cover_url" alt="Xem trước ảnh đại diện" class="h-auto max-h-[480px] w-auto max-w-full object-contain" @load="rememberCoverSize" />
+            <img v-if="form.cover_url" :src="form.cover_url" alt="Xem trước ảnh đại diện" class="h-auto max-h-[480px] w-auto max-w-[70%] rounded-lg object-contain" @load="rememberCoverSize" />
             <span v-else class="inline-flex items-center gap-2 text-sm font-bold text-on-surface-variant"><span class="material-symbols-outlined" aria-hidden="true">add_photo_alternate</span>Chọn ảnh đại diện</span>
           </button>
           <input ref="coverInput" class="sr-only" type="file" accept="image/*" @change="chooseCover" />
@@ -571,55 +903,194 @@ onBeforeUnmount(() => window.clearInterval(autosaveTimer))
       </aside>
     </div>
 
-    <div v-if="previewOpen" class="fixed inset-0 z-[100] overflow-y-auto bg-black/60 p-4" role="dialog" aria-modal="true" aria-labelledby="preview-title" @keydown.esc="previewOpen = false">
-      <article class="mx-auto max-w-4xl rounded-2xl bg-white p-6 shadow-xl md:p-10">
-        <div class="flex justify-between gap-4"><h2 id="preview-title" class="text-2xl font-bold text-primary">Xem trước bài viết</h2><button class="ui-btn ui-btn-secondary" type="button" @click="previewOpen = false">Đóng</button></div>
-        <p class="mt-8 text-sm font-bold uppercase tracking-wider text-secondary">{{ typeOptions.find(([value]) => value === form.article_type)?.[1] }}</p>
-        <h1 class="mt-3 text-4xl font-bold text-primary">{{ form.title || 'Tiêu đề bài viết' }}</h1>
-        <img v-if="form.cover_url" :src="form.cover_url" alt="" class="mx-auto mt-8 h-auto max-h-[70vh] max-w-full object-contain" />
-        <div class="newsroom-prose mt-8" v-html="safePreview"></div>
+    <!-- Preview Modal -->
+    <div
+      v-if="previewOpen"
+      class="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-black/60 p-4 sm:p-6 md:p-10 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="preview-title"
+      @click="previewOpen = false"
+      @keydown.esc="previewOpen = false"
+    >
+      <article class="relative my-auto w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl md:p-10 text-on-surface" @click.stop>
+        <div class="flex items-center justify-between gap-4 border-b border-outline-variant/30 pb-4">
+          <h2 id="preview-title" class="text-xl font-bold text-primary">Xem trước bài viết</h2>
+          <button class="ui-btn ui-btn-secondary flex items-center gap-1 cursor-pointer" type="button" @click="previewOpen = false">
+            <span class="material-symbols-outlined text-[18px]" aria-hidden="true">close</span> Đóng
+          </button>
+        </div>
+
+        <div class="mx-auto max-w-3xl text-center mt-6">
+          <p class="text-sm font-bold uppercase tracking-wider text-secondary">
+            {{ typeOptions.find(([value]) => value === form.article_type)?.[1] }}
+          </p>
+          <h1 class="mt-3 break-words text-3xl font-bold leading-tight text-primary md:text-5xl" :style="typographyStyle(form.title_format)">
+            {{ form.title || 'Tiêu đề bài viết' }}
+          </h1>
+          <p v-if="form.excerpt" class="mt-4 text-base leading-relaxed text-on-surface-variant md:text-lg" :style="typographyStyle(form.excerpt_format)">
+            {{ form.excerpt }}
+          </p>
+        </div>
+
+        <div v-if="form.cover_url" class="my-8 text-center">
+          <img :src="form.cover_url" alt="Xem trước ảnh đại diện" class="mx-auto block h-auto max-w-[70%] rounded-xl object-contain shadow-md" />
+        </div>
+
+        <div class="newsroom-prose mx-auto mt-8" v-html="safePreview"></div>
       </article>
     </div>
   </section>
 </template>
 
 <style scoped>
-:deep(.ql-toolbar.ql-snow) { display: flex !important; flex-wrap: wrap !important; align-items: center !important; gap: 4px !important; border: 1px solid var(--color-outline-variant) !important; background: #ffffff !important; padding: 6px 8px !important; border-top-left-radius: 8px !important; border-top-right-radius: 8px !important; border-bottom: 1px solid color-mix(in srgb, var(--color-outline-variant) 60%, transparent) !important; }
-:deep(.ql-snow .ql-formats) { display: inline-flex !important; align-items: center !important; gap: 2px !important; margin-right: 4px !important; padding-right: 6px !important; border-right: 1px solid color-mix(in srgb, var(--color-outline-variant) 40%, transparent) !important; height: 32px !important; }
-:deep(.ql-snow .ql-formats:last-child) { border-right: 0 !important; margin-right: 0 !important; padding-right: 0 !important; }
-:deep(.ql-snow.ql-toolbar button) { width: 32px !important; height: 32px !important; padding: 0 !important; border-radius: 6px !important; transition: all 0.15s ease !important; border: 0 !important; display: inline-flex !important; align-items: center !important; justify-content: center !important; box-sizing: border-box !important; background: transparent; }
-:deep(.ql-snow.ql-toolbar button svg) { width: 18px !important; height: 18px !important; float: none !important; margin: 0 !important; }
+/* Sticky Top Toolbar */
+:deep(.ql-toolbar.ql-snow) {
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 30 !important;
+  display: flex !important;
+  flex-wrap: wrap !important;
+  align-items: center !important;
+  gap: 4px !important;
+  border: 1px solid var(--color-outline-variant) !important;
+  background: #ffffff !important;
+  padding: 6px 8px !important;
+  border-top-left-radius: 12px !important;
+  border-top-right-radius: 12px !important;
+  border-bottom: 1px solid color-mix(in srgb, var(--color-outline-variant) 60%, transparent) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05) !important;
+}
+
+:deep(.ql-snow .ql-formats) {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 2px !important;
+  margin-right: 4px !important;
+  padding-right: 6px !important;
+  border-right: 1px solid color-mix(in srgb, var(--color-outline-variant) 40%, transparent) !important;
+  height: 32px !important;
+}
+:deep(.ql-snow .ql-formats:last-child) {
+  border-right: 0 !important;
+  margin-right: 0 !important;
+  padding-right: 0 !important;
+}
+
+:deep(.ql-snow.ql-toolbar button) {
+  width: 32px !important;
+  height: 32px !important;
+  padding: 0 !important;
+  border-radius: 6px !important;
+  transition: all 0.15s ease !important;
+  border: 0 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  box-sizing: border-box !important;
+  background: transparent;
+}
+:deep(.ql-snow.ql-toolbar button svg) {
+  width: 18px !important;
+  height: 18px !important;
+  float: none !important;
+  margin: 0 !important;
+}
 :deep(.ql-snow.ql-toolbar button:hover),
-:deep(.ql-snow .ql-picker-label:hover) { background: var(--color-surface-container-low) !important; color: var(--color-primary) !important; border-radius: 6px !important; }
+:deep(.ql-snow .ql-picker-label:hover) {
+  background: var(--color-surface-container-low) !important;
+  color: var(--color-primary) !important;
+  border-radius: 6px !important;
+}
 :deep(.ql-snow.ql-toolbar button.ql-active),
-:deep(.ql-snow .ql-picker-label.ql-active) { background: var(--color-primary-container) !important; color: var(--color-on-primary-container) !important; border-radius: 6px !important; }
+:deep(.ql-snow .ql-picker-label.ql-active) {
+  background: var(--color-primary-container) !important;
+  color: var(--color-on-primary-container) !important;
+  border-radius: 6px !important;
+}
 :deep(.ql-snow.ql-toolbar button.ql-active .ql-stroke) { stroke: var(--color-on-primary-container) !important; }
 :deep(.ql-snow.ql-toolbar button.ql-active .ql-fill) { fill: var(--color-on-primary-container) !important; }
-:deep(.ql-snow .ql-picker) { height: 32px !important; font-size: 14px !important; font-weight: 500 !important; color: var(--color-on-surface) !important; display: inline-flex !important; align-items: center !important; }
-:deep(.ql-snow .ql-picker-label) { height: 32px !important; padding: 0 8px !important; display: inline-flex !important; align-items: center !important; gap: 4px !important; border-radius: 6px !important; transition: all 0.15s ease !important; font-size: 14px !important; font-weight: 500 !important; }
+
+:deep(.ql-snow .ql-picker) {
+  height: 32px !important;
+  font-size: 14px !important;
+  font-weight: 500 !important;
+  color: var(--color-on-surface) !important;
+  display: inline-flex !important;
+  align-items: center !important;
+}
+:deep(.ql-snow .ql-picker-label) {
+  height: 32px !important;
+  padding: 0 8px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+  border-radius: 6px !important;
+  transition: all 0.15s ease !important;
+  font-size: 14px !important;
+  font-weight: 500 !important;
+}
 :deep(.ql-snow .ql-icon-picker .ql-picker-label),
-:deep(.ql-snow .ql-color-picker .ql-picker-label) { width: 32px !important; padding: 0 !important; justify-content: center !important; }
-:deep(.ql-snow .ql-picker-label svg) { width: 14px !important; height: 14px !important; float: none !important; margin: 0 !important; position: static !important; }
+:deep(.ql-snow .ql-color-picker .ql-picker-label) {
+  width: 32px !important;
+  padding: 0 !important;
+  justify-content: center !important;
+}
+:deep(.ql-snow .ql-picker-label svg) {
+  width: 14px !important;
+  height: 14px !important;
+  float: none !important;
+  margin: 0 !important;
+  position: static !important;
+}
 :deep(.ql-snow .ql-icon-picker .ql-picker-label svg),
-:deep(.ql-snow .ql-color-picker .ql-picker-label svg) { width: 18px !important; height: 18px !important; }
-:deep(.ql-snow .ql-picker-options) { border-radius: 12px !important; border: 1px solid color-mix(in srgb, var(--color-outline-variant) 50%, transparent) !important; box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.12) !important; padding: 6px !important; background: #ffffff !important; }
-:deep(.ql-snow .ql-picker-item) { border-radius: 6px !important; padding: 6px 10px !important; transition: background 0.12s ease !important; font-size: 14px !important; }
+:deep(.ql-snow .ql-color-picker .ql-picker-label svg) {
+  width: 18px !important;
+  height: 18px !important;
+}
+:deep(.ql-snow .ql-picker-options) {
+  border-radius: 12px !important;
+  border: 1px solid color-mix(in srgb, var(--color-outline-variant) 50%, transparent) !important;
+  box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.12) !important;
+  padding: 6px !important;
+  background: #ffffff !important;
+}
+:deep(.ql-snow .ql-picker-item) {
+  border-radius: 6px !important;
+  padding: 6px 10px !important;
+  transition: background 0.12s ease !important;
+  font-size: 14px !important;
+}
 :deep(.ql-snow .ql-picker-item:hover) { background: var(--color-surface-container-low) !important; }
-:deep(.ql-container.ql-snow) { min-height: 470px; border: 1px solid var(--color-outline-variant); border-top: 0; border-bottom-left-radius: 8px; border-bottom-right-radius: 8px; color: var(--color-on-surface); font-family: var(--font-literata); font-size: 1rem; line-height: 1.75; }
+
+:deep(.ql-container.ql-snow) {
+  min-height: 470px;
+  border: 1px solid var(--color-outline-variant);
+  border-top: 0;
+  border-bottom-left-radius: 12px;
+  border-bottom-right-radius: 12px;
+  color: var(--color-on-surface);
+  font-family: var(--font-literata);
+  font-size: 1rem;
+  line-height: 1.75;
+}
 :deep(.ql-editor) { min-height: 470px; color: var(--color-on-surface); }
-:deep(.ql-editor img) { display: block; max-width: 100%; height: auto; margin: 1.5rem auto; object-fit: contain; }
+:deep(.ql-editor img) { display: block; max-width: 70% !important; height: auto; margin: 1.75rem auto; object-fit: contain; border-radius: 0.75rem; }
+
 :deep(.ql-font-inter) { font-family: Inter, sans-serif; }
 :deep(.ql-font-literata) { font-family: Literata, Georgia, serif; }
 :deep(.ql-font-times-new-roman) { font-family: "Times New Roman", Times, serif; }
 :deep(.ql-font-arial) { font-family: Arial, sans-serif; }
 :deep(.ql-font-georgia) { font-family: Georgia, serif; }
 :deep(.ql-font-monospace) { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
+
 :deep(.ql-size-12px) { font-size: 12px; }
 :deep(.ql-size-14px) { font-size: 14px; }
 :deep(.ql-size-16px) { font-size: 16px; }
 :deep(.ql-size-18px) { font-size: 18px; }
 :deep(.ql-size-24px) { font-size: 24px; }
 :deep(.ql-size-32px) { font-size: 32px; }
+
 :deep(.ql-snow .ql-picker.ql-font) { width: 150px; }
 :deep(.ql-snow .ql-picker.ql-size) { width: 82px; }
 :deep(.ql-snow .ql-picker.ql-font .ql-picker-label::before),
@@ -629,12 +1100,76 @@ onBeforeUnmount(() => window.clearInterval(autosaveTimer))
 :deep(.ql-snow .ql-picker.ql-font [data-value='arial']::before) { content: 'Arial'; }
 :deep(.ql-snow .ql-picker.ql-font [data-value='georgia']::before) { content: 'Georgia'; }
 :deep(.ql-snow .ql-picker.ql-font [data-value='monospace']::before) { content: 'Monospace'; }
+
 :deep(.ql-snow .ql-picker.ql-size .ql-picker-label::before) { content: 'Cỡ chữ'; }
 :deep(.ql-snow .ql-picker.ql-size .ql-picker-label[data-value]::before),
 :deep(.ql-snow .ql-picker.ql-size .ql-picker-item::before) { content: attr(data-value); }
+
+/* Floating Selection Bubble Styling */
+.bubble-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  border: 0;
+  background: transparent;
+  color: #cbd5e1;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.bubble-btn:hover {
+  background: rgba(255, 255, 255, 0.18);
+  color: #ffffff;
+}
+.bubble-btn.is-active {
+  background: #3b82f6;
+  color: #ffffff;
+  font-weight: bold;
+}
+.bubble-select {
+  height: 28px;
+  border: 0;
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 6px;
+  padding: 0 4px;
+  outline: none;
+  cursor: pointer;
+}
+.bubble-select option {
+  background: #0f172a;
+  color: #ffffff;
+}
+
 .ui-panel,
 .ui-field { min-width: 0; max-width: 100%; }
-.newsroom-prose { max-width: 72ch; font-family: var(--font-literata); font-size: 1.0625rem; line-height: 1.8; }
+:deep(.newsroom-prose) { max-width: 72ch; font-family: var(--font-literata); font-size: 1.0625rem; line-height: 1.8; color: var(--color-on-surface); }
+:deep(.newsroom-prose p) { margin-block: 1.25em; }
+:deep(.newsroom-prose h1) { margin-top: 1.75em; font-size: 2rem; font-weight: 800; color: var(--color-primary); }
+:deep(.newsroom-prose h2) { margin-top: 1.5em; font-size: 1.5rem; font-weight: 800; color: var(--color-primary); }
+:deep(.newsroom-prose h3) { margin-top: 1.25em; font-size: 1.25rem; font-weight: 800; color: var(--color-primary); }
+:deep(.newsroom-prose img) { display: block; max-width: 70% !important; height: auto; margin: 1.75rem auto; object-fit: contain; border-radius: 0.75rem; }
+:deep(.newsroom-prose a) { color: var(--color-secondary); font-weight: 700; text-decoration: underline; }
+:deep(.newsroom-prose blockquote) { border-left: 4px solid var(--color-secondary); margin: 1.5rem 0; padding: 0.75rem 1.25rem; background: var(--color-surface-container-low); border-radius: 0 0.5rem 0.5rem 0; }
+:deep(.newsroom-prose .ql-align-center) { text-align: center; }
+:deep(.newsroom-prose .ql-align-right) { text-align: right; }
+:deep(.newsroom-prose .ql-align-justify) { text-align: justify; }
+:deep(.newsroom-prose .ql-font-inter) { font-family: Inter, sans-serif; }
+:deep(.newsroom-prose .ql-font-literata) { font-family: Literata, Georgia, serif; }
+:deep(.newsroom-prose .ql-font-times-new-roman) { font-family: "Times New Roman", Times, serif; }
+:deep(.newsroom-prose .ql-font-arial) { font-family: Arial, sans-serif; }
+:deep(.newsroom-prose .ql-font-georgia) { font-family: Georgia, serif; }
+:deep(.newsroom-prose .ql-font-monospace) { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
+:deep(.newsroom-prose .ql-size-12px) { font-size: 12px; }
+:deep(.newsroom-prose .ql-size-14px) { font-size: 14px; }
+:deep(.newsroom-prose .ql-size-16px) { font-size: 16px; }
+:deep(.newsroom-prose .ql-size-18px) { font-size: 18px; }
+:deep(.newsroom-prose .ql-size-24px) { font-size: 24px; }
+:deep(.newsroom-prose .ql-size-32px) { font-size: 32px; }
 .typography-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; border: 1px solid var(--color-outline-variant); background: #ffffff; padding: 6px 8px; border-top-left-radius: 8px; border-top-right-radius: 8px; }
 .typography-select { height: 32px; border: 0; background: transparent; color: var(--color-on-surface); font-size: 14px; font-weight: 500; padding: 0 4px; cursor: pointer; outline: none; }
 .typography-size { min-width: 64px; }

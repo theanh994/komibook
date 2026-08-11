@@ -11,14 +11,13 @@ const route = useRoute()
 const authStore = useAuthStore()
 const sidebarCollapsed = ref(false)
 const isMobile = ref(false)
-const userMenu = ref()
 const unreadNotificationsCount = ref(0)
 let notificationTimer
 
 // ─── Menu động theo Role ───────────────────────────────────────────────────
 const vendorMenuItems = [
   {
-    label: 'Dashboard',
+    label: 'Tổng quan',
     icon: 'pi pi-th-large',
     route: '/vendor/dashboard',
   },
@@ -49,24 +48,19 @@ const vendorMenuItems = [
     route: '/vendor/warehouses',
   },
   {
-    label: 'Nhân sự kho',
-    icon: 'pi pi-users',
-    route: '/vendor/warehouse-managers',
-  },
-  {
     label: 'Phiếu nhập / xuất kho',
     icon: 'pi pi-file',
     route: '/vendor/warehouse-documents',
   },
   {
+    label: 'Nhân sự kho',
+    icon: 'pi pi-users',
+    route: '/vendor/warehouse-managers',
+  },
+  {
     label: 'NXB & Nhà cung cấp',
     icon: 'pi pi-building',
     route: '/vendor/organizations',
-  },
-  {
-    label: 'Hỗ trợ khách hàng',
-    icon: 'pi pi-comments',
-    route: '/vendor/support',
   },
   {
     label: 'Quản lý Đơn hàng',
@@ -79,14 +73,19 @@ const vendorMenuItems = [
     route: '/vendor/returns',
   },
   {
-    label: 'Báo cáo doanh thu',
-    icon: 'pi pi-wallet',
-    route: '/vendor/finance',
+    label: 'Hỗ trợ khách hàng',
+    icon: 'pi pi-comments',
+    route: '/vendor/support',
   },
   {
     label: 'Ví KomiBook & Rút tiền',
     icon: 'pi pi-wallet',
     route: '/wallet',
+  },
+  {
+    label: 'Báo cáo doanh thu',
+    icon: 'pi pi-chart-pie',
+    route: '/vendor/finance',
   },
   {
     label: 'Đăng ký Flash Sale',
@@ -109,26 +108,6 @@ const adminMenuItems = [
     route: '/admin/dashboard',
   },
   {
-    label: 'Quản lý Users',
-    icon: 'pi pi-users',
-    route: '/admin/users',
-  },
-  {
-    label: 'Hồ sơ Nhà bán',
-    icon: 'pi pi-shop',
-    route: '/admin/approvals',
-  },
-  {
-    label: 'Trả hàng & Hoàn tiền',
-    icon: 'pi pi-replay',
-    route: '/admin/returns',
-  },
-  {
-    label: 'Kiểm duyệt nội dung',
-    icon: 'pi pi-comments',
-    route: '/admin/moderation',
-  },
-  {
     label: 'Quản lý Sách',
     icon: 'pi pi-book',
     children: [
@@ -138,6 +117,11 @@ const adminMenuItems = [
         route: '/admin/books',
       },
       {
+        label: 'Duyệt sách cũ',
+        icon: 'pi pi-check-circle',
+        route: '/admin/used-books/moderation',
+      },
+      {
         label: 'Thể loại sách',
         icon: 'pi pi-tags',
         route: '/admin/books/categories',
@@ -145,14 +129,19 @@ const adminMenuItems = [
     ],
   },
   {
+    label: 'Kiểm duyệt nội dung',
+    icon: 'pi pi-comments',
+    route: '/admin/moderation',
+  },
+  {
     label: 'Khuyến mãi',
     icon: 'pi pi-ticket',
     route: '/admin/coupons',
   },
   {
-    label: 'Báo cáo doanh thu',
-    icon: 'pi pi-chart-line',
-    route: '/admin/finance-report',
+    label: 'Trả hàng & Hoàn tiền',
+    icon: 'pi pi-replay',
+    route: '/admin/returns',
   },
   {
     label: 'Quản lý rút tiền',
@@ -160,14 +149,29 @@ const adminMenuItems = [
     route: '/admin/reconciliation',
   },
   {
-    label: 'Hỗ trợ khách hàng',
-    icon: 'pi pi-comments',
-    route: '/admin/support',
+    label: 'Báo cáo doanh thu',
+    icon: 'pi pi-chart-line',
+    route: '/admin/finance-report',
+  },
+  {
+    label: 'Quản lý người dùng',
+    icon: 'pi pi-users',
+    route: '/admin/users',
+  },
+  {
+    label: 'Hồ sơ Nhà bán',
+    icon: 'pi pi-shop',
+    route: '/admin/approvals',
   },
   {
     label: 'Chiến dịch thông báo',
     icon: 'pi pi-megaphone',
     route: '/admin/notifications',
+  },
+  {
+    label: 'Hỗ trợ khách hàng',
+    icon: 'pi pi-comments',
+    route: '/admin/support',
   },
   {
     label: 'Newsroom',
@@ -178,14 +182,14 @@ const adminMenuItems = [
     ],
   },
   {
-    label: 'Cấu hình hệ thống',
-    icon: 'pi pi-cog',
-    route: '/admin/system-config',
-  },
-  {
     label: 'Tổ chức & cung ứng',
     icon: 'pi pi-building',
     route: '/admin/organization-reviews',
+  },
+  {
+    label: 'Cấu hình hệ thống',
+    icon: 'pi pi-cog',
+    route: '/admin/system-config',
   },
 ]
 
@@ -277,28 +281,41 @@ watch(() => route.fullPath, () => {
   fetchUnreadCount()
 })
 
-const userMenuItems = ref([
-  {
-    label: 'Thông tin cá nhân',
-    icon: 'pi pi-user-edit',
-    command: () => router.push('/profile'),
-  },
-  { separator: true },
-  {
-    label: 'Đăng xuất',
-    icon: 'pi pi-sign-out',
-    command: async () => {
-      await authStore.logout()
-      window.location.assign('/')
-    },
-  },
-])
+const userMenuOpen = ref(false)
+const userMenuRef = ref(null)
 
-const toggleUserMenu = (event) => {
-  userMenu.value.toggle(event)
+const userRoleLabel = computed(() => {
+  if (authStore.isAdmin) return 'Quản trị'
+  if (authStore.isVendor || authStore.user?.capabilities?.active_vendor) return 'Nhà bán'
+  if (authStore.isWarehouseManager) return 'Quản kho'
+  return 'Quản lý'
+})
+
+const toggleUserMenu = () => {
+  userMenuOpen.value = !userMenuOpen.value
+}
+
+const openCustomerSupport = () => {
+  userMenuOpen.value = false
+  if (authStore.isVendor) {
+    router.push('/vendor/support')
+  } else {
+    router.push('/profile')
+  }
+}
+
+const handleWindowScroll = () => {
+  userMenuOpen.value = false
+}
+
+const handleClickOutside = (event) => {
+  if (userMenuRef.value && !userMenuRef.value.contains(event.target)) {
+    userMenuOpen.value = false
+  }
 }
 
 const logout = async () => {
+  userMenuOpen.value = false
   await authStore.logout()
   window.location.assign('/')
 }
@@ -324,14 +341,18 @@ onMounted(() => {
   syncExpandedSubmenus()
   fetchUnreadCount()
   notificationTimer = window.setInterval(fetchUnreadCount, 60000)
+  window.addEventListener('click', handleClickOutside)
   window.addEventListener('keydown', handleGlobalKeydown)
   window.addEventListener('resize', syncViewport)
+  window.addEventListener('scroll', handleWindowScroll, { passive: true, capture: true })
 })
 
 onUnmounted(() => {
   if (notificationTimer) window.clearInterval(notificationTimer)
+  window.removeEventListener('click', handleClickOutside)
   window.removeEventListener('keydown', handleGlobalKeydown)
   window.removeEventListener('resize', syncViewport)
+  window.removeEventListener('scroll', handleWindowScroll, { capture: true })
 })
 </script>
 
@@ -369,12 +390,22 @@ onUnmounted(() => {
             </div>
           </Transition>
         </router-link>
+
+        <!-- Toggle Collapse Button Inside Sidebar -->
+        <button
+          type="button"
+          class="sidebar-toggle-btn"
+          :title="sidebarCollapsed ? 'Mở rộng thanh điều hướng' : 'Thu gọn thanh điều hướng'"
+          :aria-label="sidebarCollapsed ? 'Mở rộng thanh điều hướng' : 'Thu gọn thanh điều hướng'"
+          @click="toggleSidebar"
+        >
+          <i :class="sidebarCollapsed ? 'pi pi-angle-right' : 'pi pi-angle-left'" aria-hidden="true"></i>
+        </button>
       </div>
 
       <!-- Navigation -->
       <nav class="sidebar-nav">
         <div class="nav-section">
-          <span v-if="!sidebarCollapsed" class="nav-label">MENU CHÍNH</span>
           <ul class="nav-list">
             <template v-for="item in menuItems" :key="item.label || item.route">
               <!-- Regular Item -->
@@ -471,18 +502,6 @@ onUnmounted(() => {
       </div>
     </aside>
 
-    <button
-      class="sidebar-edge-toggle"
-      :class="{ collapsed: sidebarCollapsed }"
-      type="button"
-      :aria-label="sidebarCollapsed ? 'Mở rộng thanh điều hướng' : 'Thu gọn thanh điều hướng'"
-      :aria-expanded="!sidebarCollapsed"
-      aria-controls="management-sidebar"
-      @click="toggleSidebar"
-    >
-      <i :class="sidebarCollapsed ? 'pi pi-angle-right' : 'pi pi-angle-left'" aria-hidden="true"></i>
-    </button>
-
     <!-- ═══ MAIN CONTENT AREA ═══ -->
     <div class="admin-main" :class="{ 'main-expanded': sidebarCollapsed }">
       <!-- Topbar -->
@@ -505,31 +524,121 @@ onUnmounted(() => {
             <span v-if="unreadNotificationsCount > 0" class="notification-badge" aria-hidden="true">{{ unreadNotificationsCount > 9 ? '9+' : unreadNotificationsCount }}</span>
           </button>
 
-          <!-- User Profile -->
-          <button
-            type="button"
-            class="topbar-user"
-            @click="toggleUserMenu"
-            aria-label="Mở menu tài khoản"
-            aria-haspopup="menu"
-            aria-controls="admin_user_menu"
-          >
-            <div v-if="userAvatarUrl" class="w-8 h-8 rounded-full overflow-hidden border border-slate-200 shadow-xs shrink-0 bg-slate-100 flex items-center justify-center">
-              <img :src="userAvatarUrl" :alt="authStore.user?.name" class="w-full h-full object-cover" />
-            </div>
-            <Avatar
-              v-else
-              icon="pi pi-user"
-              shape="circle"
-              class="user-avatar"
-            />
-            <div class="user-info">
-              <span class="user-name">{{ authStore.user?.name }}</span>
-              <span class="user-role">{{ shopName }}</span>
-            </div>
-            <i class="pi pi-chevron-down user-chevron"></i>
-          </button>
-          <Menu ref="userMenu" id="admin_user_menu" :model="userMenuItems" :popup="true" />
+          <!-- User Profile & Custom Dropdown -->
+          <div ref="userMenuRef" class="relative">
+            <button
+              type="button"
+              class="topbar-user"
+              :class="{ 'bg-slate-100 dark:bg-slate-800': userMenuOpen }"
+              aria-label="Mở menu tài khoản"
+              aria-haspopup="menu"
+              :aria-expanded="userMenuOpen"
+              @click.stop="toggleUserMenu"
+            >
+              <div v-if="userAvatarUrl" class="w-8 h-8 rounded-full overflow-hidden border border-slate-200 shadow-xs shrink-0 bg-slate-100 flex items-center justify-center">
+                <img :src="userAvatarUrl" :alt="authStore.user?.name" class="w-full h-full object-cover" />
+              </div>
+              <Avatar
+                v-else
+                icon="pi pi-user"
+                shape="circle"
+                class="user-avatar"
+              />
+              <div class="user-info">
+                <span class="user-name">{{ authStore.user?.name }}</span>
+                <span class="user-role">{{ shopName }}</span>
+              </div>
+              <i class="pi pi-chevron-down user-chevron transition-transform duration-200" :class="{ 'rotate-180': userMenuOpen }"></i>
+            </button>
+
+            <!-- Custom User Dropdown Panel -->
+            <Transition
+              enter-active-class="transition duration-200 ease-out"
+              enter-from-class="transform scale-95 opacity-0 -translate-y-2"
+              enter-to-class="transform scale-100 opacity-100 translate-y-0"
+              leave-active-class="transition duration-150 ease-in"
+              leave-from-class="transform scale-100 opacity-100 translate-y-0"
+              leave-to-class="transform scale-95 opacity-0 -translate-y-2"
+            >
+              <div
+                v-if="userMenuOpen"
+                class="absolute right-0 top-full mt-2 w-72 z-[100] overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-2 shadow-2xl origin-top-right text-slate-800 dark:text-slate-100"
+                role="menu"
+                @click.stop
+              >
+                <!-- User Profile Header Card -->
+                <div class="mb-2 flex items-center gap-3 rounded-xl bg-slate-100 dark:bg-slate-800/80 p-3 border border-slate-200/50 dark:border-slate-700/50">
+                  <div class="h-11 w-11 shrink-0 overflow-hidden rounded-full border-2 border-emerald-500/40 shadow-xs">
+                    <img v-if="userAvatarUrl" :src="userAvatarUrl" :alt="authStore.user?.name" class="h-full w-full object-cover" />
+                    <div v-else class="flex h-full w-full items-center justify-center bg-indigo-100 text-indigo-700 font-bold">
+                      <i class="pi pi-user text-lg"></i>
+                    </div>
+                  </div>
+                  <div class="min-w-0 flex-1">
+                    <div class="flex items-center justify-between gap-1">
+                      <h4 class="truncate text-sm font-bold">{{ authStore.user?.name }}</h4>
+                      <span class="shrink-0 rounded-full bg-emerald-100 dark:bg-emerald-950 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-emerald-700 dark:text-emerald-300">
+                        {{ userRoleLabel }}
+                      </span>
+                    </div>
+                    <p class="truncate text-xs text-slate-500 dark:text-slate-400 mt-0.5">{{ authStore.user?.email || 'Tài khoản quản lý' }}</p>
+                  </div>
+                </div>
+
+                <!-- Navigation List -->
+                <div class="space-y-0.5 text-sm">
+                  <router-link to="/profile" class="flex items-center justify-between rounded-xl px-3 py-2 text-slate-700 dark:text-slate-200 transition-colors hover:bg-slate-100 dark:hover:bg-slate-800 no-underline" @click="userMenuOpen = false">
+                    <span class="flex items-center gap-2.5 font-medium"><i class="pi pi-user-edit text-base text-indigo-500"></i>Thông tin cá nhân</span>
+                  </router-link>
+
+                  <router-link to="/notifications" class="flex items-center justify-between rounded-xl px-3 py-2 text-slate-700 dark:text-slate-200 transition-colors hover:bg-slate-100 dark:hover:bg-slate-800 no-underline" @click="userMenuOpen = false">
+                    <span class="flex items-center gap-2.5 font-medium"><i class="pi pi-bell text-base text-indigo-500"></i>Thông báo</span>
+                    <span v-if="unreadNotificationsCount > 0" class="rounded-full bg-red-500 px-2 py-0.5 text-[10px] font-bold text-white">{{ unreadNotificationsCount > 9 ? '9+' : unreadNotificationsCount }}</span>
+                  </router-link>
+
+                  <button type="button" class="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-slate-700 dark:text-slate-200 transition-colors hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer" @click="openCustomerSupport">
+                    <span class="flex items-center gap-2.5 font-medium"><i class="pi pi-comments text-base text-indigo-500"></i>Hộp thư hỗ trợ</span>
+                  </button>
+
+                  <router-link to="/help-center" class="flex items-center justify-between rounded-xl px-3 py-2 text-slate-700 dark:text-slate-200 transition-colors hover:bg-slate-100 dark:hover:bg-slate-800 no-underline" @click="userMenuOpen = false">
+                    <span class="flex items-center gap-2.5 font-medium"><i class="pi pi-question-circle text-base text-indigo-500"></i>Trung tâm trợ giúp</span>
+                  </router-link>
+                </div>
+
+                <!-- Featured Role Switcher Box (Switch Space back to Customer Storefront / Home) -->
+                <div class="mt-2 pt-1.5 border-t border-slate-200/50 dark:border-slate-800">
+                  <router-link
+                    to="/"
+                    class="group flex w-full items-center justify-between rounded-xl border border-emerald-500/30 bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-100/50 dark:from-emerald-950/40 dark:to-teal-950/40 p-2.5 text-left no-underline transition-all hover:scale-[1.01] hover:border-emerald-500 hover:shadow-md cursor-pointer"
+                    @click="userMenuOpen = false"
+                  >
+                    <div class="flex items-center gap-2.5">
+                      <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-600 text-white shadow-xs group-hover:bg-emerald-500">
+                        <i class="pi pi-home text-sm"></i>
+                      </div>
+                      <div>
+                        <span class="block text-xs font-bold leading-tight text-slate-900 dark:text-slate-100">Trang chủ KomiBook</span>
+                        <span class="mt-0.5 block text-[11px] font-medium text-slate-500 dark:text-slate-400">Không gian mua sắm</span>
+                      </div>
+                    </div>
+                    <span class="material-symbols-outlined text-base text-emerald-600 dark:text-emerald-400 transition-transform group-hover:translate-x-0.5">arrow_forward</span>
+                  </router-link>
+                </div>
+
+                <!-- Log Out Button -->
+                <div class="mt-1 pt-1 border-t border-slate-200/50 dark:border-slate-800">
+                  <button
+                    type="button"
+                    class="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-semibold text-red-600 dark:text-red-400 transition-colors hover:bg-red-50 dark:hover:bg-red-950/50 cursor-pointer"
+                    @click="logout"
+                  >
+                    <i class="pi pi-sign-out text-base"></i>
+                    <span>Đăng xuất</span>
+                  </button>
+                </div>
+              </div>
+            </Transition>
+          </div>
         </div>
       </header>
 
@@ -580,6 +689,9 @@ onUnmounted(() => {
 .sidebar-collapsed .sidebar-header {
   flex-direction: column;
   padding: 12px 8px;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
 }
 
 .sidebar-collapsed .sidebar-brand {
@@ -588,10 +700,11 @@ onUnmounted(() => {
 
 /* Sidebar Header */
 .sidebar-header {
-  padding: 20px 16px;
+  padding: 16px 14px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
 }
 
@@ -605,37 +718,26 @@ onUnmounted(() => {
   color: inherit;
 }
 
-.brand-icon {
-  width: 40px;
-  height: 40px;
-  min-width: 40px;
-  border-radius: 10px;
-  background: transparent;
+.sidebar-toggle-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: none;
-}
-
-.sidebar-edge-toggle {
-  position: fixed;
-  top: 16px;
-  left: 238px;
-  z-index: 1001;
-  display: grid;
-  width: 44px;
-  height: 44px;
-  place-items: center;
-  border: 0;
-  color: #e2e8f0;
-  background: transparent;
-  box-shadow: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+  color: #94a3b8;
   cursor: pointer;
-  transition: left 220ms ease, color 180ms ease, background-color 180ms ease;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
 }
 
-.sidebar-edge-toggle.collapsed {
-  left: 50px;
+.sidebar-toggle-btn:hover {
+  background: rgba(255, 255, 255, 0.18);
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.25);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 }
 
 .sidebar-edge-toggle:hover,
@@ -1080,15 +1182,6 @@ onUnmounted(() => {
   .admin-sidebar:not(.sidebar-collapsed) {
     transform: translateX(0) !important;
     box-shadow: 4px 0 24px rgba(0, 0, 0, 0.25);
-  }
-
-  .sidebar-edge-toggle {
-    left: 238px;
-  }
-
-  .sidebar-edge-toggle.collapsed {
-    left: 4px;
-    color: #0f172a;
   }
 
   .admin-main {

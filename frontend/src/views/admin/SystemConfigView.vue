@@ -4,6 +4,8 @@ import { useRoute, useRouter } from 'vue-router'
 import { useToast } from 'primevue/usetoast'
 import apiClient from '@/services/axios'
 import FeeSchedulesView from '@/views/admin/FeeSchedulesView.vue'
+import vnpayLogo from '@/assets/logo-vnpay.png'
+import adminLogo from '@/assets/logo-komi.png'
 
 const toast = useToast()
 const route = useRoute()
@@ -26,8 +28,8 @@ const config = ref({
 
 const gateways = ref([])
 const gatewayMeta = {
-  demo_wallet: { description: 'Ví nội bộ cho thanh toán, hoàn tiền, doanh thu và yêu cầu rút; không hỗ trợ nạp tiền ngoài', icon: 'wallet', color: '#1A3A5A' },
-  vnpay: { description: 'Cổng VNPAY Sandbox, không phát sinh tiền thật', icon: 'payments', color: '#005BAA' },
+  demo_wallet: { description: 'Ví nội bộ cho thanh toán, hoàn tiền, doanh thu và yêu cầu rút. Không hỗ trợ nạp tiền ngoài', icon: 'wallet', color: '#1A3A5A' },
+  vnpay: { description: 'Cổng VNPAY Sandbox, không phát sinh tiền thật', logo: vnpayLogo, color: '#005BAA' },
 }
 
 const loading = ref(true)
@@ -48,12 +50,16 @@ const fetchConfig = async () => {
       maintenanceMode: data.maintenance_mode,
       maxUploadSize: data.max_upload_size,
     }
-    gateways.value = (providersRes.data.data || []).map((provider) => ({
-      ...provider,
-      ...(gatewayMeta[provider.id] || { description: 'Phương thức thanh toán', icon: 'payments', color: '#1A3A5A' }),
-      enabled: provider.available,
-      canConfigureDemo: provider.id === 'demo_wallet',
-    }))
+    gateways.value = (providersRes.data.data || []).map((provider) => {
+      const meta = gatewayMeta[provider.id] || { description: 'Phương thức thanh toán', icon: 'payments', color: '#1A3A5A' }
+      return {
+        ...provider,
+        ...meta,
+        icon: meta.logo ? undefined : meta.icon,
+        enabled: provider.available,
+        canConfigureDemo: provider.id === 'demo_wallet',
+      }
+    })
   } catch (error) {
     toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Không thể tải cấu hình hệ thống.', life: 3000 })
   } finally {
@@ -208,14 +214,7 @@ onMounted(() => {
           <div class="p-lg grid grid-cols-1 md:grid-cols-2 gap-lg">
             <div class="space-y-xs md:col-span-2 rounded-lg border border-primary/20 bg-primary/5 p-md">
               <p class="font-label-md text-label-md text-on-surface">Commission và phí dịch vụ được quản lý theo lịch sử hiệu lực.</p>
-              <RouterLink to="/admin/fee-schedules" class="mt-sm inline-flex min-h-11 items-center font-label-md text-primary hover:underline">Mở tab cấu hình phí →</RouterLink>
-            </div>
-            <div class="space-y-xs md:col-span-2">
-              <label class="font-label-md text-label-md text-on-surface-variant">Thời gian gia hạn mượn sách mặc định</label>
-              <div class="relative flex items-center">
-                <input v-model.number="config.defaultBorrowDays" class="w-full bg-surface border border-outline-variant rounded-lg pl-md pr-xl py-sm font-body-md text-on-background focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all" type="number"/>
-                <span class="absolute right-md font-body-md text-on-surface-variant">Ngày</span>
-              </div>
+              <RouterLink to="/admin/fee-schedules" class="mt-sm inline-flex min-h-11 items-center font-label-md text-primary hover:underline">Mở cài đặt cấu hình phí</RouterLink>
             </div>
           </div>
         </section>
@@ -238,8 +237,17 @@ onMounted(() => {
               :class="{ 'border-b border-outline-variant/10': idx < gateways.length - 1 }"
             >
               <div class="flex items-center gap-md">
-                <div class="w-12 h-12 rounded-lg flex items-center justify-center" :style="{ backgroundColor: gw.color + '15', color: gw.color }">
-                  <span class="material-symbols-outlined text-[28px]">{{ gw.icon }}</span>
+                <div 
+                  class="w-12 h-12 rounded-lg flex items-center justify-center shrink-0 overflow-hidden" 
+                  :style="{ backgroundColor: gw.logo ? '#F8FAFC' : gw.color + '15', color: gw.color }"
+                >
+                  <img 
+                    v-if="gw.logo" 
+                    :src="gw.logo" 
+                    :alt="gw.name" 
+                    class="w-full h-full object-contain scale-[1.65]" 
+                  />
+                  <span v-else class="material-symbols-outlined text-[28px]">{{ gw.icon }}</span>
                 </div>
                 <div>
                   <p class="font-label-md text-label-md text-on-background">{{ gw.name }}</p>
@@ -258,12 +266,6 @@ onMounted(() => {
                 <span class="material-symbols-outlined text-[20px]">{{ gw.updating ? 'progress_activity' : (gw.available ? 'toggle_on' : 'toggle_off') }}</span>
               </button>
             </div>
-          </div>
-          <div class="p-md bg-surface-container-low border-t border-outline-variant/10">
-            <button type="button" disabled class="min-h-11 w-full text-on-surface-variant font-label-md text-label-md flex items-center justify-center gap-xs cursor-not-allowed opacity-70">
-              <span class="material-symbols-outlined text-[18px]">add</span>
-              Chỉ cho phép chế độ demo — không gọi API, không phát sinh phí
-            </button>
           </div>
         </section>
       </div>

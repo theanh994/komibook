@@ -209,17 +209,23 @@
                     <p class="mt-1 text-sm text-on-surface-variant">Dữ liệu được lấy trực tiếp từ cấu hình hạng của KomiBook. Quyền lợi có dấu xác minh là quyền lợi đã có logic thực thi.</p>
                   </div>
                   <div class="grid gap-4 lg:grid-cols-3">
-                    <article v-for="tier in membership.tiers" :key="tier.id" class="ui-panel relative" :class="tier.id === membership.current_tier_id ? 'border-brand-green-strong ring-2 ring-brand-green/20' : ''">
-                      <span v-if="tier.id === membership.current_tier_id" class="ui-badge-commerce inline-flex rounded-full px-3 py-1 text-sm font-bold"><span class="material-symbols-outlined mr-1 text-base" aria-hidden="true">check_circle</span>Hạng của bạn</span>
-                      <h4 class="mt-3 text-xl font-black text-on-surface">{{ tier.name }}</h4>
-                      <p class="mt-1 text-sm text-on-surface-variant">Từ <strong class="tabular-nums text-on-surface">{{ tier.min_points.toLocaleString('vi-VN') }}</strong> điểm</p>
-                      <ul class="mt-4 space-y-3">
-                        <li v-for="benefit in tier.operational_benefits" :key="benefit.code" class="flex gap-2">
-                          <span class="material-symbols-outlined mt-0.5 text-brand-green-strong" aria-hidden="true">verified</span>
-                          <div><p class="font-bold text-on-surface">{{ benefit.label }}</p><p class="mt-1 text-sm leading-6 text-on-surface-variant">{{ benefit.description }}</p></div>
-                        </li>
-                      </ul>
-                      <div v-if="tier.program_description" class="mt-4 rounded-xl border border-secondary/20 bg-secondary-fixed/45 p-3">
+                    <article v-for="tier in membership.tiers" :key="tier.id" class="ui-panel relative flex flex-col justify-between" :class="tier.id === membership.current_tier_id ? 'border-brand-green-strong ring-2 ring-brand-green/20' : ''">
+                      <div>
+                        <div class="flex flex-wrap items-center gap-2">
+                          <h4 class="text-xl font-black text-on-surface">{{ tier.name }}</h4>
+                          <span v-if="tier.id === membership.current_tier_id" class="ui-badge-commerce inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold">
+                            <span class="material-symbols-outlined mr-1 text-sm" aria-hidden="true">check_circle</span>Hạng của bạn
+                          </span>
+                        </div>
+                        <p class="mt-1 text-sm text-on-surface-variant">Từ <strong class="tabular-nums text-on-surface">{{ tier.min_points.toLocaleString('vi-VN') }}</strong> điểm</p>
+                        <ul class="mt-4 space-y-3">
+                          <li v-for="benefit in tier.operational_benefits" :key="benefit.code" class="flex gap-2">
+                            <span class="material-symbols-outlined mt-0.5 text-brand-green-strong" aria-hidden="true">verified</span>
+                            <div><p class="font-bold text-on-surface">{{ benefit.label }}</p><p class="mt-1 text-sm leading-6 text-on-surface-variant">{{ benefit.description }}</p></div>
+                          </li>
+                        </ul>
+                      </div>
+                      <div v-if="tier.program_description" class="mt-6 rounded-xl border border-secondary/20 bg-secondary-fixed/45 p-3">
                         <p class="flex items-center gap-2 text-sm font-bold text-on-secondary-fixed-variant"><span class="material-symbols-outlined text-lg" aria-hidden="true">info</span>Mô tả chương trình</p>
                         <p class="mt-1 text-sm leading-6 text-on-surface-variant">{{ tier.program_description }}</p>
                         <p class="mt-2 text-sm font-semibold text-secondary">Các nội dung ngoài danh sách có dấu xác minh chưa được coi là quyền lợi tự động.</p>
@@ -435,14 +441,12 @@
         </div>
       </template>
     </Dialog>
-
-    <Toast />
-    <ConfirmDialog />
   </div>
 </template>
 
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from 'primevue/usetoast'
 import { useConfirm } from 'primevue/useconfirm'
@@ -454,10 +458,9 @@ import Password from 'primevue/password'
 import Textarea from 'primevue/textarea'
 import Checkbox from 'primevue/checkbox'
 import Dialog from 'primevue/dialog'
-import Toast from 'primevue/toast'
-import ConfirmDialog from 'primevue/confirmdialog'
 
 const authStore = useAuthStore()
+const route = useRoute()
 const toast = useToast()
 const confirm = useConfirm()
 
@@ -606,6 +609,13 @@ onMounted(() => {
   fetchCategories()
   fetchAddresses()
   resetPasswordForm()
+
+  // Support deep-linking: /profile?tab=membership
+  const validTabIds = tabs.map(t => t.id)
+  const requestedTab = route.query.tab
+  if (requestedTab && validTabIds.includes(requestedTab)) {
+    switchTab(requestedTab)
+  }
 })
 
 const toggleCategoryPreference = (catId) => {

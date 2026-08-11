@@ -334,16 +334,16 @@ onMounted(() => {
 
         <!-- Table -->
         <div class="overflow-x-auto">
-          <table class="w-full text-left border-collapse">
+          <table class="w-full text-center border-collapse">
             <thead>
               <tr class="bg-surface-container-low text-on-surface-variant font-label-md text-label-md border-b border-surface-container-high">
-                <th class="p-md font-medium w-8"></th>
-                <th class="p-md font-medium">Mã SKU/ISBN</th>
-                <th class="p-md font-medium">Tên sách</th>
-                <th class="p-md font-medium">Loại</th>
-                <th class="p-md font-medium">{{ selectedWarehouse ? 'Tồn tại kho đã chọn' : 'Tổng tồn kho' }}</th>
-                <th class="p-md font-medium">Vị trí kho chính</th>
-                <th class="p-md font-medium">Trạng thái</th>
+                <th class="p-md font-medium w-10 text-center"></th>
+                <th class="p-md font-medium text-center">Mã SKU/ISBN</th>
+                <th class="p-md font-medium text-center">Tên sách</th>
+                <th class="p-md font-medium text-center">Loại</th>
+                <th class="p-md font-medium text-center">{{ selectedWarehouse ? 'Tồn tại kho đã chọn' : 'Tổng tồn kho' }}</th>
+                <th class="p-md font-medium text-center">Vị trí kho chính</th>
+                <th class="p-md font-medium text-center">Trạng thái</th>
               </tr>
             </thead>
             <tbody class="font-body-md text-body-md divide-y divide-surface-container-high">
@@ -358,41 +358,43 @@ onMounted(() => {
                       <span class="material-symbols-outlined">{{ expandedBookIds.includes(item.id) ? 'expand_less' : 'expand_more' }}</span>
                     </button>
                   </td>
-                  <td class="p-md text-outline">{{ item.sku }}</td>
-                  <td class="p-md font-medium text-on-surface flex items-center gap-3">
-                    <div class="w-10 h-14 bg-surface-container rounded overflow-hidden flex-shrink-0">
-                      <img :alt="`Bìa ${item.title}`" class="h-full w-full object-contain" loading="lazy" :src="getBookCover(item.cover_image)" @error="handleCoverError"/>
+                  <td class="p-md text-center text-outline font-mono text-xs font-semibold">{{ item.sku }}</td>
+                  <td class="p-md font-medium text-on-surface text-left">
+                    <div class="flex items-center gap-3">
+                      <div class="w-10 h-14 bg-surface-container rounded overflow-hidden flex-shrink-0 shadow-sm">
+                        <img :alt="`Bìa ${item.title}`" class="h-full w-full object-contain" loading="lazy" :src="getBookCover(item.cover_image)" @error="handleCoverError"/>
+                      </div>
+                      <span class="font-semibold text-on-surface leading-snug break-words text-justify text-left max-w-md">{{ item.title }}</span>
                     </div>
-                    <span class="truncate max-w-[250px]">{{ item.title }}</span>
                   </td>
-                  <td class="p-md">
+                  <td class="p-md text-center">
                     <span 
                       :class="item.type === 'Ebook' ? 'bg-primary-container text-primary' : 'bg-[#f1f5f9] text-[#1e293b]'"
-                      class="px-3 py-1 rounded-full text-sm font-label-md"
+                      class="px-3 py-1 rounded-full text-sm font-label-md inline-block"
                     >
                       {{ item.type }}
                     </span>
                   </td>
-                  <td class="p-md font-medium" :class="{'text-secondary': item.stock === 0, 'text-[#d97706]': item.stock > 0 && item.stock < 10}">
+                  <td class="p-md font-bold text-center" :class="{'text-secondary': item.stock === 0, 'text-[#d97706]': item.stock > 0 && item.stock < 10}">
                     {{ item.stock }}
                   </td>
-                  <td class="p-md text-on-surface-variant">{{ item.main_location }}</td>
-                  <td class="p-md">
+                  <td class="p-md text-center text-on-surface-variant">{{ item.main_location }}</td>
+                  <td class="p-md text-center">
                     <span 
                       v-if="item.status === 'Còn hàng'"
-                      class="inline-flex items-center gap-1 text-[#059669] bg-[#d1fae5] px-2 py-1 rounded-md text-sm font-medium"
+                      class="inline-flex items-center justify-center gap-1 text-[#059669] bg-[#d1fae5] px-2.5 py-1 rounded-md text-sm font-medium"
                     >
                       <span class="material-symbols-outlined text-[16px]">check_circle</span> Còn hàng
                     </span>
                     <span 
                       v-else-if="item.status === 'Sắp hết'"
-                      class="inline-flex items-center gap-1 text-[#d97706] bg-[#fef3c7] px-2 py-1 rounded-md text-sm font-medium"
+                      class="inline-flex items-center justify-center gap-1 text-[#d97706] bg-[#fef3c7] px-2.5 py-1 rounded-md text-sm font-medium"
                     >
                       <span class="material-symbols-outlined text-[16px]">warning</span> Sắp hết
                     </span>
                     <span 
                       v-else
-                      class="inline-flex items-center gap-1 text-secondary bg-secondary-fixed px-2 py-1 rounded-md text-sm font-medium"
+                      class="inline-flex items-center justify-center gap-1 text-secondary bg-secondary-fixed px-2.5 py-1 rounded-md text-sm font-medium"
                     >
                       <span class="material-symbols-outlined text-[16px]">error</span> Hết hàng
                     </span>

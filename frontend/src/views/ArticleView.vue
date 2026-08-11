@@ -111,7 +111,7 @@ onMounted(fetchArticle)
               </button>
             </div>
           </header>
-          <div v-if="article.cover_image" class="my-6 overflow-hidden md:my-8">
+          <div v-if="article.cover_image" class="my-6 overflow-hidden md:my-8 text-center max-w-[70%] mx-auto rounded-xl shadow-md">
             <img :src="getCoverUrl(article.cover_image)" :alt="article.title" class="block h-auto w-full max-w-full object-contain" />
           </div>
 
@@ -208,7 +208,7 @@ onMounted(fetchArticle)
 :deep(.article-body p) { margin-block: 1.35em; }
 :deep(.article-body h2) { margin-top: 2em; font-size: 1.75rem; font-weight: 800; color: var(--color-primary); }
 :deep(.article-body h3) { margin-top: 1.75em; font-size: 1.35rem; font-weight: 800; color: var(--color-primary); }
-:deep(.article-body img) { display: block; max-width: 100%; height: auto; margin: 1.75rem auto; }
+:deep(.article-body img) { display: block; max-width: 70% !important; height: auto; margin: 1.75rem auto; border-radius: 0.75rem; }
 :deep(.article-body a) { color: var(--color-secondary); font-weight: 700; text-decoration: underline; }
 :deep(.article-body blockquote) { border-left: 4px solid var(--color-secondary); margin: 2rem 0; padding: 1rem 1.5rem; background: var(--color-surface-container-low); }
 :deep(.article-body > :first-child) { margin-top: 0; }

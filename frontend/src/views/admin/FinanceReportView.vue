@@ -200,7 +200,7 @@ const maxChartRevenueScale = computed(() => {
 // 24-Month Ledger Table (Sorted from NEWEST month down & filtered by Year/Search)
 const filteredMonths = computed(() => {
   let list = [...(reportData.value.revenue_by_month || [])]
-
+  
   // Sort descending by month string ('2026-08' -> '2024-08')
   list.sort((a, b) => b.month.localeCompare(a.month))
 
@@ -351,7 +351,7 @@ const orderStatusDonutSegments = computed(() => {
     <!-- Quick Operations Links Navigation Bar (Removed Kê khai thuế nhà bán button as requested) -->
     <nav class="mb-6 flex flex-wrap items-center gap-2 rounded-2xl border border-outline-variant/40 bg-surface-container-lowest p-2 shadow-xs print:hidden">
       <span class="px-3 text-xs font-bold uppercase tracking-wider text-outline">Thao tác nhanh:</span>
-
+      
       <RouterLink
         to="/admin/reconciliation"
         class="inline-flex min-h-10 items-center gap-1.5 rounded-xl border border-outline-variant/50 bg-surface-container-low px-3 text-sm font-semibold text-on-surface no-underline transition-colors hover:border-primary hover:text-primary"

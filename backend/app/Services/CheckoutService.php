@@ -218,6 +218,9 @@ class CheckoutService
                 $books,
                 $shippingPricing,
             );
+            if (! $isCod) {
+                $this->expirePriorUnpaidOnlineSessions($userId);
+            }
             [$vendorSnapshots, $sessionSubtotal, $sessionDiscount, $sessionFee, $sessionTotal] = $this->buildVendorSnapshots(
                 $groupedItems,
                 $books,
@@ -256,6 +259,7 @@ class CheckoutService
                     'payment_method' => $paymentMethod,
                     'shipping_address' => $shippingData['shipping_address'],
                     'phone' => $shippingData['phone'],
+                    'shipping_carrier' => 'KomiBook Express',
                 ]);
 
                 $order->order_code = Order::generateOrderCode();
@@ -276,7 +280,6 @@ class CheckoutService
                         'product_taxonomy_snapshot' => $item['product_taxonomy_snapshot'],
                         'commercial_parties_snapshot' => $item['commercial_parties_snapshot'],
                         'return_policy_snapshot' => $item['return_policy_snapshot'],
-                        'commercial_parties_snapshot' => $item['commercial_parties_snapshot'],
                         'ebook_consent_snapshot' => $item['ebook_consent_snapshot'],
                     ]);
                     $orderItem->saveQuietly();
@@ -392,6 +395,30 @@ class CheckoutService
      *
      * @param  int[]  $orderIds
      */
+    private function expirePriorUnpaidOnlineSessions(int $userId): void
+    {
+        $sessionIds = CheckoutSessionOrder::whereHas('order', function ($query) {
+            $query->whereIn('status', ['pending', 'draft'])->where('payment_status', 'unpaid');
+        })->pluck('checkout_session_id')->unique();
+        $sessions = CheckoutSession::whereIn('id', $sessionIds)
+            ->where('user_id', $userId)
+            ->lockForUpdate()
+            ->get();
+
+        $lifecycleService = app(CheckoutSessionLifecycleService::class);
+        foreach ($sessions as $session) {
+            try {
+                // The lifecycle service uses the same Laravel connection; its
+                // nested transaction is therefore part of this outer checkout
+                // transaction and rolls back with a later checkout failure.
+                $lifecycleService->expireSession($session);
+            } catch (\Throwable) {
+                // Existing cleanup is best-effort for sessions that cannot yet
+                // be expired. It must not make a valid new checkout fail.
+            }
+        }
+    }
+
     /**
      * Revalidates the exact coupon row while it is locked by this checkout
      * transaction. A coupon quote is never trusted across this lock boundary.
@@ -453,4 +480,30 @@ class CheckoutService
         return [$snapshots, $sessionSubtotal, $sessionDiscount, $sessionFee, $sessionTotal];
     }
 
+    public function confirmCodCheckout(array $orderIds, int $userId): array
+    {
+        return DB::transaction(function () use ($orderIds, $userId) {
+            $orders = Order::withoutGlobalScopes()
+                ->whereIn('id', $orderIds)
+                ->where('user_id', $userId)
+                ->lockForUpdate()
+                ->get();
+
+            if ($orders->isEmpty()) {
+                throw new Exception('Không tìm thấy đơn hàng cần xác nhận.');
+            }
+
+            $confirmedOrders = [];
+            foreach ($orders as $order) {
+                if ($order->status === 'draft') {
+                    $order->status = 'confirmed';
+                    $order->saveQuietly();
+                    ProcessOrder::dispatch($order->id);
+                }
+                $confirmedOrders[] = $order;
+            }
+
+            return $confirmedOrders;
+        });
+    }
 }

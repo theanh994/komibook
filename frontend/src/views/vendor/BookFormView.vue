@@ -29,7 +29,6 @@
             Hủy
           </button>
           <button 
-            v-if="isEditMode"
             type="button" 
             @click="submitForm('draft')" 
             :disabled="saving"
@@ -140,7 +139,7 @@
             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div class="w-full">
                 <label class="block text-[11px] font-bold uppercase tracking-wider text-outline mb-1.5">Giá gốc (VNĐ) <span class="text-error">*</span></label>
-                <InputNumber v-model="bookForm.price" :min="0" :step="1000" class="w-full !h-11" placeholder="0" />
+                <InputNumber v-model="bookForm.price" :min="0" :step="1000" class="w-full !h-11" placeholder="Ví dụ: 120.000" />
               </div>
               <div class="w-full">
                 <label class="block text-[11px] font-bold uppercase tracking-wider text-outline mb-1.5">Giảm giá (%)</label>
@@ -159,7 +158,7 @@
                   <span class="material-symbols-outlined text-base mr-1.5">all_inclusive</span>
                   Vô hạn (Digital)
                 </div>
-                <InputNumber v-else v-model="bookForm.stock" :min="0" class="w-full !h-11" />
+                <InputNumber v-else v-model="bookForm.stock" :min="0" class="w-full !h-11" placeholder="Ví dụ: 50" />
               </div>
             </div>
           </div>
@@ -181,8 +180,9 @@
                     :options="dimensionPresets"
                     optionLabel="label"
                     optionValue="value"
-                    placeholder="Chọn khổ sách phổ biến"
+                    placeholder="Chọn khổ sách (Không bắt buộc)"
                     class="w-full !h-11"
+                    showClear
                     @change="onDimensionPresetChange"
                   />
                   <InputText 
@@ -202,8 +202,9 @@
                     :options="coverFormatOptions"
                     optionLabel="label"
                     optionValue="value"
-                    placeholder="Chọn hình thức bìa"
+                    placeholder="Chọn hình thức bìa (Không bắt buộc)"
                     class="w-full !h-11"
+                    showClear
                   />
                 </div>
                 <div>
@@ -225,8 +226,9 @@
                     :options="publicationYearOptions"
                     optionLabel="label"
                     optionValue="value"
-                    placeholder="Chọn năm xuất bản"
+                    placeholder="Chọn năm xuất bản (Không bắt buộc)"
                     class="w-full !h-11"
+                    showClear
                   />
                 </div>
               </div>
@@ -240,8 +242,9 @@
                     :options="languageOptions"
                     optionLabel="label"
                     optionValue="value"
-                    placeholder="Chọn ngôn ngữ"
+                    placeholder="Chọn ngôn ngữ (Không bắt buộc)"
                     class="w-full !h-11"
+                    showClear
                     @change="onLanguageOptionChange"
                   />
                   <InputText 
@@ -262,8 +265,9 @@
                   :options="targetAgePresets"
                   optionLabel="label"
                   optionValue="value"
-                  placeholder="Chọn mốc độ tuổi phù hợp"
+                  placeholder="Chọn mốc độ tuổi (Không bắt buộc)"
                   class="w-full !h-11"
+                  showClear
                 />
               </div>
             </div>
@@ -449,8 +453,8 @@
             </div>
           </div>
 
-          <!-- Card 3: Vận hành ban đầu cho sách mới -->
-          <div v-if="!isEditMode" class="bg-surface-container-lowest rounded-2xl p-6 border border-outline-variant/20 shadow-sm space-y-4">
+          <!-- Card 3: Vận hành cho sách mới & Nhà bán phân phối khi Edit -->
+          <div v-if="!isEditMode || supplyChainMode !== 'self_supplied'" class="bg-surface-container-lowest rounded-2xl p-6 border border-outline-variant/20 shadow-sm space-y-4">
             <div class="flex items-center justify-between gap-3 border-b border-outline-variant/10 pb-3">
               <h3 class="text-lg font-bold text-on-surface">Kho & Chuỗi Cung Ứng</h3>
               <InfoTip text="Thiết lập một lần khi tạo sách để sản phẩm không còn ở trạng thái thiếu thông tin vận hành." label="Thông tin về Kho và Chuỗi Cung Ứng" />
@@ -602,13 +606,13 @@ const relationshipOption = (rel) => ({
   label: `${rel.organization?.display_name || rel.organization?.legal_name || 'Tổ chức'}${rel.status === 'demo_accepted' ? ' · Demo đã chấp nhận' : ' · Đã xác minh'}`,
 })
 const publisherOptions = computed(() => acceptedRelationships.value
-  .filter(rel => rel.organization?.organization_types?.includes('publisher') && ['self_legal_entity', 'publisher_partner'].includes(rel.role))
+  .filter(rel => rel.organization?.organization_types?.includes('publisher') && ['self_legal_entity', 'publisher_partner', 'publisher', 'commercial_partner'].includes(rel.role))
   .map(relationshipOption))
 const supplierOptions = computed(() => acceptedRelationships.value
-  .filter(rel => rel.organization?.organization_types?.some(type => ['supplier', 'publisher', 'distributor'].includes(type)) && ['self_legal_entity', 'supplier_partner', 'authorized_distributor'].includes(rel.role))
+  .filter(rel => rel.organization?.organization_types?.some(type => ['supplier', 'publisher', 'distributor'].includes(type)) && ['self_legal_entity', 'supplier_partner', 'authorized_distributor', 'supplier', 'distributor', 'publisher', 'commercial_partner'].includes(rel.role))
   .map(relationshipOption))
 const responsibleOptions = computed(() => acceptedRelationships.value
-  .filter(rel => ['self_legal_entity', 'publisher_partner', 'supplier_partner', 'authorized_distributor'].includes(rel.role))
+  .filter(rel => ['self_legal_entity', 'publisher_partner', 'supplier_partner', 'authorized_distributor', 'publisher', 'supplier', 'distributor', 'commercial_partner'].includes(rel.role))
   .map(relationshipOption))
 const hasUsableRelationships = computed(() => publisherOptions.value.length > 0 && supplierOptions.value.length > 0 && responsibleOptions.value.length > 0)
 const displayTitlePreview = computed(() => {
@@ -626,16 +630,16 @@ const bookForm = ref({
   description: '',
   isbn: '',
   print_edition: 1,
-  dimensions: '13 x 18 cm',
-  cover_format: 'Bìa mềm',
+  dimensions: '',
+  cover_format: null,
   weight: '',
-  language: 'Tiếng Việt',
-  target_age: 'Tuổi trưởng thành (Trên 18 tuổi)',
+  language: '',
+  target_age: null,
   pages: null,
-  release_date: '2026',
-  price: 0,
+  release_date: null,
+  price: null,
   sale_price: null,
-  stock: 0,
+  stock: null,
   type: 'physical',
   status: 'draft',
 })
@@ -719,8 +723,8 @@ const handleEbookFileChange = (e) => {
   ebookFile.value = e.target.files?.[0] || null
 }
 
-const selectedDimensionPreset = ref('13 x 18 cm')
-const selectedLanguageOption = ref('Tiếng Việt')
+const selectedDimensionPreset = ref('')
+const selectedLanguageOption = ref('')
 const customLanguage = ref('')
 
 const dimensionPresets = [
@@ -811,18 +815,40 @@ const fetchBookDetail = async (id) => {
       description: bookData.description || '',
       isbn: bookData.isbn || '',
       print_edition: bookData.print_edition || 1,
-      dimensions: bookData.dimensions || '13 x 18 cm',
-      cover_format: bookData.cover_format || 'Bìa mềm',
-      weight: bookData.weight || '350',
-      language: bookData.language || 'Tiếng Việt',
-      target_age: bookData.target_age || 'Tuổi trưởng thành (Trên 18 tuổi)',
+      dimensions: bookData.dimensions || '',
+      cover_format: bookData.cover_format || null,
+      weight: bookData.weight || '',
+      language: bookData.language || '',
+      target_age: bookData.target_age || null,
       pages: bookData.pages || null,
-      release_date: bookData.release_date || '',
+      release_date: bookData.release_date || null,
       price: bookData.price || 0,
       sale_price: bookData.sale_price || null,
       stock: bookData.type === 'ebook' ? 999999 : (bookData.stock || 0),
       type: bookData.type || 'physical',
       status: bookData.status || 'draft',
+    }
+    selectedDimensionPreset.value = bookForm.value.dimensions || ''
+    selectedLanguageOption.value = languageOptions.some(l => l.value === bookForm.value.language) ? bookForm.value.language : (bookForm.value.language ? 'other' : '')
+    if (selectedLanguageOption.value === 'other') customLanguage.value = bookForm.value.language
+
+    if (bookData.commercial_parties && organizationRelationships.value.length) {
+      const pubOrgId = bookData.commercial_parties.publisher?.organization_id
+      const supOrgId = bookData.commercial_parties.supplier?.organization_id
+      const respOrgId = bookData.commercial_parties.responsible_organization?.organization_id
+
+      if (pubOrgId) {
+        const rel = organizationRelationships.value.find(r => r.organization?.id === pubOrgId || r.organization_id === pubOrgId)
+        if (rel) operationsForm.value.publisher_relationship_id = rel.id
+      }
+      if (supOrgId) {
+        const rel = organizationRelationships.value.find(r => r.organization?.id === supOrgId || r.organization_id === supOrgId)
+        if (rel) operationsForm.value.supplier_relationship_id = rel.id
+      }
+      if (respOrgId) {
+        const rel = organizationRelationships.value.find(r => r.organization?.id === respOrgId || r.organization_id === respOrgId)
+        if (rel) operationsForm.value.responsible_organization_relationship_id = rel.id
+      }
     }
     printEditionSelection.value = bookForm.value.print_edition <= 10 ? bookForm.value.print_edition : 'custom'
     customPrintEdition.value = bookForm.value.print_edition > 10 ? bookForm.value.print_edition : 11
@@ -884,24 +910,40 @@ const getCoverUrl = (path) => {
 }
 
 const submitForm = async (targetStatus) => {
-  if (isEditMode.value && targetStatus === 'draft') bookForm.value.status = 'draft'
+  if (targetStatus === 'draft') {
+    bookForm.value.status = 'draft'
+  } else if (targetStatus === 'save' && !isEditMode.value) {
+    bookForm.value.status = 'published'
+  }
+
+  // Ràng buộc tất cả thông tin bắt buộc trước khi tạo hoặc lưu bản nháp
   if (!bookForm.value.title || !bookForm.value.author) {
-    toast.add({ severity: 'warn', summary: 'Thiếu thông tin', detail: 'Vui lòng nhập tên sách và tác giả.', life: 3000 })
+    toast.add({ severity: 'warn', summary: 'Thiếu thông tin bắt buộc', detail: 'Vui lòng nhập tên sách và tác giả.', life: 3500 })
     return
   }
   if (!bookForm.value.category_ids || bookForm.value.category_ids.length === 0) {
-    toast.add({ severity: 'warn', summary: 'Thiếu thông tin', detail: 'Vui lòng chọn ít nhất một danh mục.', life: 3000 })
+    toast.add({ severity: 'warn', summary: 'Thiếu thông tin bắt buộc', detail: 'Vui lòng chọn ít nhất một danh mục.', life: 3500 })
     return
   }
-  if (!isEditMode.value) {
-    if (bookForm.value.type === 'physical' && (!primaryWarehouse.value || blockingReasons.value.length)) {
-      toast.add({ severity: 'warn', summary: 'Chưa sẵn sàng vận hành', detail: blockingReasons.value[0] || 'Vui lòng chọn kho tổng cho sách vật lý.', life: 4000 })
-      return
-    }
-    if (supplyChainMode.value !== 'self_supplied' && (!operationsForm.value.publisher_relationship_id || !operationsForm.value.supplier_relationship_id || !operationsForm.value.responsible_organization_relationship_id)) {
-      toast.add({ severity: 'warn', summary: 'Thiếu chuỗi cung ứng', detail: 'Vui lòng chọn đủ Nhà xuất bản, Nhà cung ứng và Đơn vị chịu trách nhiệm.', life: 4000 })
-      return
-    }
+  if (bookForm.value.price === null || bookForm.value.price === undefined || bookForm.value.price < 0) {
+    toast.add({ severity: 'warn', summary: 'Thiếu thông tin bắt buộc', detail: 'Vui lòng nhập giá gốc hợp lệ.', life: 3500 })
+    return
+  }
+  if (!bookForm.value.type) {
+    toast.add({ severity: 'warn', summary: 'Thiếu thông tin bắt buộc', detail: 'Vui lòng chọn loại hình phát hành (Sách vật lý / E-book).', life: 3500 })
+    return
+  }
+  if (bookForm.value.type === 'ebook' && !isEditMode.value && !ebookFile.value) {
+    toast.add({ severity: 'warn', summary: 'Thiếu tệp E-book', detail: 'Vui lòng tải lên tệp E-book (PDF/EPUB) trước khi tạo.', life: 4000 })
+    return
+  }
+  if (!isEditMode.value && bookForm.value.type === 'physical' && (!primaryWarehouse.value || blockingReasons.value.length)) {
+    toast.add({ severity: 'warn', summary: 'Chưa sẵn sàng vận hành', detail: blockingReasons.value[0] || 'Vui lòng chọn kho tổng cho sách vật lý.', life: 4000 })
+    return
+  }
+  if (supplyChainMode.value !== 'self_supplied' && (!operationsForm.value.publisher_relationship_id || !operationsForm.value.supplier_relationship_id || !operationsForm.value.responsible_organization_relationship_id)) {
+    toast.add({ severity: 'warn', summary: 'Thiếu chuỗi cung ứng', detail: 'Vui lòng chọn đủ Nhà xuất bản, Nhà cung ứng và Đơn vị chịu trách nhiệm.', life: 4000 })
+    return
   }
 
   if (bookForm.value.type === 'ebook') {
@@ -912,11 +954,12 @@ const submitForm = async (targetStatus) => {
   try {
     const formData = new FormData()
     Object.entries(bookForm.value).forEach(([key, val]) => {
-      if (key === 'status' && !isEditMode.value) return
-      if (key === 'category_ids' && Array.isArray(val)) {
-        val.forEach(id => formData.append('category_ids[]', id))
-      } else if (val !== null && val !== undefined && val !== '') {
-        formData.append(key, val)
+      if (val !== null && val !== undefined && val !== '') {
+        if (key === 'category_ids' && Array.isArray(val)) {
+          val.forEach(id => formData.append('category_ids[]', id))
+        } else {
+          formData.append(key, val)
+        }
       }
     })
 
@@ -937,13 +980,18 @@ const submitForm = async (targetStatus) => {
       })
       const response = await apiClient.post('/api/vendor/books', formData)
       const receiptId = response.data.receipt_document?.id
-      toast.add({ severity: 'success', summary: 'Đã tạo sách và phiếu nhập', detail: 'Sách đã công khai. Hãy kiểm tra và ghi sổ phiếu để mở bán.', life: 4500 })
+      toast.add({ severity: 'success', summary: 'Đã tạo sách và phiếu nhập', detail: 'Sách đã tạo thành công.', life: 4500 })
       if (receiptId) {
         router.push({ name: 'vendor-warehouse-documents', query: { document_id: receiptId } })
         return
       }
     } else {
       formData.append('_method', 'PUT')
+      if (supplyChainMode.value !== 'self_supplied') {
+        if (operationsForm.value.publisher_relationship_id) formData.append('publisher_relationship_id', operationsForm.value.publisher_relationship_id)
+        if (operationsForm.value.supplier_relationship_id) formData.append('supplier_relationship_id', operationsForm.value.supplier_relationship_id)
+        if (operationsForm.value.responsible_organization_relationship_id) formData.append('responsible_organization_relationship_id', operationsForm.value.responsible_organization_relationship_id)
+      }
       await apiClient.post(`/api/vendor/books/${route.params.id}`, formData)
       toast.add({ severity: 'success', summary: 'Thành công', detail: 'Đã cập nhật cuốn sách!', life: 3000 })
     }
@@ -983,13 +1031,12 @@ const fetchOperationalOptions = async () => {
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
   fetchCategories()
   fetchExistingSeries()
+  await fetchOperationalOptions()
   if (isEditMode.value) {
     fetchBookDetail(route.params.id)
-  } else {
-    fetchOperationalOptions()
   }
 })
 

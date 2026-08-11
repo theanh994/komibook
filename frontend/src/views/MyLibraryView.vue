@@ -17,12 +17,71 @@
             <!-- Hero Header Section -->
             <div class="p-lg md:p-xl border-b border-outline-variant/10 bg-surface-container-low/20 space-y-4">
               <!-- Title & Subtitle -->
-              <div>
-                <h1 id="library-title" class="text-2xl font-black text-on-surface tracking-tight mb-1">Tủ sách cá nhân</h1>
-                <p class="text-sm text-on-surface-variant font-medium">Các sách bạn đã sở hữu và quyền đọc ebook tương ứng.</p>
+              <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                  <h1 id="library-title" class="text-2xl font-black text-on-surface tracking-tight mb-1">Tủ sách cá nhân</h1>
+                  <p class="text-sm text-on-surface-variant font-medium">Các sách bạn đã sở hữu và quyền đọc ebook tương ứng.</p>
+                </div>
+                
+                <!-- View Mode Switcher -->
+                <div class="flex items-center gap-1 bg-surface-container-low p-1 rounded-xl border border-outline-variant/20 shrink-0 self-start md:self-auto">
+                  <button 
+                    type="button" 
+                    @click="viewMode = 'grid'" 
+                    :class="['w-9 h-9 rounded-lg flex items-center justify-center transition-colors border-none cursor-pointer', viewMode === 'grid' ? 'bg-primary text-on-primary shadow-xs' : 'text-outline hover:text-on-surface']"
+                    title="Hiển thị dạng Lưới"
+                    aria-label="Chuyển sang dạng Lưới"
+                  >
+                    <span class="material-symbols-outlined text-[20px]">grid_view</span>
+                  </button>
+                  <button 
+                    type="button" 
+                    @click="viewMode = 'list'" 
+                    :class="['w-9 h-9 rounded-lg flex items-center justify-center transition-colors border-none cursor-pointer', viewMode === 'list' ? 'bg-primary text-on-primary shadow-xs' : 'text-outline hover:text-on-surface']"
+                    title="Hiển thị dạng Danh sách"
+                    aria-label="Chuyển sang dạng Danh sách"
+                  >
+                    <span class="material-symbols-outlined text-[20px]">view_list</span>
+                  </button>
+                </div>
               </div>
 
-              <!-- Moved Badges & Filters directly below Title/Subtitle -->
+              <!-- Search & Controls Bar -->
+              <div class="grid grid-cols-1 sm:grid-cols-12 gap-3 pt-2">
+                <!-- Search Box -->
+                <div class="sm:col-span-6 md:col-span-7 relative">
+                  <span class="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-outline text-[20px]">search</span>
+                  <input 
+                    v-model="searchQuery" 
+                    type="text" 
+                    placeholder="Tìm tên sách hoặc tác giả..." 
+                    class="w-full h-11 pl-10 pr-4 rounded-xl bg-surface-container-lowest border border-outline-variant/30 text-sm font-medium text-on-surface placeholder:text-outline/60 focus:outline-none focus:border-primary/50 transition-colors"
+                  />
+                  <button 
+                    v-if="searchQuery" 
+                    @click="searchQuery = ''" 
+                    class="absolute right-3 top-1/2 -translate-y-1/2 text-outline hover:text-on-surface border-none bg-transparent cursor-pointer flex items-center justify-center"
+                  >
+                    <span class="material-symbols-outlined text-[18px]">cancel</span>
+                  </button>
+                </div>
+
+                <!-- Sort Dropdown -->
+                <div class="sm:col-span-6 md:col-span-5 relative">
+                  <select 
+                    v-model="sortBy" 
+                    class="w-full h-11 px-4 pr-10 rounded-xl bg-surface-container-lowest border border-outline-variant/30 text-sm font-bold text-on-surface focus:outline-none focus:border-primary/50 appearance-none cursor-pointer"
+                  >
+                    <option value="purchased_desc">📅 Ngày mua: Mới nhất</option>
+                    <option value="purchased_asc">📅 Ngày mua: Cũ nhất</option>
+                    <option value="title_asc">🔤 Tên sách: A ➔ Z</option>
+                    <option value="title_desc">🔤 Tên sách: Z ➔ A</option>
+                  </select>
+                  <span class="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-outline pointer-events-none text-[20px]">unfold_more</span>
+                </div>
+              </div>
+
+              <!-- Badges & Format Filters -->
               <div class="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-outline-variant/10">
                 <!-- Badges -->
                 <div class="flex items-center gap-2">
@@ -33,9 +92,11 @@
                     {{ physicalCount }} Sách Giấy
                   </span>
                 </div>
-                <!-- Filters -->
+                <!-- Format Filters -->
                 <div class="flex max-w-full gap-1 overflow-x-auto p-1 bg-surface-container-low rounded-xl border border-outline-variant/20" role="group" aria-label="Lọc Tủ sách theo định dạng">
-                  <button                    v-for="type in typeFilters"                    :key="type.value"
+                  <button 
+                    v-for="type in typeFilters" 
+                    :key="type.value"
                     type="button"
                     :aria-pressed="currentType === type.value"
                     @click="currentType = type.value"
@@ -62,36 +123,43 @@
                 <button type="button" class="mt-5 min-h-11 rounded-xl bg-primary px-6 py-3 text-sm font-bold text-on-primary" @click="fetchMyLibrary">Thử lại</button>
               </div>
 
-              <!-- Compact Empty State (Aligned with Left Sidebar height) -->
-              <div v-else-if="filteredItems.length === 0" class="py-8 text-center animate-fade-in flex flex-col items-center justify-center">
+              <!-- Compact Empty State -->
+              <div v-else-if="filteredItems.length === 0" class="py-12 text-center animate-fade-in flex flex-col items-center justify-center">
                 <div class="w-16 h-16 bg-surface-container-high rounded-2xl flex items-center justify-center mx-auto mb-3 text-outline/40 border border-outline-variant/10">
                   <span class="material-symbols-outlined text-3xl">local_library</span>
                 </div>
-                <h2 class="text-lg font-bold text-on-surface mb-1 tracking-tight">{{ libraryItems.length ? 'Không có sách phù hợp bộ lọc' : 'Tủ sách còn trống' }}</h2>
+                <h2 class="text-lg font-bold text-on-surface mb-1 tracking-tight">
+                  {{ libraryItems.length ? 'Không tìm thấy sách phù hợp' : 'Tủ sách còn trống' }}
+                </h2>
                 <p class="text-sm text-on-surface-variant mb-5 max-w-sm mx-auto font-medium">
-                  {{ libraryItems.length ? 'Hãy chọn định dạng khác để xem sách đã sở hữu.' : 'Khám phá danh mục để sở hữu tác phẩm đầu tiên.' }}
+                  {{ libraryItems.length ? 'Hãy thử thay đổi từ khóa tìm kiếm hoặc bộ lọc định dạng.' : 'Khám phá danh mục để sở hữu tác phẩm đầu tiên.' }}
                 </p>
                 <button v-if="libraryItems.length === 0" type="button" @click="$router.push('/catalog')" class="min-h-11 bg-primary text-on-primary px-5 py-2.5 rounded-xl font-bold text-sm shadow-md hover:bg-primary/90 transition-colors border-none cursor-pointer flex items-center gap-2">
                   <span>Khám phá KomiBook</span>
                   <span class="material-symbols-outlined text-sm">arrow_forward</span>
                 </button>
+                <button v-else type="button" @click="resetFilters" class="min-h-11 bg-surface-container-high text-on-surface px-5 py-2.5 rounded-xl font-bold text-sm border border-outline-variant/20 hover:bg-surface-container-highest transition-colors border-none cursor-pointer">
+                  Xóa tìm kiếm / bộ lọc
+                </button>
               </div>
 
-              <!-- Premium Library Grid -->
-              <div v-else class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-x-6 gap-y-8">
-                <div v-for="(item, index) in filteredItems" :key="item.book.id" class="group animate-slide-up" :style="{ animationDelay: (index * 50) + 'ms' }">
+              <!-- Premium Library: GRID VIEW -->
+              <div v-else-if="viewMode === 'grid'" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-x-6 gap-y-8">
+                <div v-for="(item, index) in filteredItems" :key="item.book.id" class="group animate-slide-up" :style="{ animationDelay: (index * 40) + 'ms' }">
                   <div class="relative aspect-[2/3] overflow-hidden shadow-sm group-hover:shadow-md transition-shadow duration-300 border border-outline-variant/10 mb-3 bg-surface-container-low">
                     <img v-if="item.book.cover_image" :src="getCoverUrl(item.book.cover_image)" :alt="`Bìa sách ${item.book.title}`" class="w-full h-full object-contain p-2" />
                     <div v-else class="w-full h-full flex items-center justify-center text-outline/20">
                       <span class="material-symbols-outlined text-5xl">auto_stories</span>
                     </div>
+
                     <!-- Wishlist Float -->
                     <div class="absolute top-2.5 right-2.5 z-30">
-                       <button type="button" @click.stop="toggleWishlist(item.book.id)" class="w-11 h-11 rounded-xl bg-black/60 backdrop-blur-md border border-white/20 flex items-center justify-center text-white transition-colors group/heart shadow-md"
+                       <button type="button" @click.stop="toggleWishlist(item.book.id)" class="w-11 h-11 rounded-xl bg-black/60 backdrop-blur-md border border-white/20 flex items-center justify-center text-white transition-colors group/heart shadow-md cursor-pointer"
                          :aria-label="wishlistStore.isFavorite(item.book.id) ? `Bỏ ${item.book.title} khỏi yêu thích` : `Thêm ${item.book.title} vào yêu thích`"
                          :aria-pressed="wishlistStore.isFavorite(item.book.id)"
                        >
-                          <span                            class="material-symbols-outlined text-base transition-all duration-300"
+                          <span 
+                            class="material-symbols-outlined text-base transition-all duration-300"
                             :class="wishlistStore.isFavorite(item.book.id) ? 'text-error fill-1 scale-110' : 'group-hover/heart:text-error'"
                           >
                             favorite
@@ -106,11 +174,6 @@
                        </div>
                     </div>
 
-                    <!-- Refined Progress Line (Shown only when real progress data exists) -->
-                    <div v-if="item.book.type === 'ebook' && item.reading_progress != null" class="absolute bottom-0 left-0 right-0 h-1 bg-black/20 z-10 overflow-hidden">
-                       <div class="h-full bg-primary transition-all duration-500" :style="{ width: item.reading_progress + '%' }"></div>
-                    </div>
-
                     <!-- Hover Quick Actions -->
                     <div class="library-actions absolute inset-0 bg-gradient-to-t from-primary/95 via-primary/50 to-transparent transition-opacity duration-300 flex flex-col items-center justify-center p-4 gap-2.5 z-20">
                       <button
@@ -122,12 +185,11 @@
                         Đọc Ngay
                       </button>
                       <button
-                        v-if="item.book.type === 'physical'"
-                        @click="$router.push(`/tracking/${item.order_id}`)"
-                        class="min-h-11 w-full bg-white text-on-surface py-2.5 rounded-xl font-bold text-sm shadow-md transition-colors flex items-center justify-center gap-2 border-none cursor-pointer"
+                        @click="$router.push(`/book/${item.book.slug || item.book.id}#reviews`)"
+                        class="min-h-11 w-full bg-white text-primary hover:bg-primary hover:text-on-primary py-2.5 rounded-xl font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2 border-none cursor-pointer"
                       >
-                        <span class="material-symbols-outlined text-lg">local_shipping</span>
-                        Theo dõi
+                        <span class="material-symbols-outlined text-lg">rate_review</span>
+                        Đánh giá
                       </button>
                       <button
                         @click="$router.push(`/book/${item.book.slug || item.book.id}`)"
@@ -137,13 +199,84 @@
                       </button>
                     </div>
                   </div>
+
                   <div class="px-1 space-y-1 text-left">
                     <h4 class="text-sm font-bold text-on-surface leading-tight line-clamp-1 group-hover:text-primary transition-colors tracking-tight">{{ item.book.title }}</h4>
-                    <p class="text-sm text-outline font-medium truncate">{{ item.book.author || 'Đang cập nhật tác giả' }}</p>
-                    <div v-if="item.book.type === 'ebook' && item.purchase_version" class="pt-2 text-xs text-outline">
-                      <span class="font-bold">Đã mua: phiên bản {{ item.purchase_version }}</span>
-                      <span v-if="item.latest_version && item.latest_version !== item.purchase_version"> · Mới nhất: phiên bản {{ item.latest_version }}</span>
+                    <p class="text-xs text-outline font-medium truncate">{{ item.book.author || 'Chưa cập nhật tác giả' }}</p>
+                    <div class="flex items-center justify-between text-[11px] text-outline/80 pt-1">
+                      <span>{{ formatDate(item.purchased_at) }}</span>
+                      <span v-if="item.book.type === 'ebook' && item.purchase_version" class="font-bold">v{{ item.purchase_version }}</span>
                     </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Premium Library: LIST VIEW -->
+              <div v-else-if="viewMode === 'list'" class="space-y-4">
+                <div 
+                  v-for="(item, index) in filteredItems" 
+                  :key="item.book.id" 
+                  class="bg-surface-container-low/30 rounded-2xl p-4 border border-outline-variant/20 hover:border-primary/30 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-slide-up"
+                  :style="{ animationDelay: (index * 30) + 'ms' }"
+                >
+                  <div class="flex items-center gap-4 min-w-0">
+                    <div class="w-16 h-24 overflow-hidden shrink-0 shadow-sm border border-outline-variant/10 rounded-xl bg-surface-container-low relative">
+                      <img v-if="item.book.cover_image" :src="getCoverUrl(item.book.cover_image)" :alt="`Bìa sách ${item.book.title}`" class="w-full h-full object-contain p-1" />
+                      <div v-else class="w-full h-full flex items-center justify-center text-outline/30">
+                        <span class="material-symbols-outlined text-2xl">book</span>
+                      </div>
+                    </div>
+
+                    <div class="min-w-0 space-y-1">
+                      <div class="flex items-center gap-2 flex-wrap">
+                        <span 
+                          class="px-2 py-0.5 rounded text-[10px] font-black tracking-wide border"
+                          :class="item.book.type === 'ebook' ? 'bg-primary/10 text-primary border-primary/20' : 'bg-secondary/10 text-secondary border-secondary/20'"
+                        >
+                          {{ item.book.type === 'ebook' ? 'E-book' : 'Sách giấy' }}
+                        </span>
+                        <span class="text-xs text-outline font-medium">Sở hữu ngày: {{ formatDate(item.purchased_at) }}</span>
+                      </div>
+                      <h4 class="text-base font-bold text-on-surface leading-snug truncate hover:text-primary transition-colors">{{ item.book.title }}</h4>
+                      <p class="text-xs text-outline font-medium">{{ item.book.author || 'Chưa cập nhật tác giả' }}</p>
+                      
+                      <div v-if="item.book.type === 'ebook' && item.purchase_version" class="text-xs text-outline/80 pt-0.5">
+                        <span>Phiên bản đã mua: <strong>v{{ item.purchase_version }}</strong></span>
+                        <span v-if="item.latest_version && item.latest_version !== item.purchase_version" class="text-primary font-bold ml-2">· Có bản mới: v{{ item.latest_version }}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="flex items-center gap-3 shrink-0 self-end sm:self-center">
+                    <button 
+                      type="button" 
+                      @click="toggleWishlist(item.book.id)" 
+                      class="w-10 h-10 rounded-xl bg-surface-container-high border border-outline-variant/20 flex items-center justify-center text-on-surface transition-colors cursor-pointer"
+                      :title="wishlistStore.isFavorite(item.book.id) ? 'Bỏ yêu thích' : 'Thêm yêu thích'"
+                    >
+                      <span class="material-symbols-outlined text-lg" :class="wishlistStore.isFavorite(item.book.id) ? 'text-error fill-1' : ''">favorite</span>
+                    </button>
+                    <button
+                      v-if="item.book.type === 'ebook' && item.has_access && item.order_id"
+                      @click="readEbook(item.order_id, item.book.id)"
+                      class="min-h-11 px-5 py-2.5 bg-primary text-on-primary rounded-xl font-bold text-xs flex items-center gap-1.5 cursor-pointer border-none shadow-sm hover:bg-primary/90 transition-colors"
+                    >
+                      <span class="material-symbols-outlined text-[18px] fill-1">auto_stories</span>
+                      Đọc Ngay
+                    </button>
+                    <button
+                      @click="$router.push(`/book/${item.book.slug || item.book.id}#reviews`)"
+                      class="min-h-11 px-4 py-2.5 bg-primary/10 text-primary hover:bg-primary hover:text-on-primary rounded-xl font-bold text-xs flex items-center gap-1.5 cursor-pointer border border-primary/20 transition-all"
+                    >
+                      <span class="material-symbols-outlined text-[18px]">rate_review</span>
+                      Đánh giá
+                    </button>
+                    <button
+                      @click="$router.push(`/book/${item.book.slug || item.book.id}`)"
+                      class="min-h-11 px-4 py-2.5 border border-outline-variant/30 rounded-xl font-bold text-xs text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer bg-transparent"
+                    >
+                      Thông tin
+                    </button>
                   </div>
                 </div>
               </div>
@@ -171,6 +304,9 @@ const wishlistStore = useWishlistStore()
 const loading = ref(true)
 const libraryItems = ref([])
 const currentType = ref('all')
+const searchQuery = ref('')
+const sortBy = ref('purchased_desc')
+const viewMode = ref('grid')
 const error = ref('')
 
 const typeFilters = [
@@ -210,9 +346,55 @@ const physicalCount = computed(() => {
 })
 
 const filteredItems = computed(() => {
-  if (currentType.value === 'all') return libraryItems.value
-  return libraryItems.value.filter(item => item.book?.type === currentType.value)
+  let list = libraryItems.value
+
+  // 1. Lọc theo định dạng
+  if (currentType.value !== 'all') {
+    list = list.filter(item => item.book?.type === currentType.value)
+  }
+
+  // 2. Tìm kiếm theo tên sách hoặc tác giả
+  if (searchQuery.value.trim()) {
+    const q = searchQuery.value.trim().toLowerCase()
+    list = list.filter(item => {
+      const title = (item.book?.title || '').toLowerCase()
+      const author = (item.book?.author || '').toLowerCase()
+      return title.includes(q) || author.includes(q)
+    })
+  }
+
+  // 3. Sắp xếp
+  return [...list].sort((a, b) => {
+    if (sortBy.value === 'purchased_desc') {
+      return new Date(b.purchased_at || 0) - new Date(a.purchased_at || 0)
+    }
+    if (sortBy.value === 'purchased_asc') {
+      return new Date(a.purchased_at || 0) - new Date(b.purchased_at || 0)
+    }
+    if (sortBy.value === 'title_asc') {
+      return (a.book?.title || '').localeCompare(b.book?.title || '', 'vi')
+    }
+    if (sortBy.value === 'title_desc') {
+      return (b.book?.title || '').localeCompare(a.book?.title || '', 'vi')
+    }
+    return 0
+  })
 })
+
+const resetFilters = () => {
+  searchQuery.value = ''
+  currentType.value = 'all'
+  sortBy.value = 'purchased_desc'
+}
+
+const formatDate = (dateString) => {
+  if (!dateString) return '—'
+  const date = new Date(dateString)
+  if (Number.isNaN(date.getTime())) return '—'
+  return new Intl.DateTimeFormat('vi-VN', {
+    day: '2-digit', month: '2-digit', year: 'numeric'
+  }).format(date)
+}
 
 const getCoverUrl = (path) => {
   if (!path) return ''

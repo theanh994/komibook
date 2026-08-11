@@ -14,13 +14,16 @@
       aria-label="Công cụ trình đọc"
     >
       <!-- Brand & Header -->
-      <div class="px-8 mb-xl flex items-center gap-4 group cursor-pointer" @click="$router.push('/')">
-        <div class="w-12 h-12 rounded-2xl bg-primary flex items-center justify-center text-on-primary shadow-lg shadow-primary/20 group-hover:scale-105 transition-transform duration-500">
-          <span class="material-symbols-outlined text-[28px] fill-1">menu_book</span>
+      <div class="px-6 mb-xl flex items-center gap-3.5 group cursor-pointer" @click="$router.push('/')" title="Trở về Trang chủ KomiBook">
+        <div class="w-12 h-12 rounded-2xl flex items-center justify-center transition-transform group-hover:scale-105 shrink-0 overflow-hidden bg-surface-container-lowest p-1 shadow-md border border-outline-variant/20">
+          <img v-if="logoExists" src="@/assets/logo.png" alt="KomiBook Logo" class="w-full h-full object-contain" />
+          <div v-else class="w-full h-full bg-primary flex items-center justify-center rounded-xl text-on-primary">
+            <span class="material-symbols-outlined text-2xl">auto_stories</span>
+          </div>
         </div>
         <div>
-          <h1 class="text-2xl font-bold text-on-surface tracking-tighter leading-none">KomiBook</h1>
-          <p class="text-xs text-primary font-bold mt-1.5">Trình đọc ebook</p>
+          <h1 class="text-xl font-black text-on-surface tracking-tight uppercase leading-none">KomiBook</h1>
+          <p class="text-[10px] text-primary font-extrabold tracking-wider uppercase mt-1">Trình đọc ebook</p>
         </div>
       </div>
 
@@ -121,6 +124,19 @@
 
     <!-- ─── MAIN CONTENT AREA ─── -->
     <main class="flex-1 flex flex-col h-full overflow-hidden relative transition-all duration-500">
+      <!-- Floating Brand Logo Badge (Shown in Focus Mode) -->
+      <div 
+        v-if="focusMode" 
+        class="fixed top-5 left-5 z-[90] flex items-center gap-3 bg-surface-container-lowest/90 backdrop-blur-2xl px-4 py-2 rounded-2xl border border-outline-variant/30 shadow-lg cursor-pointer hover:scale-105 transition-all"
+        @click="$router.push('/')"
+        title="Trở về Trang chủ KomiBook"
+      >
+        <div class="w-7 h-7 flex items-center justify-center shrink-0">
+          <img v-if="logoExists" src="@/assets/logo.png" alt="KomiBook Logo" class="w-full h-full object-contain" />
+          <span v-else class="material-symbols-outlined text-primary text-lg">auto_stories</span>
+        </div>
+        <span class="font-black text-sm text-on-surface tracking-tight uppercase">KomiBook</span>
+      </div>
       
       <!-- ══ READER WORKSPACE (Always active) ══ -->
       <div class="flex-1 flex flex-col h-full relative overflow-hidden">
@@ -140,6 +156,25 @@
           </div>
           <div class="h-px w-8 mx-auto bg-outline-variant/20"></div>
           <div class="flex flex-col gap-2">
+            <button @click="openAddNoteDialog" class="w-12 h-12 rounded-2xl flex items-center justify-center text-primary bg-primary/10 hover:bg-primary hover:text-on-primary transition-all" title="Thêm ghi chú trang này">
+              <span class="material-symbols-outlined text-[26px]">edit_note</span>
+            </button>
+            <button
+              @click="toggleBookmarkCurrentPage"
+              class="w-12 h-12 rounded-2xl flex items-center justify-center transition-all cursor-pointer"
+              :class="isCurrentPageBookmarked ? 'bg-primary text-on-primary shadow-md' : 'text-on-surface hover:text-primary hover:bg-primary/10'"
+              :title="isCurrentPageBookmarked ? 'Bỏ đánh dấu trang này' : 'Đánh dấu trang hiện tại'"
+            >
+              <span class="material-symbols-outlined text-[26px]" :style="{ 'font-variation-settings': isCurrentPageBookmarked ? `'FILL' 1` : `'FILL' 0` }">bookmark</span>
+            </button>
+            <button
+              @click="toggleViewMode"
+              class="w-12 h-12 rounded-2xl flex items-center justify-center transition-all cursor-pointer"
+              :class="viewMode === 'double' ? 'bg-primary text-on-primary shadow-md' : 'text-on-surface hover:text-primary hover:bg-primary/10'"
+              :title="viewMode === 'double' ? 'Chuyển về 1 trang' : 'Chuyển sang 2 trang song song'"
+            >
+              <span class="material-symbols-outlined text-[26px]">{{ viewMode === 'double' ? 'menu_book' : 'auto_stories' }}</span>
+            </button>
             <button @click="toggleTheme" class="w-12 h-12 rounded-2xl flex items-center justify-center text-on-surface hover:text-primary hover:bg-primary/10 transition-all" title="Chuyển chế độ">
               <span class="material-symbols-outlined text-[26px]">{{ currentTheme === 'dark' ? 'light_mode' : 'dark_mode' }}</span>
             </button>
@@ -163,7 +198,8 @@
           </div>
 
           <div 
-            class="w-full max-w-3xl relative transition-all duration-700 ease-[cubic-bezier(0.34,1.56,0.64,1)]" 
+            class="w-full relative transition-all duration-700 ease-[cubic-bezier(0.34,1.56,0.64,1)]" 
+            :class="viewMode === 'double' ? 'max-w-6xl' : 'max-w-3xl'"
             :style="{ transform: `scale(${scale})`, transformOrigin: 'top center', perspective: '1500px' }"
           >
             
@@ -203,18 +239,62 @@
               @pointercancel="endDrag"
               @pointerleave="endDrag"
             >
-              <VuePdfEmbed 
-                v-if="pdfUrl"
-                ref="pdfRef"
-                :source="pdfUrl" 
-                :page="currentPage"
-                :text-layer="false"
-                :annotation-layer="false"
-                @loaded="onPdfLoaded"
-                @rendered="onPdfRendered"
-                @error="onPdfError"
-                class="w-full" 
-              />
+              <!-- Single Page Mode -->
+              <template v-if="viewMode === 'single'">
+                <VuePdfEmbed 
+                  v-if="pdfUrl"
+                  ref="pdfRef"
+                  :source="pdfUrl" 
+                  :page="currentPage"
+                  :text-layer="false"
+                  :annotation-layer="false"
+                  @loaded="onPdfLoaded"
+                  @rendered="onPdfRendered"
+                  @error="onPdfError"
+                  class="w-full" 
+                />
+              </template>
+
+              <!-- Dual Page Spread Mode (2 Trang song song) -->
+              <template v-else>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-0 relative bg-slate-100 dark:bg-slate-900">
+                  <!-- Left Page -->
+                  <div class="bg-white overflow-hidden relative shadow-xs">
+                    <VuePdfEmbed 
+                      v-if="pdfUrl"
+                      ref="pdfRef"
+                      :source="pdfUrl" 
+                      :page="currentPage"
+                      :text-layer="false"
+                      :annotation-layer="false"
+                      @loaded="onPdfLoaded"
+                      @rendered="onPdfRendered"
+                      @error="onPdfError"
+                      class="w-full" 
+                    />
+                    <span class="absolute bottom-2 left-3 text-[10px] font-bold text-slate-400 opacity-60">Trang {{ currentPage }}</span>
+                  </div>
+
+                  <!-- Book Spine Shadow (Nếp gáy sách ở giữa) -->
+                  <div class="hidden md:block absolute left-1/2 top-0 bottom-0 w-6 -translate-x-1/2 bg-gradient-to-r from-black/15 via-black/35 to-black/15 pointer-events-none z-20 shadow-inner"></div>
+
+                  <!-- Right Page -->
+                  <div class="bg-white overflow-hidden relative shadow-xs">
+                    <VuePdfEmbed 
+                      v-if="pdfUrl && hasSecondPage"
+                      :source="pdfUrl" 
+                      :page="secondPageNumber"
+                      :text-layer="false"
+                      :annotation-layer="false"
+                      class="w-full" 
+                    />
+                    <div v-else-if="!hasSecondPage" class="w-full h-full min-h-[500px] flex items-center justify-center bg-slate-50 text-slate-400 italic text-xs">
+                      (Hết sách)
+                    </div>
+                    <span v-if="hasSecondPage" class="absolute bottom-2 right-3 text-[10px] font-bold text-slate-400 opacity-60">Trang {{ secondPageNumber }}</span>
+                  </div>
+                </div>
+              </template>
               <!-- Social DRM Watermark Overlay -->
               <div v-if="watermarkEmail" class="absolute inset-0 pointer-events-none z-10 flex flex-wrap justify-around items-center overflow-hidden opacity-[0.06] select-none">
                 <div v-for="n in 12" :key="n" class="text-xs font-black rotate-[-30deg] tracking-widest py-12 px-6 whitespace-nowrap text-slate-900">
@@ -339,64 +419,228 @@
 
       <!-- ══ DRAWER TAB: ANNOTATIONS ══ -->
       <div v-show="activeTab === 'annotations'" class="h-full overflow-y-auto no-scrollbar scroll-smooth pb-8">
-        <div class="max-w-4xl mx-auto">
-          <header class="flex flex-col gap-6 mb-10 border-b border-outline-variant/20 pb-8">
-            <div class="animate-slide-up">
-              <div class="flex items-center gap-3 mb-3">
-                 <div class="w-1.5 h-6 bg-secondary rounded-full"></div>
-                 <span class="text-xs font-bold text-secondary uppercase tracking-[0.3em]">Kho tàng cảm xúc</span>
+        <div class="max-w-4xl mx-auto space-y-6">
+          <header class="flex flex-col gap-6 border-b border-outline-variant/20 pb-6">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-slide-up">
+              <div>
+                <div class="flex items-center gap-3 mb-1">
+                   <div class="w-1.5 h-6 bg-secondary rounded-full"></div>
+                   <span class="text-xs font-bold text-secondary uppercase tracking-[0.3em]">Kho tàng cảm xúc</span>
+                </div>
+                <h2 class="text-3xl font-bold text-on-surface tracking-tight">Ghi chú & Đánh dấu</h2>
               </div>
-              <h2 class="text-3xl font-bold text-on-surface tracking-tight">Ghi chú & Đánh dấu</h2>
-              <p class="text-on-surface-variant font-medium mt-2 text-sm">Lưu giữ từng khoảnh khắc bừng sáng của trí tuệ.</p>
+              <div class="flex items-center gap-2">
+                <button
+                  type="button"
+                  @click="openAddNoteDialog"
+                  class="min-h-10 inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-on-primary font-bold text-xs shadow-md hover:bg-primary/90 transition-all cursor-pointer"
+                >
+                  <span class="material-symbols-outlined text-lg">add_notes</span>
+                  <span>Thêm ghi chú</span>
+                </button>
+                <button
+                  type="button"
+                  @click="exportNotesMarkdown"
+                  class="min-h-10 inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-surface-container-high border border-outline-variant/30 text-on-surface-variant font-bold text-xs hover:bg-primary/10 hover:text-primary transition-all cursor-pointer"
+                  title="Xuất danh sách ghi chú ra file Markdown (.md)"
+                >
+                  <span class="material-symbols-outlined text-lg">download</span>
+                  <span class="hidden sm:inline">Xuất .md</span>
+                </button>
+              </div>
             </div>
+
+            <!-- Search input -->
+            <div class="relative">
+              <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-lg">search</span>
+              <input
+                type="text"
+                v-model="annotationSearchQuery"
+                placeholder="Tìm kiếm từ khóa trong ghi chú hoặc trích dẫn..."
+                class="w-full h-11 pl-10 pr-4 rounded-xl border border-outline-variant/30 bg-surface-container-lowest text-xs font-bold text-on-surface focus:border-primary outline-none"
+              />
+            </div>
+
+            <!-- Filter tabs -->
             <div class="flex flex-wrap gap-2 animate-fade-in">
-              <button @click="annotationFilter = 'all'" :class="annotationFilter === 'all' ? 'bg-primary text-on-primary shadow-md shadow-primary/20' : 'bg-surface-container-high text-on-surface-variant'" class="px-5 py-2.5 rounded-xl text-xs font-bold transition-all">Tất cả ({{ annotations.length }})</button>
-              <button @click="annotationFilter = 'highlight'" :class="annotationFilter === 'highlight' ? 'bg-secondary text-on-secondary shadow-md shadow-secondary/20' : 'bg-surface-container-high text-on-surface-variant'" class="px-5 py-2.5 rounded-xl text-xs font-bold transition-all">Highlights</button>
-              <button @click="annotationFilter = 'note'" :class="annotationFilter === 'note' ? 'bg-tertiary text-on-tertiary shadow-md shadow-tertiary/20' : 'bg-surface-container-high text-on-surface-variant'" class="px-5 py-2.5 rounded-xl text-xs font-bold transition-all">Ghi chú</button>
+              <button @click="annotationFilter = 'all'" :class="annotationFilter === 'all' ? 'bg-primary text-on-primary shadow-md shadow-primary/20' : 'bg-surface-container-high text-on-surface-variant'" class="px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer">Tất cả ({{ annotations.length }})</button>
+              <button @click="annotationFilter = 'highlight'" :class="annotationFilter === 'highlight' ? 'bg-secondary text-on-secondary shadow-md shadow-secondary/20' : 'bg-surface-container-high text-on-surface-variant'" class="px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer">Highlights</button>
+              <button @click="annotationFilter = 'note'" :class="annotationFilter === 'note' ? 'bg-tertiary text-on-tertiary shadow-md shadow-tertiary/20' : 'bg-surface-container-high text-on-surface-variant'" class="px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer">Ghi chú</button>
+              <button @click="annotationFilter = 'bookmark'" :class="annotationFilter === 'bookmark' ? 'bg-primary-container text-primary border border-primary/30 shadow-xs' : 'bg-surface-container-high text-on-surface-variant'" class="px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer">Bookmarks (Đã ghim)</button>
             </div>
           </header>
 
-          <div v-if="filteredAnnotations.length === 0" class="flex flex-col items-center justify-center py-20 bg-surface-container-low/40 rounded-3xl border-2 border-dashed border-outline-variant/20 animate-fade-in">
-            <div class="w-24 h-24 bg-surface-container-high rounded-full flex items-center justify-center mb-6">
-              <span class="material-symbols-outlined text-[48px] text-outline/30">draw_abstract</span>
+          <div v-if="filteredAnnotations.length === 0" class="flex flex-col items-center justify-center py-16 bg-surface-container-low/40 rounded-3xl border-2 border-dashed border-outline-variant/20 animate-fade-in">
+            <div class="w-20 h-20 bg-surface-container-high rounded-full flex items-center justify-center mb-4">
+              <span class="material-symbols-outlined text-[40px] text-outline/30">draw_abstract</span>
             </div>
-            <h3 class="text-xl font-bold text-on-surface mb-2">Trang giấy còn trống</h3>
-            <p class="text-sm text-on-surface-variant font-medium opacity-60">Hãy bắt đầu tô điểm hành trình đọc sách của bạn.</p>
+            <h3 class="text-lg font-bold text-on-surface mb-1">Chưa có dữ liệu phù hợp</h3>
+            <p class="text-xs text-on-surface-variant font-medium opacity-60">Hãy bắt đầu tạo ghi chú hoặc đánh dấu trang đầu tiên cho cuốn sách này.</p>
           </div>
 
-          <div class="grid grid-cols-1 gap-6 items-start">
+          <div class="grid grid-cols-1 gap-4 items-start">
             <article 
               v-for="(note, idx) in filteredAnnotations" 
               :key="note.id"
-              class="bg-surface-container-lowest rounded-3xl shadow-sm p-6 relative overflow-hidden flex flex-col gap-5 border border-outline-variant/10 hover:shadow-xl hover:-translate-y-1 transition-all duration-500 group animate-slide-up"
-              :style="{ animationDelay: `${idx * 100}ms` }"
+              class="bg-surface-container-lowest rounded-3xl shadow-xs p-5 relative overflow-hidden flex flex-col gap-4 border border-outline-variant/10 hover:shadow-lg transition-all duration-300 group animate-slide-up"
+              :style="{ animationDelay: `${idx * 60}ms` }"
             >
-              <!-- Color Indicator -->
-              <div class="absolute left-0 top-0 bottom-0 w-2 transition-all group-hover:w-3" :style="{ backgroundColor: note.color || '#ba0035' }"></div>
+              <!-- Color Indicator Bar -->
+              <div class="absolute left-0 top-0 bottom-0 w-2 transition-all group-hover:w-3" :style="{ backgroundColor: note.color || '#eab308' }"></div>
               
               <div class="flex justify-between items-center pl-2">
-                <div class="flex items-center gap-2">
-                   <div class="w-8 h-8 rounded-full bg-surface-container-high flex items-center justify-center">
-                      <span class="material-symbols-outlined text-sm text-primary">auto_stories</span>
-                   </div>
-                  <span class="text-xs font-bold text-on-surface">Trang {{ note.page }}</span>
+                <!-- Jump to page clickable header -->
+                <button
+                  type="button"
+                  @click="jumpToNotePage(note)"
+                  class="flex items-center gap-2 group/jump cursor-pointer"
+                  title="Nhấn để chuyển đến trang này"
+                >
+                  <div class="w-8 h-8 rounded-full bg-primary/10 group-hover/jump:bg-primary group-hover/jump:text-on-primary flex items-center justify-center text-primary transition-colors">
+                    <span class="material-symbols-outlined text-sm">{{ note.type === 'bookmark' ? 'bookmark' : 'auto_stories' }}</span>
+                  </div>
+                  <span class="text-xs font-bold text-on-surface group-hover/jump:text-primary transition-colors">
+                    Trang {{ note.page_number || note.page }} {{ note.type === 'bookmark' ? '(Đã ghim)' : '' }}
+                  </span>
+                  <span class="material-symbols-outlined text-xs text-outline group-hover/jump:text-primary opacity-0 group-hover/jump:opacity-100 transition-opacity">open_in_new</span>
+                </button>
+
+                <div class="flex items-center gap-3">
+                  <span class="text-[11px] font-bold text-outline">{{ formatDate(note.created_at) }}</span>
+                  <!-- Action Buttons: Edit & Delete -->
+                  <div class="flex items-center gap-1">
+                    <button
+                      v-if="note.type !== 'bookmark'"
+                      type="button"
+                      @click.stop="openEditDialog(note)"
+                      class="w-7 h-7 rounded-lg hover:bg-primary/10 hover:text-primary text-outline flex items-center justify-center transition-colors cursor-pointer"
+                      title="Chỉnh sửa ghi chú"
+                    >
+                      <span class="material-symbols-outlined text-base">edit</span>
+                    </button>
+                    <button
+                      type="button"
+                      @click.stop="deleteAnnotation(note.id)"
+                      class="w-7 h-7 rounded-lg hover:bg-error/10 hover:text-error text-outline flex items-center justify-center transition-colors cursor-pointer"
+                      title="Xóa bản ghi này"
+                    >
+                      <span class="material-symbols-outlined text-base">delete</span>
+                    </button>
+                  </div>
                 </div>
-                <span class="text-xs font-bold text-outline">{{ formatDate(note.created_at) }}</span>
               </div>
 
-              <blockquote v-if="note.highlighted_text" class="font-literata text-base text-on-surface italic pl-5 border-l-4 border-outline-variant/20 my-1 leading-relaxed opacity-80 group-hover:opacity-100 transition-opacity">
-                "{{ note.highlighted_text }}"
-              </blockquote>
-
-              <div class="bg-surface-container-low p-5 rounded-2xl border border-outline-variant/10 relative">
-                <div class="flex items-center gap-2 mb-2 text-primary opacity-60">
-                  <span class="material-symbols-outlined text-xs">edit_square</span>
-                  <span class="text-[8px] font-bold uppercase tracking-[0.2em]">Suy tư của bạn</span>
+              <div v-if="note.highlighted_text" class="flex flex-col gap-2">
+                <blockquote class="font-literata text-xs text-on-surface italic pl-4 border-l-3 border-outline-variant/30 my-0.5 leading-relaxed opacity-90">
+                  "{{ note.highlighted_text }}"
+                </blockquote>
+                <div class="flex justify-end pr-1">
+                  <button
+                    type="button"
+                    @click.stop="openQuoteCardModal(note)"
+                    class="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-primary/10 text-primary text-[11px] font-bold hover:bg-primary hover:text-on-primary transition-all cursor-pointer shadow-xs"
+                    title="Tạo ảnh thẻ trích dẫn nghệ thuật để chia sẻ"
+                  >
+                    <span class="material-symbols-outlined text-sm">share</span>
+                    <span>Tạo thẻ chia sẻ</span>
+                  </button>
                 </div>
-                <p class="text-sm font-bold text-on-surface leading-relaxed">{{ note.note_content }}</p>
-                <span class="absolute bottom-3 right-3 material-symbols-outlined text-2xl text-primary/5 group-hover:text-primary/20 transition-all">format_quote</span>
+              </div>
+
+              <div v-if="note.note_content" class="bg-surface-container-low p-4 rounded-2xl border border-outline-variant/10 relative">
+                <div class="flex items-center gap-1.5 mb-1.5 text-primary opacity-70">
+                  <span class="material-symbols-outlined text-xs">{{ note.type === 'bookmark' ? 'bookmark' : 'edit_square' }}</span>
+                  <span class="text-[9px] font-bold uppercase tracking-wider">{{ note.type === 'bookmark' ? 'Đánh dấu trang' : 'Suy tư của bạn' }}</span>
+                </div>
+                <p class="text-xs font-semibold text-on-surface leading-relaxed whitespace-pre-wrap">{{ note.note_content }}</p>
               </div>
             </article>
+          </div>
+        </div>
+      </div>
+
+      <!-- ══ DRAWER TAB: SEARCH ══ -->
+      <div v-show="activeTab === 'search'" class="h-full overflow-y-auto no-scrollbar scroll-smooth pb-8">
+        <div class="max-w-4xl mx-auto space-y-6">
+          <header class="flex flex-col gap-4 border-b border-outline-variant/20 pb-6">
+            <div class="animate-slide-up">
+              <div class="flex items-center gap-3 mb-1">
+                 <div class="w-1.5 h-6 bg-primary rounded-full"></div>
+                 <span class="text-xs font-bold text-primary uppercase tracking-[0.3em]">Tra cứu toàn văn</span>
+              </div>
+              <h2 class="text-3xl font-bold text-on-surface tracking-tight">Tìm kiếm trong Sách</h2>
+              <p class="text-on-surface-variant font-medium mt-1 text-xs">Tìm từ khóa trực tiếp trong toàn bộ nội dung văn bản của cuốn sách.</p>
+            </div>
+
+            <form @submit.prevent="searchBookText" class="flex gap-2">
+              <div class="relative flex-1">
+                <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-lg">search</span>
+                <input
+                  type="text"
+                  v-model="searchKeyword"
+                  placeholder="Nhập từ khóa cần tìm trong sách..."
+                  class="w-full h-11 pl-10 pr-10 rounded-xl border border-outline-variant/30 bg-surface-container-lowest text-xs font-bold text-on-surface focus:border-primary outline-none"
+                />
+                <button v-if="searchKeyword" type="button" @click="clearBookSearch" class="absolute right-3 top-1/2 -translate-y-1/2 text-outline hover:text-on-surface">
+                  <span class="material-symbols-outlined text-base">close</span>
+                </button>
+              </div>
+              <button
+                type="submit"
+                :disabled="isSearchingBook || !searchKeyword.trim()"
+                class="px-5 py-2.5 rounded-xl bg-primary text-on-primary font-bold text-xs shadow-md hover:bg-primary/90 disabled:opacity-50 transition-all flex items-center gap-2 shrink-0 cursor-pointer"
+              >
+                <span v-if="isSearchingBook" class="material-symbols-outlined text-base animate-spin">sync</span>
+                <span>{{ isSearchingBook ? `Đang quét ${searchProgress}%` : 'Tìm kiếm' }}</span>
+              </button>
+            </form>
+          </header>
+
+          <!-- Searching Progress Bar -->
+          <div v-if="isSearchingBook" class="space-y-2 py-4">
+            <div class="flex justify-between text-xs font-bold text-primary">
+              <span>Đang quét các trang sách...</span>
+              <span>{{ searchProgress }}%</span>
+            </div>
+            <div class="w-full h-2 bg-surface-container-high rounded-full overflow-hidden">
+              <div class="h-full bg-primary transition-all duration-200" :style="{ width: searchProgress + '%' }"></div>
+            </div>
+          </div>
+
+          <!-- Empty State -->
+          <div v-if="!isSearchingBook && searchResults.length === 0 && searchKeyword" class="flex flex-col items-center justify-center py-16 bg-surface-container-low/40 rounded-3xl border-2 border-dashed border-outline-variant/20">
+            <div class="w-16 h-16 bg-surface-container-high rounded-full flex items-center justify-center mb-3 text-outline">
+              <span class="material-symbols-outlined text-3xl">search_off</span>
+            </div>
+            <h3 class="text-sm font-bold text-on-surface mb-1">Không tìm thấy kết quả</h3>
+            <p class="text-xs text-on-surface-variant font-medium opacity-60">Hãy thử nhập từ khóa ngắn hơn hoặc bằng từ khác.</p>
+          </div>
+
+          <!-- Search Results List -->
+          <div v-if="!isSearchingBook && searchResults.length > 0" class="space-y-3">
+            <div class="flex items-center justify-between text-xs font-bold text-on-surface-variant px-1">
+              <span>Tìm thấy <strong>{{ searchResults.length }}</strong> đoạn văn chứa từ khóa</span>
+            </div>
+
+            <div class="grid grid-cols-1 gap-3">
+              <button
+                v-for="res in searchResults"
+                :key="res.id"
+                @click="jumpToSearchResult(res)"
+                class="w-full text-left bg-surface-container-lowest p-4 rounded-2xl border border-outline-variant/15 hover:border-primary/40 hover:shadow-md transition-all group cursor-pointer flex flex-col gap-2"
+              >
+                <div class="flex items-center justify-between">
+                  <span class="inline-flex items-center gap-1.5 text-xs font-bold text-primary group-hover:underline">
+                    <span class="material-symbols-outlined text-sm">auto_stories</span>
+                    <span>Trang {{ res.page }}</span>
+                  </span>
+                  <span class="material-symbols-outlined text-xs text-outline group-hover:text-primary transition-colors">east</span>
+                </div>
+                <p class="text-xs font-literata leading-relaxed text-on-surface-variant group-hover:text-on-surface transition-colors">
+                  {{ res.snippet }}
+                </p>
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -416,6 +660,38 @@
               <span class="inline-block px-3 py-1 bg-primary/10 text-primary text-xs font-bold rounded-full border border-primary/20">Ebook</span>
               <h1 class="text-3xl font-bold text-on-surface leading-tight tracking-tight">{{ book?.title }}</h1>
               <p class="text-base text-on-surface-variant font-bold tracking-tight">Bởi {{ book?.author }}</p>
+            </div>
+          </div>
+
+          <!-- Reading Session Analytics Card -->
+          <div class="bg-surface-container-low p-5 rounded-3xl border border-outline-variant/15 mb-8 space-y-4">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <div class="w-8 h-8 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
+                  <span class="material-symbols-outlined text-lg">timer</span>
+                </div>
+                <h4 class="font-bold text-sm text-on-surface">Thống kê phiên đọc hiện tại</h4>
+              </div>
+              <span class="text-[10px] font-bold text-primary bg-primary/10 px-2.5 py-1 rounded-full animate-pulse">Đang ghi nhận</span>
+            </div>
+
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div class="bg-surface-container-lowest p-3 rounded-2xl text-center border border-outline-variant/10">
+                <span class="text-[9px] font-bold uppercase text-outline block mb-1">Thời gian đọc</span>
+                <span class="text-sm font-bold text-on-surface">{{ formattedSessionTime }}</span>
+              </div>
+              <div class="bg-surface-container-lowest p-3 rounded-2xl text-center border border-outline-variant/10">
+                <span class="text-[9px] font-bold uppercase text-outline block mb-1">Trang đã xem</span>
+                <span class="text-sm font-bold text-on-surface">{{ sessionPagesRead }} trang</span>
+              </div>
+              <div class="bg-surface-container-lowest p-3 rounded-2xl text-center border border-outline-variant/10">
+                <span class="text-[9px] font-bold uppercase text-outline block mb-1">Tốc độ đọc</span>
+                <span class="text-sm font-bold text-on-surface">{{ readingSpeed }}</span>
+              </div>
+              <div class="bg-surface-container-lowest p-3 rounded-2xl text-center border border-outline-variant/10">
+                <span class="text-[9px] font-bold uppercase text-outline block mb-1">Thời gian còn lại</span>
+                <span class="text-sm font-bold text-primary">{{ estRemainingTime }}</span>
+              </div>
             </div>
           </div>
 
@@ -570,11 +846,262 @@
         <Button label="Đồng ý & Tiến hành" class="p-button-primary bg-indigo-600 text-white p-button-sm text-xs font-bold" @click="confirmPrint" />
       </template>
     </Dialog>
+
+    <!-- Panel Nổi Thêm Ghi chú bên phải (Không che/làm mờ trang sách) -->
+    <transition name="slide-panel">
+      <div
+        v-if="showAddNoteDialog"
+        class="fixed right-4 sm:right-6 top-20 sm:top-24 bottom-20 sm:bottom-24 w-[calc(100vw-32px)] sm:w-[380px] bg-surface-container-lowest/95 backdrop-blur-2xl rounded-3xl border border-outline-variant/30 shadow-[0_20px_60px_rgba(0,0,0,0.18)] z-[95] flex flex-col p-5 overflow-y-auto text-on-surface"
+      >
+        <header class="flex items-center justify-between pb-3 border-b border-outline-variant/20 mb-4">
+          <div class="flex items-center gap-2">
+            <div class="w-8 h-8 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
+              <span class="material-symbols-outlined text-lg">edit_note</span>
+            </div>
+            <div>
+              <h3 class="font-bold text-sm text-on-surface">Thêm Ghi chú</h3>
+              <p class="text-[10px] text-primary font-bold">Trang {{ noteForm.page_number }} / {{ totalPages || 1 }}</p>
+            </div>
+          </div>
+          <button type="button" @click="showAddNoteDialog = false" class="w-8 h-8 rounded-full hover:bg-surface-container-high text-on-surface-variant flex items-center justify-center transition-colors cursor-pointer">
+            <span class="material-symbols-outlined text-base">close</span>
+          </button>
+        </header>
+
+        <form @submit.prevent="saveNewAnnotation" class="flex-1 flex flex-col justify-between space-y-4">
+          <div class="space-y-3">
+            <!-- Vị trí trang -->
+            <div class="flex items-center justify-between bg-surface-container-low p-2.5 rounded-xl border border-outline-variant/15">
+              <label class="text-xs font-bold text-on-surface-variant">Vị trí trang</label>
+              <div class="flex items-center gap-1.5">
+                <span class="text-xs font-bold text-primary">Trang</span>
+                <input type="number" v-model.number="noteForm.page_number" min="1" :max="totalPages || 9999" class="w-14 h-8 bg-surface-container-lowest text-center rounded-lg border border-outline-variant/30 font-bold text-xs outline-none focus:border-primary" />
+              </div>
+            </div>
+
+            <!-- Màu điểm nhấn -->
+            <div>
+              <label class="block text-[11px] font-bold text-on-surface-variant mb-1.5">Màu điểm nhấn</label>
+              <div class="flex items-center justify-between bg-surface-container-low p-2 rounded-xl border border-outline-variant/15">
+                <button
+                  v-for="c in colorPresets"
+                  :key="c.value"
+                  type="button"
+                  @click="noteForm.color = c.value"
+                  class="w-7 h-7 rounded-full border-2 transition-all flex items-center justify-center cursor-pointer"
+                  :class="noteForm.color === c.value ? 'border-primary scale-110 shadow-sm' : 'border-transparent opacity-75 hover:opacity-100'"
+                  :style="{ backgroundColor: c.value }"
+                  :title="c.name"
+                >
+                  <span v-if="noteForm.color === c.value" class="material-symbols-outlined text-xs text-white drop-shadow">check</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Đoạn trích dẫn -->
+            <div>
+              <div class="flex items-center justify-between mb-1">
+                <label class="text-[11px] font-bold text-on-surface-variant">Đoạn trích dẫn</label>
+                <span class="text-[9px] text-outline font-semibold">Tùy chọn</span>
+              </div>
+              <textarea
+                v-model="noteForm.highlighted_text"
+                rows="3"
+                placeholder="Nhìn trang sách bên cạnh để trích dẫn..."
+                class="w-full rounded-xl border border-outline-variant/30 bg-surface-container-lowest p-2.5 text-xs font-literata italic text-on-surface focus:border-primary outline-none resize-none"
+              ></textarea>
+            </div>
+
+            <!-- Suy tư / Ghi chú -->
+            <div>
+              <label class="block text-[11px] font-bold text-on-surface-variant mb-1">Ghi chú & Suy tư <span class="text-error">*</span></label>
+              <textarea
+                v-model="noteForm.note_content"
+                rows="4"
+                placeholder="Viết cảm nhận, đúc kết của bạn..."
+                class="w-full rounded-xl border border-outline-variant/30 bg-surface-container-lowest p-2.5 text-xs font-medium text-on-surface focus:border-primary outline-none resize-none"
+                required
+              ></textarea>
+            </div>
+          </div>
+
+          <!-- Footer hành động -->
+          <div class="flex items-center justify-end gap-2 pt-3 border-t border-outline-variant/15 mt-auto">
+            <button type="button" @click="showAddNoteDialog = false" class="px-4 py-2 rounded-xl text-xs font-bold text-on-surface-variant hover:bg-surface-container-high transition-colors cursor-pointer">Hủy</button>
+            <button type="submit" :disabled="submittingNote" class="px-5 py-2 rounded-xl bg-primary text-on-primary text-xs font-bold shadow-md hover:bg-primary/90 disabled:opacity-50 transition-all cursor-pointer">
+              {{ submittingNote ? 'Đang lưu...' : 'Lưu ghi chú' }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </transition>
+
+    <!-- Panel Nổi Chỉnh sửa Ghi chú bên phải -->
+    <transition name="slide-panel">
+      <div
+        v-if="showEditNoteDialog"
+        class="fixed right-4 sm:right-6 top-20 sm:top-24 bottom-20 sm:bottom-24 w-[calc(100vw-32px)] sm:w-[380px] bg-surface-container-lowest/95 backdrop-blur-2xl rounded-3xl border border-outline-variant/30 shadow-[0_20px_60px_rgba(0,0,0,0.18)] z-[95] flex flex-col p-5 overflow-y-auto text-on-surface"
+      >
+        <header class="flex items-center justify-between pb-3 border-b border-outline-variant/20 mb-4">
+          <div class="flex items-center gap-2">
+            <div class="w-8 h-8 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
+              <span class="material-symbols-outlined text-lg">edit</span>
+            </div>
+            <h3 class="font-bold text-sm text-on-surface">Chỉnh sửa Ghi chú</h3>
+          </div>
+          <button type="button" @click="showEditNoteDialog = false" class="w-8 h-8 rounded-full hover:bg-surface-container-high text-on-surface-variant flex items-center justify-center transition-colors cursor-pointer">
+            <span class="material-symbols-outlined text-base">close</span>
+          </button>
+        </header>
+
+        <form @submit.prevent="saveEditAnnotation" class="flex-1 flex flex-col justify-between space-y-4">
+          <div class="space-y-3">
+            <!-- Màu điểm nhấn -->
+            <div>
+              <label class="block text-[11px] font-bold text-on-surface-variant mb-1.5">Màu điểm nhấn</label>
+              <div class="flex items-center justify-between bg-surface-container-low p-2 rounded-xl border border-outline-variant/15">
+                <button
+                  v-for="c in colorPresets"
+                  :key="c.value"
+                  type="button"
+                  @click="editNoteForm.color = c.value"
+                  class="w-7 h-7 rounded-full border-2 transition-all flex items-center justify-center cursor-pointer"
+                  :class="editNoteForm.color === c.value ? 'border-primary scale-110 shadow-sm' : 'border-transparent opacity-75 hover:opacity-100'"
+                  :style="{ backgroundColor: c.value }"
+                  :title="c.name"
+                >
+                  <span v-if="editNoteForm.color === c.value" class="material-symbols-outlined text-xs text-white drop-shadow">check</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Đoạn trích dẫn -->
+            <div>
+              <div class="flex items-center justify-between mb-1">
+                <label class="text-[11px] font-bold text-on-surface-variant">Đoạn trích dẫn</label>
+                <span class="text-[9px] text-outline font-semibold">Tùy chọn</span>
+              </div>
+              <textarea
+                v-model="editNoteForm.highlighted_text"
+                rows="3"
+                placeholder="Nhập đoạn văn trích dẫn..."
+                class="w-full rounded-xl border border-outline-variant/30 bg-surface-container-lowest p-2.5 text-xs font-literata italic text-on-surface focus:border-primary outline-none resize-none"
+              ></textarea>
+            </div>
+
+            <!-- Nội dung suy tư -->
+            <div>
+              <label class="block text-[11px] font-bold text-on-surface-variant mb-1">Ghi chú & Suy tư <span class="text-error">*</span></label>
+              <textarea
+                v-model="editNoteForm.note_content"
+                rows="4"
+                placeholder="Nội dung ghi chú..."
+                class="w-full rounded-xl border border-outline-variant/30 bg-surface-container-lowest p-2.5 text-xs font-medium text-on-surface focus:border-primary outline-none resize-none"
+                required
+              ></textarea>
+            </div>
+          </div>
+
+          <!-- Footer hành động -->
+          <div class="flex items-center justify-end gap-2 pt-3 border-t border-outline-variant/15 mt-auto">
+            <button type="button" @click="showEditNoteDialog = false" class="px-4 py-2 rounded-xl text-xs font-bold text-on-surface-variant hover:bg-surface-container-high transition-colors cursor-pointer">Hủy</button>
+            <button type="submit" :disabled="submittingNote" class="px-5 py-2 rounded-xl bg-primary text-on-primary text-xs font-bold shadow-md hover:bg-primary/90 disabled:opacity-50 transition-all cursor-pointer">
+              {{ submittingNote ? 'Đang lưu...' : 'Cập nhật' }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </transition>
+
+    <!-- Side Panel Tạo Thẻ Trích Dẫn Chia Sẻ -->
+    <transition name="slide-panel">
+      <div
+        v-if="showQuoteCardModal"
+        class="fixed right-4 sm:right-6 top-20 sm:top-24 bottom-20 sm:bottom-24 w-[calc(100vw-32px)] sm:w-[420px] bg-surface-container-lowest/95 backdrop-blur-2xl rounded-3xl border border-outline-variant/30 shadow-[0_20px_60px_rgba(0,0,0,0.22)] z-[96] flex flex-col p-5 overflow-y-auto text-on-surface"
+      >
+        <header class="flex items-center justify-between pb-3 border-b border-outline-variant/20 mb-3">
+          <div class="flex items-center gap-2">
+            <div class="w-8 h-8 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
+              <span class="material-symbols-outlined text-lg">style</span>
+            </div>
+            <div>
+              <h3 class="font-bold text-sm text-on-surface">Thẻ Trích Dẫn Chia Sẻ</h3>
+              <p class="text-[10px] text-on-surface-variant font-medium">Tải về ảnh PNG nghệ thuật để đăng Story/MXH</p>
+            </div>
+          </div>
+          <button type="button" @click="showQuoteCardModal = false" class="w-8 h-8 rounded-full hover:bg-surface-container-high text-on-surface-variant flex items-center justify-center transition-colors cursor-pointer">
+            <span class="material-symbols-outlined text-base">close</span>
+          </button>
+        </header>
+
+        <div class="flex-1 flex flex-col justify-between space-y-4">
+          <!-- Theme Selection -->
+          <div>
+            <label class="block text-[11px] font-bold text-on-surface-variant mb-2">Chọn phong cách Thẻ</label>
+            <div class="grid grid-cols-2 gap-2">
+              <button
+                v-for="t in quoteCardThemes"
+                :key="t.id"
+                type="button"
+                @click="selectedQuoteTheme = t.id"
+                class="p-2.5 rounded-xl border transition-all text-left flex items-center gap-2.5 cursor-pointer"
+                :class="selectedQuoteTheme === t.id ? 'border-primary ring-2 ring-primary/20 bg-surface-container-high' : 'border-outline-variant/20 bg-surface-container-low hover:border-outline-variant/40'"
+              >
+                <div class="w-6 h-6 rounded-full shadow-inner border border-white/20 shrink-0" :style="{ background: t.bg }"></div>
+                <span class="text-xs font-bold text-on-surface truncate">{{ t.name }}</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Preview Card -->
+          <div class="flex-1 flex flex-col items-center justify-center">
+            <div
+              class="w-full aspect-[4/5] rounded-2xl p-6 shadow-xl flex flex-col justify-between relative overflow-hidden transition-all duration-300 border border-white/10"
+              :style="{ background: currentQuoteThemeObj.bg, color: currentQuoteThemeObj.text }"
+            >
+              <!-- Top Header -->
+              <div class="flex items-center justify-between opacity-70 text-[10px] font-bold uppercase tracking-wider">
+                <span class="truncate max-w-[200px]">{{ book?.title || 'Komibook Ebook' }}</span>
+                <span>Trang {{ selectedQuoteForCard.page }}</span>
+              </div>
+
+              <!-- Quote Content -->
+              <div class="my-auto space-y-3 py-4">
+                <span class="material-symbols-outlined text-4xl opacity-20 block">format_quote</span>
+                <p class="font-literata text-xs italic leading-relaxed font-normal line-clamp-6">
+                  "{{ selectedQuoteForCard.text }}"
+                </p>
+                <div class="h-0.5 w-10 rounded-full" :style="{ backgroundColor: currentQuoteThemeObj.accent }"></div>
+                <p class="text-xs font-bold opacity-80">— {{ book?.author || 'Tác giả' }}</p>
+              </div>
+
+              <!-- Bottom Footer -->
+              <div class="flex items-center justify-between pt-3 border-t border-white/10 text-[9px] opacity-60 font-semibold">
+                <span class="flex items-center gap-1">
+                  <span class="material-symbols-outlined text-xs">auto_stories</span>
+                  <span>Komibook Reader</span>
+                </span>
+                <span>komibook.vn</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Action Footer -->
+          <div class="flex items-center justify-end gap-2 pt-3 border-t border-outline-variant/15 mt-auto">
+            <button type="button" @click="showQuoteCardModal = false" class="px-4 py-2 rounded-xl text-xs font-bold text-on-surface-variant hover:bg-surface-container-high transition-colors cursor-pointer">Đóng</button>
+            <button type="button" @click="downloadQuoteCardImage" class="px-5 py-2 rounded-xl bg-primary text-on-primary text-xs font-bold shadow-md hover:bg-primary/90 transition-all flex items-center gap-2 cursor-pointer">
+              <span class="material-symbols-outlined text-base">download</span>
+              <span>Tải ảnh PNG</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </transition>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, defineAsyncComponent, onMounted, onUnmounted, watch } from 'vue'
+import { ref, shallowRef, markRaw, computed, defineAsyncComponent, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useToast } from 'primevue/usetoast'
 import Toast from 'primevue/toast'
@@ -600,7 +1127,24 @@ const scale = ref(1.0)
 const scrollContainer = ref(null)
 const book = ref(null)
 const focusMode = ref(false)
+const logoExists = ref(false)
+const viewMode = ref(localStorage.getItem('readerViewMode') || 'single')
 const annotationFilter = ref('all')
+
+const secondPageNumber = computed(() => currentPage.value + 1)
+const hasSecondPage = computed(() => secondPageNumber.value <= totalPages.value)
+const pageStep = computed(() => (viewMode.value === 'double' ? 2 : 1))
+
+const toggleViewMode = () => {
+  viewMode.value = viewMode.value === 'single' ? 'double' : 'single'
+  localStorage.setItem('readerViewMode', viewMode.value)
+  toast.add({
+    severity: 'info',
+    summary: 'Chế độ đọc',
+    detail: viewMode.value === 'double' ? 'Đã chuyển sang đọc 2 trang song song' : 'Đã chuyển sang đọc 1 trang',
+    life: 2500
+  })
+}
 
 const watermarkEmail = ref('')
 const watermarkName = ref('')
@@ -687,12 +1231,13 @@ function selectTab(tabId) {
   }
 }
 const pdfRef = ref(null)
-const pdfDocument = ref(null)
+const pdfDocument = shallowRef(null)
 
 const tabs = [
   { id: 'reader', label: 'Trình đọc', icon: 'auto_stories' },
   { id: 'contents', label: 'Mục lục', icon: 'format_list_bulleted' },
   { id: 'annotations', label: 'Ghi chú', icon: 'edit_note' },
+  { id: 'search', label: 'Tìm kiếm', icon: 'search' },
   { id: 'details', label: 'Thông tin', icon: 'info' }
 ]
 
@@ -731,12 +1276,470 @@ const readingProgress = computed(() => {
   return Math.round((currentPage.value / totalPages.value) * 100)
 })
 
-const filteredAnnotations = computed(() => {
-  if (annotationFilter.value === 'all') return annotations.value
-  if (annotationFilter.value === 'highlight') return annotations.value.filter(a => a.highlighted_text && !a.note_content)
-  if (annotationFilter.value === 'note') return annotations.value.filter(a => a.note_content)
-  return annotations.value
+const showAddNoteDialog = ref(false)
+const showEditNoteDialog = ref(false)
+const submittingNote = ref(false)
+const annotationSearchQuery = ref('')
+
+const colorPresets = [
+  { name: 'Vàng trí tuệ', value: '#eab308' },
+  { name: 'Xanh lá thư giãn', value: '#10b981' },
+  { name: 'Hồng điểm nhấn', value: '#f43f5e' },
+  { name: 'Tím tư duy', value: '#8b5cf6' },
+  { name: 'Xanh dương sâu lắng', value: '#3b82f6' }
+]
+
+const noteForm = ref({
+  page_number: 1,
+  highlighted_text: '',
+  note_content: '',
+  color: '#eab308'
 })
+
+const editNoteForm = ref({
+  id: null,
+  highlighted_text: '',
+  note_content: '',
+  color: '#eab308'
+})
+
+const filteredAnnotations = computed(() => {
+  let list = annotations.value
+  if (annotationFilter.value === 'highlight') {
+    list = list.filter(a => a.highlighted_text && !a.note_content && a.type !== 'bookmark')
+  } else if (annotationFilter.value === 'note') {
+    list = list.filter(a => a.note_content && a.type !== 'bookmark')
+  } else if (annotationFilter.value === 'bookmark') {
+    list = list.filter(a => a.type === 'bookmark')
+  }
+  
+  if (annotationSearchQuery.value.trim()) {
+    const q = annotationSearchQuery.value.toLowerCase().trim()
+    list = list.filter(a =>
+      (a.note_content && a.note_content.toLowerCase().includes(q)) ||
+      (a.highlighted_text && a.highlighted_text.toLowerCase().includes(q))
+    )
+  }
+  return list
+})
+
+// --- In-Book Search & Bookmark State & Methods ---
+const searchKeyword = ref('')
+const searchResults = ref([])
+const isSearchingBook = ref(false)
+const searchProgress = ref(0)
+
+const currentBookmark = computed(() => {
+  return annotations.value.find(a => Number(a.page_number || a.page) === currentPage.value && a.type === 'bookmark')
+})
+
+const isCurrentPageBookmarked = computed(() => {
+  return !!currentBookmark.value
+})
+
+const toggleBookmarkCurrentPage = async () => {
+  if (isCurrentPageBookmarked.value) {
+    const bm = currentBookmark.value
+    if (bm) {
+      await deleteAnnotation(bm.id)
+    }
+  } else {
+    const bookId = route.params.bookId
+    try {
+      const payload = {
+        book_id: Number(bookId),
+        page_number: currentPage.value,
+        page: currentPage.value,
+        type: 'bookmark',
+        note_content: `Đã đánh dấu trang ${currentPage.value}`,
+        color: '#3b82f6'
+      }
+      const response = await apiClient.post('/api/annotations', payload)
+      const newAnnot = readApiData(response.data) || response.data.data || response.data
+      annotations.value.unshift(newAnnot)
+      toast.add({ severity: 'success', summary: 'Đã ghim trang', detail: `Đã đánh dấu trang ${currentPage.value}`, life: 2500 })
+    } catch (err) {
+      console.error('Error toggling bookmark:', err)
+      toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Không thể đánh dấu trang này.', life: 3000 })
+    }
+  }
+}
+
+const searchBookText = async () => {
+  const query = searchKeyword.value.trim().toLowerCase()
+  const doc = pdfRef.value?.doc || pdfDocument.value
+  if (!query || !doc || isSearchingBook.value) {
+    if (!doc) {
+      toast.add({ severity: 'warn', summary: 'Cảnh báo', detail: 'Tài liệu PDF chưa tải xong. Vui lòng đợi trong giây lát.', life: 3000 })
+    }
+    return
+  }
+
+  isSearchingBook.value = true
+  searchResults.value = []
+  searchProgress.value = 0
+
+  const total = doc.numPages || totalPages.value || 0
+  const results = []
+
+  try {
+    for (let pageNum = 1; pageNum <= total; pageNum++) {
+      searchProgress.value = Math.round((pageNum / total) * 100)
+      const page = await doc.getPage(pageNum)
+      const textContent = await page.getTextContent()
+      const rawText = (textContent.items || []).map(item => item.str || '').join(' ')
+      const lowerText = rawText.toLowerCase()
+
+      let matchIndex = lowerText.indexOf(query)
+      let matchCount = 0
+
+      while (matchIndex !== -1 && matchCount < 3) {
+        matchCount++
+        const start = Math.max(0, matchIndex - 35)
+        const end = Math.min(rawText.length, matchIndex + query.length + 35)
+        let snippet = rawText.substring(start, end)
+        if (start > 0) snippet = '...' + snippet
+        if (end < rawText.length) snippet = snippet + '...'
+
+        results.push({
+          id: `${pageNum}-${matchIndex}`,
+          page: pageNum,
+          snippet,
+          matchIndex
+        })
+
+        matchIndex = lowerText.indexOf(query, matchIndex + query.length)
+      }
+    }
+    searchResults.value = results
+    if (results.length === 0) {
+      toast.add({ severity: 'info', summary: 'Tìm kiếm', detail: 'Không tìm thấy kết quả phù hợp trong sách.', life: 3000 })
+    }
+  } catch (err) {
+    console.error('[Reader] In-book search error details:', err)
+    toast.add({ severity: 'error', summary: 'Lỗi', detail: `Không thể trích xuất văn bản sách để tìm kiếm: ${err.message || 'Lỗi không xác định'}`, life: 3000 })
+  } finally {
+    isSearchingBook.value = false
+  }
+}
+
+const clearBookSearch = () => {
+  searchKeyword.value = ''
+  searchResults.value = []
+  searchProgress.value = 0
+}
+
+const jumpToSearchResult = (result) => {
+  if (result.page >= 1 && result.page <= totalPages.value) {
+    triggerFlip(result.page > currentPage.value ? 'next' : 'prev')
+    loading.value = true
+    currentPage.value = result.page
+    inputPage.value = result.page
+    isDrawerVisible.value = false
+    activeTab.value = 'reader'
+    scrollContainer.value?.scrollTo({ top: 0, behavior: 'smooth' })
+    toast.add({ severity: 'info', summary: 'Chuyển trang', detail: `Đã chuyển đến trang ${result.page}`, life: 2500 })
+  }
+}
+
+// --- Quote Card Generator State & Methods ---
+const quoteCardThemes = [
+  { id: 'dark', name: 'Đêm huyền bí', bg: '#0f172a', text: '#f8fafc', accent: '#38bdf8', border: '#334155' },
+  { id: 'classic', name: 'Cổ điển', bg: '#fef3c7', text: '#451a03', accent: '#d97706', border: '#fde68a' },
+  { id: 'sunset', name: 'Hoàng hôn', bg: 'linear-gradient(135deg, #4c1d95, #831843)', text: '#ffffff', accent: '#f472b6', border: '#701a75' },
+  { id: 'emerald', name: 'Ngọc bích', bg: '#064e3b', text: '#ecfdf5', accent: '#34d399', border: '#047857' }
+]
+
+const selectedQuoteTheme = ref('dark')
+const showQuoteCardModal = ref(false)
+const selectedQuoteForCard = ref({ text: '', page: 1 })
+
+const currentQuoteThemeObj = computed(() => {
+  return quoteCardThemes.find(t => t.id === selectedQuoteTheme.value) || quoteCardThemes[0]
+})
+
+const openQuoteCardModal = (note) => {
+  selectedQuoteForCard.value = {
+    text: note.highlighted_text || '',
+    page: note.page_number || note.page || 1
+  }
+  showQuoteCardModal.value = true
+}
+
+const downloadQuoteCardImage = () => {
+  const canvas = document.createElement('canvas')
+  const ctx = canvas.getContext('2d')
+  const width = 1200
+  const height = 1500
+  canvas.width = width
+  canvas.height = height
+
+  const theme = currentQuoteThemeObj.value
+
+  // Background
+  ctx.fillStyle = theme.id === 'sunset' ? '#4c1d95' : theme.bg
+  ctx.fillRect(0, 0, width, height)
+
+  // Decorative Quotes
+  ctx.fillStyle = theme.accent
+  ctx.globalAlpha = 0.15
+  ctx.font = 'bold 180px Georgia, serif'
+  ctx.fillText('“', 80, 220)
+  ctx.globalAlpha = 1.0
+
+  // Header: Book Title & Page
+  ctx.fillStyle = theme.text
+  ctx.globalAlpha = 0.7
+  ctx.font = 'bold 28px sans-serif'
+  const titleText = (book.value?.title || 'KOMIBOOK EBOOK').toUpperCase()
+  ctx.fillText(titleText, 80, 100)
+  const pageText = `TRANG ${selectedQuoteForCard.value.page}`
+  ctx.fillText(pageText, width - 80 - ctx.measureText(pageText).width, 100)
+
+  // Divider Line
+  ctx.strokeStyle = theme.accent
+  ctx.lineWidth = 4
+  ctx.beginPath()
+  ctx.moveTo(80, 140)
+  ctx.lineTo(width - 80, 140)
+  ctx.stroke()
+
+  // Quote Text Word Wrap
+  ctx.fillStyle = theme.text
+  ctx.globalAlpha = 0.95
+  ctx.font = 'italic 46px Georgia, serif'
+  const words = selectedQuoteForCard.value.text.split(' ')
+  let line = ''
+  let y = 380
+  const maxWidth = width - 160
+  const lineHeight = 72
+
+  for (let n = 0; n < words.length; n++) {
+    const testLine = line + words[n] + ' '
+    const metrics = ctx.measureText(testLine)
+    if (metrics.width > maxWidth && n > 0) {
+      ctx.fillText(`"${line.trim()}"`, 80, y)
+      line = words[n] + ' '
+      y += lineHeight
+    } else {
+      line = testLine
+    }
+  }
+  ctx.fillText(`"${line.trim()}"`, 80, y)
+
+  // Accent Bar
+  y += 50
+  ctx.fillStyle = theme.accent
+  ctx.fillRect(80, y, 120, 6)
+
+  // Author
+  y += 60
+  ctx.fillStyle = theme.text
+  ctx.globalAlpha = 0.85
+  ctx.font = 'bold 36px sans-serif'
+  ctx.fillText(`— ${book.value?.author || 'Tác giả'}`, 80, y)
+
+  // Footer
+  ctx.globalAlpha = 0.5
+  ctx.font = 'bold 24px sans-serif'
+  ctx.fillText('Komibook Reader • komibook.vn', 80, height - 80)
+
+  // Trigger Download
+  const link = document.createElement('a')
+  const safeTitle = (book.value?.title || 'Ebook').replace(/\s+/g, '_')
+  link.download = `TheTrichDan_${safeTitle}_Trang${selectedQuoteForCard.value.page}.png`
+  link.href = canvas.toDataURL('image/png')
+  link.click()
+
+  toast.add({ severity: 'success', summary: 'Tải ảnh thẻ', detail: 'Đã tải xuống Thẻ Trích Dẫn PNG nghệ thuật!', life: 3000 })
+}
+
+// --- Reading Session Analytics State & Logic ---
+const sessionSeconds = ref(0)
+const sessionPagesRead = ref(0)
+const visitedPages = ref(new Set())
+let sessionInterval = null
+
+const startReadingSessionTimer = () => {
+  if (sessionInterval) clearInterval(sessionInterval)
+  sessionInterval = setInterval(() => {
+    if (!document.hidden) {
+      sessionSeconds.value++
+    }
+  }, 1000)
+}
+
+watch(currentPage, (newPage) => {
+  if (!visitedPages.value.has(newPage)) {
+    visitedPages.value.add(newPage)
+    sessionPagesRead.value = visitedPages.value.size
+  }
+}, { immediate: true })
+
+const formattedSessionTime = computed(() => {
+  const m = Math.floor(sessionSeconds.value / 60)
+  const s = sessionSeconds.value % 60
+  return `${m}m ${s < 10 ? '0' : ''}${s}s`
+})
+
+const readingSpeed = computed(() => {
+  if (sessionPagesRead.value <= 0 || sessionSeconds.value < 10) return 'Đang tính...'
+  const minPerPage = (sessionSeconds.value / 60 / sessionPagesRead.value).toFixed(1)
+  return `${minPerPage} phút/trang`
+})
+
+const estRemainingTime = computed(() => {
+  const remainingPages = (totalPages.value || 1) - currentPage.value
+  if (remainingPages <= 0) return 'Đã xong'
+  if (sessionPagesRead.value <= 0 || sessionSeconds.value < 10) return 'Đang tính...'
+  const minPerPage = sessionSeconds.value / 60 / sessionPagesRead.value
+  const remMin = Math.ceil(remainingPages * minPerPage)
+  return `~${remMin} phút`
+})
+
+const openAddNoteDialog = () => {
+  noteForm.value = {
+    page_number: currentPage.value || 1,
+    highlighted_text: '',
+    note_content: '',
+    color: '#eab308'
+  }
+  showAddNoteDialog.value = true
+}
+
+const saveNewAnnotation = async () => {
+  if (!noteForm.value.note_content?.trim()) return
+  const bookId = route.params.bookId
+  submittingNote.value = true
+  try {
+    const payload = {
+      book_id: Number(bookId),
+      page_number: Number(noteForm.value.page_number) || currentPage.value,
+      page: Number(noteForm.value.page_number) || currentPage.value,
+      highlighted_text: noteForm.value.highlighted_text,
+      note_content: noteForm.value.note_content,
+      color: noteForm.value.color,
+      type: noteForm.value.note_content ? 'note' : 'highlight'
+    }
+    const response = await apiClient.post('/api/annotations', payload)
+    const newAnnot = readApiData(response.data) || response.data.data || response.data
+    annotations.value.unshift(newAnnot)
+    showAddNoteDialog.value = false
+    toast.add({ severity: 'success', summary: 'Thành công', detail: 'Đã lưu ghi chú cho trang sách.', life: 3000 })
+  } catch (err) {
+    console.error('Error saving annotation:', err)
+    toast.add({ severity: 'error', summary: 'Lỗi', detail: err.response?.data?.message || 'Không thể lưu ghi chú.', life: 3000 })
+  } finally {
+    submittingNote.value = false
+  }
+}
+
+const openEditDialog = (note) => {
+  editNoteForm.value = {
+    id: note.id,
+    highlighted_text: note.highlighted_text || '',
+    note_content: note.note_content || '',
+    color: note.color || '#eab308'
+  }
+  showEditNoteDialog.value = true
+}
+
+const saveEditAnnotation = async () => {
+  if (!editNoteForm.value.id || !editNoteForm.value.note_content?.trim()) return
+  submittingNote.value = true
+  try {
+    const payload = {
+      note_content: editNoteForm.value.note_content,
+      highlighted_text: editNoteForm.value.highlighted_text,
+      color: editNoteForm.value.color
+    }
+    const response = await apiClient.put(`/api/annotations/${editNoteForm.value.id}`, payload)
+    const updated = readApiData(response.data) || response.data.data || response.data
+    const index = annotations.value.findIndex(a => a.id === editNoteForm.value.id)
+    if (index !== -1) {
+      annotations.value[index] = {
+        ...annotations.value[index],
+        ...updated,
+        note_content: editNoteForm.value.note_content,
+        color: editNoteForm.value.color,
+        highlighted_text: editNoteForm.value.highlighted_text
+      }
+    }
+    showEditNoteDialog.value = false
+    toast.add({ severity: 'success', summary: 'Thành công', detail: 'Đã cập nhật ghi chú.', life: 3000 })
+  } catch (err) {
+    console.error('Error updating annotation:', err)
+    toast.add({ severity: 'error', summary: 'Lỗi', detail: err.response?.data?.message || 'Không thể cập nhật ghi chú.', life: 3000 })
+  } finally {
+    submittingNote.value = false
+  }
+}
+
+const deleteAnnotation = async (noteId) => {
+  if (!confirm('Bạn có chắc chắn muốn xóa ghi chú này không?')) return
+  try {
+    await apiClient.delete(`/api/annotations/${noteId}`)
+    annotations.value = annotations.value.filter(a => a.id !== noteId)
+    toast.add({ severity: 'info', summary: 'Đã xóa', detail: 'Đã xóa ghi chú khỏi danh sách.', life: 3000 })
+  } catch (err) {
+    console.error('Error deleting annotation:', err)
+    toast.add({ severity: 'error', summary: 'Lỗi', detail: err.response?.data?.message || 'Không thể xóa ghi chú.', life: 3000 })
+  }
+}
+
+const jumpToNotePage = (note) => {
+  const targetPage = Number(note.page_number || note.page) || 1
+  if (targetPage >= 1 && targetPage <= (totalPages.value || 9999)) {
+    triggerFlip(targetPage > currentPage.value ? 'next' : 'prev')
+    loading.value = true
+    currentPage.value = targetPage
+    inputPage.value = targetPage
+    isDrawerVisible.value = false
+    activeTab.value = 'reader'
+    scrollContainer.value?.scrollTo({ top: 0, behavior: 'smooth' })
+    toast.add({ severity: 'info', summary: 'Chuyển trang', detail: `Đã chuyển đến trang ${targetPage}`, life: 2500 })
+  }
+}
+
+const exportNotesMarkdown = () => {
+  if (!annotations.value.length) {
+    toast.add({ severity: 'warn', summary: 'Thông báo', detail: 'Chưa có ghi chú nào để xuất file.', life: 3000 })
+    return
+  }
+  const title = book.value?.title || 'Ebook'
+  const author = book.value?.author || 'KomiBook'
+  const dateStr = new Date().toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' })
+  
+  let mdContent = `# Ghi chú tác phẩm: ${title}\n`
+  mdContent += `**Tác giả**: ${author} | **Ngày xuất**: ${dateStr}\n`
+  mdContent += `**Tổng số ghi chú**: ${annotations.value.length}\n\n`
+  mdContent += `---\n\n`
+
+  annotations.value.forEach((note, index) => {
+    const pageNum = note.page_number || note.page || 'N/A'
+    const noteDate = formatDate(note.created_at)
+    mdContent += `### ${index + 1}. Trang ${pageNum} ${noteDate ? `(${noteDate})` : ''}\n`
+    if (note.highlighted_text) {
+      mdContent += `> "${note.highlighted_text}"\n\n`
+    }
+    if (note.note_content) {
+      mdContent += `**Suy tư / Ghi chú**: ${note.note_content}\n\n`
+    }
+    mdContent += `---\n\n`
+  })
+
+  const blob = new Blob([mdContent], { type: 'text/markdown;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  const safeFilename = title.replace(/[^a-z0-9àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ\s]/gi, '_')
+  link.setAttribute('download', `GhiChu_${safeFilename}.md`)
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  URL.revokeObjectURL(url)
+  toast.add({ severity: 'success', summary: 'Đã xuất file', detail: 'Đã tải xuống file Ghi chú Markdown thành công.', life: 3000 })
+}
 
 const bookStats = computed(() => [
   { label: 'Ngôn ngữ', value: book.value?.language || 'Tiếng Việt', icon: 'language' },
@@ -789,20 +1792,22 @@ const zoomIn = () => scale.value = Math.min(scale.value + 0.2, 3)
 const zoomOut = () => scale.value = Math.max(scale.value - 0.2, 0.5)
 
 const prevPage = () => {
+  const step = pageStep.value
   if (currentPage.value > 1) {
     triggerFlip('prev')
     loading.value = true
-    currentPage.value--
+    currentPage.value = Math.max(1, currentPage.value - step)
     inputPage.value = currentPage.value
     scrollContainer.value?.scrollTo({ top: 0, behavior: 'smooth' })
   }
 }
 
 const nextPage = () => {
+  const step = pageStep.value
   if (currentPage.value < totalPages.value) {
     triggerFlip('next')
     loading.value = true
-    currentPage.value++
+    currentPage.value = Math.min(totalPages.value, currentPage.value + step)
     inputPage.value = currentPage.value
     scrollContainer.value?.scrollTo({ top: 0, behavior: 'smooth' })
   }
@@ -943,16 +1948,17 @@ const onPdfError = (err) => {
 }
 
 const onPdfLoaded = async (pdfApp) => {
-  pdfDocument.value = pdfRef.value?.doc || pdfApp
-  if (pdfDocument.value) {
-    totalPages.value = pdfDocument.value.numPages
+  const doc = pdfRef.value?.doc || pdfApp
+  if (doc) {
+    pdfDocument.value = markRaw(doc)
+    totalPages.value = doc.numPages
     if (savedPage.value && savedPage.value <= totalPages.value) {
       currentPage.value = savedPage.value
       inputPage.value = savedPage.value
       savedPage.value = null
     }
     try {
-      const toc = await pdfDocument.value.getOutline()
+      const toc = await doc.getOutline()
       outline.value = toc || []
     } catch (e) {
       console.warn('Không thể lấy mục lục:', e)
@@ -1012,11 +2018,17 @@ const confirmPrint = () => {
 onMounted(() => {
   document.body.classList.add('overflow-hidden')
   fetchEbookData()
+  startReadingSessionTimer()
   window.addEventListener('keydown', handleKeydown)
+
+  const img = new Image()
+  img.src = new URL('@/assets/logo.png', import.meta.url).href
+  img.onload = () => { logoExists.value = true }
 })
 
 onUnmounted(() => {
   if (progressTimer) clearTimeout(progressTimer)
+  if (sessionInterval) clearInterval(sessionInterval)
   syncReadingProgress()
   document.body.classList.remove('overflow-hidden')
   window.removeEventListener('keydown', handleKeydown)
@@ -1024,6 +2036,16 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+.slide-panel-enter-active,
+.slide-panel-leave-active {
+  transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.slide-panel-enter-from,
+.slide-panel-leave-to {
+  opacity: 0;
+  transform: translateX(40px) scale(0.95);
+}
+
 .pdf-wrapper {
   user-select: none;
   -webkit-user-select: none;

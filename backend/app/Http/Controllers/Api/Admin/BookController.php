@@ -17,13 +17,11 @@ class BookController extends Controller
         $query = Book::with(['vendor', 'categories', 'category'])
             ->withCount(['reviews', 'wishlists']);
 
-        // Tìm kiếm theo từ khóa (Tên sách, tác giả, mã ISBN hoặc tên gian hàng)
+        // Tìm kiếm theo từ khóa thông minh (Tên sách, tác giả, mã ISBN, series hoặc tên gian hàng)
         if ($request->filled('search')) {
             $search = $request->input('search');
             $query->where(function ($q) use ($search) {
-                $q->where('title', 'like', "%{$search}%")
-                    ->orWhere('author', 'like', "%{$search}%")
-                    ->orWhere('isbn', 'like', "%{$search}%")
+                $q->smartSearch($search)
                     ->orWhereHas('vendor', function ($vq) use ($search) {
                         $vq->where('shop_name', 'like', "%{$search}%");
                     });

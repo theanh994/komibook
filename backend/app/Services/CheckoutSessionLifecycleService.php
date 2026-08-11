@@ -46,21 +46,12 @@ class CheckoutSessionLifecycleService
             throw new RuntimeException("Order ID {$orderId} is not linked to a checkout session");
         }
 
-        return DB::transaction(function () use ($link, $userId) {
+        return DB::transaction(function () use ($link, $orderId, $userId) {
             // 1. Lock CheckoutSession
             $session = CheckoutSession::where('id', $link->checkout_session_id)->lockForUpdate()->firstOrFail();
             if ((int) $session->user_id !== $userId) {
                 throw new AuthorizationException("User ID {$userId} is not authorized to cancel session ID {$session->id}");
             }
-
-            // Fail-closed if any reservation is COMMITTED
-            $hasCommittedReservation = InventoryReservation::where('checkout_session_id', $session->id)
-                ->where('status', InventoryReservationStatus::COMMITTED)
-                ->exists();
-            if ($hasCommittedReservation) {
-                throw new LogicException("Cannot cancel session ID {$session->id} with committed inventory reservation");
-            }
-
             // 2. Lock links & Orders by ID asc
             $sessionLinks = CheckoutSessionOrder::where('checkout_session_id', $session->id)
                 ->orderBy('order_id', 'asc')
@@ -82,24 +73,26 @@ class CheckoutSessionLifecycleService
                 throw new RuntimeException("Incomplete orders in CheckoutSession ID {$session->id}");
             }
 
-            // Precondition & ownership integrity check
-            foreach ($sessionOrders as $so) {
-                if ((int) $so->user_id !== (int) $session->user_id) {
-                    throw new LogicException("Order ID {$so->id} owner does not match CheckoutSession owner");
-                }
+            $hasCommittedReservation = InventoryReservation::where('checkout_session_id', $session->id)
+                ->where('status', InventoryReservationStatus::COMMITTED)
+                ->exists();
+            $lockedTarget = $sessionOrders->firstWhere('id', $orderId);
+            if (! $lockedTarget) {
+                throw new RuntimeException("Order ID {$orderId} is not linked to checkout session ID {$session->id}");
+            }
 
-                $pm = strtolower((string) $so->payment_method);
-                if ($pm !== 'online' && $pm !== 'vnpay') {
-                    throw new LogicException("Cannot cancel COD order ID {$so->id}");
-                }
-
-                if ($so->status !== 'pending' && $so->status !== 'cancelled') {
-                    throw new LogicException("Cannot cancel order ID {$so->id} in status '{$so->status}'");
-                }
-
-                if ($so->payment_status !== 'unpaid') {
-                    throw new LogicException("Cannot cancel order ID {$so->id} with payment status '{$so->payment_status}'");
-                }
+            $assessment = app(BuyerCancellationEligibilityService::class)->assessOnlineSession(
+                $lockedTarget,
+                $userId,
+                $sessionLinks->firstWhere('order_id', $orderId),
+                $session,
+                $sessionLinks,
+                $sessionOrders,
+                $hasCommittedReservation,
+                true
+            );
+            if (! ($assessment['eligible'] ?? false)) {
+                $this->throwForBuyerCancellationIneligibility($assessment, $session);
             }
 
             // 3. Lock PaymentTransactions strictly by checkout_session_id and ID asc
@@ -119,6 +112,8 @@ class CheckoutSessionLifecycleService
                 return $sessionOrders->all();
             }
 
+            $reservationService = app(InventoryReservationService::class);
+
             // Perform updates
             foreach ($sessionOrders as $so) {
                 if ($so->status !== 'cancelled') {
@@ -135,7 +130,6 @@ class CheckoutSessionLifecycleService
             }
 
             // 5. Release inventory reservations (reserved -> released)
-            $reservationService = app(InventoryReservationService::class);
             $reservationService->releaseSession($session);
 
             return $sessionOrders->all();
@@ -153,14 +147,12 @@ class CheckoutSessionLifecycleService
             if ((int) $order->user_id !== $userId) {
                 throw new AuthorizationException("User ID {$userId} is not authorized to cancel order ID {$orderId}");
             }
+            $assessment = app(BuyerCancellationEligibilityService::class)->assessCodOrder($order, $userId, true);
+            if (! ($assessment['eligible'] ?? false)) {
+                $this->throwForBuyerCancellationIneligibility($assessment);
+            }
             if ($order->status === 'cancelled') {
                 return $order;
-            }
-            if (
-                ! in_array($order->status, ['confirmed', 'processing'], true)
-                || ! in_array($order->shipping_status, [null, 'pending_pickup'], true)
-            ) {
-                throw new LogicException("Cannot cancel COD order ID {$order->id} after shipment");
             }
 
             $operationKey = "buyer-cancel-cod:{$order->id}";
@@ -187,6 +179,36 @@ class CheckoutSessionLifecycleService
 
             return $order;
         });
+    }
+
+    /**
+     * @param array<string, mixed> $assessment
+     */
+    private function throwForBuyerCancellationIneligibility(array $assessment, ?CheckoutSession $session = null): never
+    {
+        $reasonCode = $assessment['reason_code'] ?? 'ineligible';
+        $context = $assessment['context'] ?? [];
+        $orderId = (int) ($context['order_id'] ?? 0);
+
+        if ($reasonCode === 'paid_order') {
+            throw new LogicException('Cannot cancel paid order through buyer cancellation; use the return/refund workflow');
+        }
+        if ($reasonCode === 'committed_reservation' && $session) {
+            throw new LogicException("Cannot cancel session ID {$session->id} with committed inventory reservation");
+        }
+        if ($reasonCode === 'sibling_not_owned' && $orderId && $session) {
+            throw new LogicException("Order ID {$orderId} owner does not match CheckoutSession owner");
+        }
+        if ($reasonCode === 'invalid_order_state' && $orderId) {
+            $status = (string) ($context['status'] ?? 'unknown');
+            throw new LogicException("Cannot cancel order ID {$orderId} in status '{$status}'");
+        }
+        if ($reasonCode === 'invalid_payment_status' && $orderId) {
+            $paymentStatus = (string) ($context['payment_status'] ?? 'unknown');
+            throw new LogicException("Cannot cancel order ID {$orderId} with payment status '{$paymentStatus}'");
+        }
+
+        throw new LogicException("Cannot cancel buyer order: {$reasonCode}");
     }
 
     /**

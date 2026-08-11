@@ -12,18 +12,20 @@ class UserSeeder extends Seeder
     {
         // 1. Admin
         User::create([
-            'name'     => 'Administrator',
-            'email'    => 'admin@komibook.id.vn',
-            'password' => bcrypt('password'),
-            'role'     => 'admin',
+            'name'              => 'Administrator',
+            'email'             => 'admin@komibook.id.vn',
+            'password'          => bcrypt('password'),
+            'role'              => 'admin',
+            'email_verified_at' => now(),
         ]);
 
         // 2. Vendor 1
         $vendor1 = User::create([
-            'name'     => 'Chủ shop Nhà sách Trẻ',
-            'email'    => 'vendor1@gmail.com',
-            'password' => bcrypt('password'),
-            'role'     => 'vendor',
+            'name'              => 'Chủ shop Nhà sách Trẻ',
+            'email'             => 'vendor1@gmail.com',
+            'password'          => bcrypt('password'),
+            'role'              => 'vendor',
+            'email_verified_at' => now(),
         ]);
         
         $vendor1->vendor()->create([
@@ -34,10 +36,11 @@ class UserSeeder extends Seeder
 
         // 3. Vendor 2
         $vendor2 = User::create([
-            'name'     => 'Chủ shop Tiệm sách Cũ',
-            'email'    => 'vendor2@gmail.com',
-            'password' => bcrypt('password'),
-            'role'     => 'vendor',
+            'name'              => 'Chủ shop Tiệm sách Cũ',
+            'email'             => 'vendor2@gmail.com',
+            'password'          => bcrypt('password'),
+            'role'              => 'vendor',
+            'email_verified_at' => now(),
         ]);
 
         $vendor2->vendor()->create([

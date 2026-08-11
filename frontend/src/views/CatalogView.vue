@@ -63,6 +63,10 @@
             <div v-if="loadingCategories" class="flex flex-col gap-2">
               <Skeleton v-for="i in 6" :key="i" height="36px" borderRadius="8px" />
             </div>
+            <div v-else-if="categoryError" class="mb-lg rounded-lg bg-error-container p-3 text-sm text-on-error-container" role="alert">
+              <p>Không thể tải danh mục.</p>
+              <button type="button" class="mt-2 min-h-11 rounded-lg border border-current px-3 font-semibold" @click="fetchCategories">Thử lại</button>
+            </div>
             <ul v-else class="flex flex-col gap-0.5 mb-lg">
               <li>
                 <button @click="selectCategory(null)" :class="catClass(null)" :aria-pressed="selectedCategoryId === null">Tất cả</button>
@@ -109,11 +113,11 @@
         </aside>
 
         <!-- ─── MAIN GRID ─── -->
-        <main class="lg:col-span-3">
+        <section class="lg:col-span-3" aria-labelledby="catalog-results-title">
           <!-- Active Filters & Count -->
           <div class="flex items-center justify-between mb-lg">
             <div class="flex items-center gap-sm flex-wrap">
-              <h2 class="font-inter text-xl font-semibold text-on-surface tracking-tight">{{ activeTitle }}</h2>
+              <h2 id="catalog-results-title" class="font-inter text-xl font-semibold text-on-surface tracking-tight">{{ activeTitle }}</h2>
               <span v-if="searchQuery" class="inline-flex items-center gap-1 px-sm py-1 bg-surface-variant rounded-full text-xs font-medium text-primary">
                 "{{ searchQuery }}"
                 <button @click="clearSearch" class="hover:text-secondary"><span class="material-symbols-outlined text-[14px]">close</span></button>
@@ -128,6 +132,11 @@
               <Skeleton height="220px" borderRadius="0" />
               <div class="p-md flex flex-col gap-2"><Skeleton height="14px" width="85%" /><Skeleton height="12px" width="60%" /><Skeleton height="16px" width="40%" /></div>
             </div>
+          </div>
+
+          <div v-else-if="booksError" class="flex flex-col items-center justify-center py-xxl text-center bg-surface-container-lowest rounded-xl border border-outline-variant/20" role="alert">
+            <p class="text-lg font-medium text-on-surface">Không thể tải sách.</p>
+            <button type="button" class="mt-4 min-h-11 rounded-lg border border-primary px-4 font-semibold text-primary" @click="fetchBooks">Thử lại</button>
           </div>
 
           <!-- Empty -->
@@ -156,141 +165,21 @@
             </div>
 
             <!-- Pagination -->
-            <div v-if="totalRecords > 12" class="mt-xl flex justify-center">
-              <Paginator :rows="12" :totalRecords="totalRecords" :first="first" @page="onPageChange" template="PrevPageLink PageLinks NextPageLink" class="!border-none !bg-transparent" />
+            <div v-if="totalRecords > PAGE_SIZE" class="mt-xl flex justify-center">
+              <Paginator :rows="PAGE_SIZE" :totalRecords="totalRecords" :first="first" @page="onPageChange" template="PrevPageLink PageLinks NextPageLink" class="!border-none !bg-transparent" />
             </div>
           </div>
-        </main>
+        </section>
       </div>
     </div>
 
     <!-- ═══ QUICK VIEW DIALOG ═══ -->
-    <Dialog 
-      v-model:visible="quickViewVisible" 
-      :modal="true" 
-      :show-header="false"
-      class="!max-w-4xl !w-[95vw] !rounded-xl !border-2 !border-brand-green !bg-white !shadow-2xl overflow-hidden relative"
-      contentClass="!p-0"
-    >
-      <div v-if="quickViewBook" class="flex flex-col md:flex-row min-h-[500px]">
-        <!-- Close Button -->
-        <button 
-          @click="quickViewVisible = false"
-          class="absolute top-3 right-3 flex h-11 w-11 items-center justify-center rounded-full border border-outline-variant/60 bg-white text-xl font-bold text-gray-500 transition-[border-color,color,background-color] duration-200 hover:border-brand-green hover:text-brand-green-strong focus-visible:outline-none z-50 cursor-pointer"
-          aria-label="Đóng xem nhanh"
-          type="button"
-        >
-          <span class="material-symbols-outlined text-[20px] text-gray-700">close</span>
-        </button>
-
-        <!-- Left Column: Image and slider indicator -->
-        <div class="w-full md:w-1/2 p-6 bg-surface-variant/10 flex flex-col items-center justify-center border-r border-outline-variant/30 relative">
-          <!-- Sale Badge on image top-right -->
-          <div class="relative w-full max-w-[280px] pt-[140%] shadow-lg rounded-lg overflow-hidden bg-white">
-            <img 
-              v-if="quickViewBook.cover_image" 
-              :src="getCoverUrl(quickViewBook.cover_image)" 
-              :alt="quickViewBook.title" 
-              class="absolute inset-0 w-full h-full object-cover p-2" 
-            />
-            <div v-else class="absolute inset-0 flex items-center justify-center">
-              <span class="material-symbols-outlined text-outline text-5xl">image</span>
-            </div>
-            
-            <!-- Sale Percent Badge -->
-            <span
-              v-if="quickViewBook.sale_price && quickViewBook.price > quickViewBook.sale_price"
-              class="absolute top-3 right-3 bg-secondary text-on-secondary text-[11px] font-bold px-2.5 py-1 rounded-md shadow-md z-10"
-            >
-              -{{ Math.round((1 - quickViewBook.sale_price / quickViewBook.price) * 100) }}%
-            </span>
-          </div>
-        </div>
-
-        <!-- Right Column: Info & Details -->
-        <div class="w-full md:w-1/2 p-6 flex flex-col justify-between">
-          <div>
-            <!-- Book Title -->
-            <h2 class="text-xl md:text-2xl font-bold text-on-surface mb-2 leading-tight pr-6">{{ quickViewBook.title }}</h2>
-            
-            <!-- SKU -->
-            <div class="text-xs text-outline mb-4">SKU: 978632{{ String(quickViewBook.id).padStart(7, '0') }}</div>
-
-            <!-- Price -->
-            <div class="flex items-center gap-3 mb-5">
-              <span class="text-2xl font-extrabold text-brand-green-strong">{{ formatCurrency(quickViewBook.sale_price || quickViewBook.price) }}</span>
-              <span v-if="quickViewBook.sale_price && quickViewBook.price > quickViewBook.sale_price" class="text-sm text-outline line-through">{{ formatCurrency(quickViewBook.price) }}</span>
-            </div>
-
-            <!-- Metadata table grid -->
-            <div class="grid grid-cols-2 gap-x-4 gap-y-2 border-t border-b border-outline-variant/40 py-4 mb-5 text-xs text-on-surface-variant">
-              <div><strong>Tác giả:</strong> <span class="text-on-surface ml-1">{{ quickViewBook.author || 'Đang cập nhật' }}</span></div>
-              <div><strong>Dịch giả:</strong> <span class="text-on-surface ml-1">Đang cập nhật</span></div>
-              <div><strong>Nhà xuất bản:</strong> <span class="text-on-surface ml-1">{{ quickViewBook.vendor?.name || 'Đang cập nhật' }}</span></div>
-              <div><strong>Năm xuất bản:</strong> <span class="text-on-surface ml-1">{{ quickViewBook.publish_year || '2026' }}</span></div>
-              <div><strong>Hình thức:</strong> <span class="text-on-surface ml-1">Bìa mềm</span></div>
-              <div><strong>Kích thước:</strong> <span class="text-on-surface ml-1">13 x 18 cm</span></div>
-            </div>
-
-            <!-- Description -->
-            <div class="mb-5">
-              <div class="text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1.5">Nội dung:</div>
-              <p class="text-xs text-on-surface-variant leading-relaxed line-clamp-3">
-                {{ cleanDescriptionText(quickViewBook.description) || 'Chưa có mô tả chi tiết cho cuốn sách này.' }}
-              </p>
-            </div>
-
-
-
-            <!-- Quantity Selector & Actions -->
-            <div class="flex items-center gap-3 mt-5">
-              <div class="flex items-center border border-outline-variant/60 rounded-xl h-10 overflow-hidden bg-surface-container-lowest">
-                <button 
-                  type="button"
-                  @click="decrementQty"
-                  class="w-8 h-full flex items-center justify-center hover:bg-surface-variant transition-colors text-sm font-bold border-none"
-                >-</button>
-                <input 
-                  type="number" 
-                  v-model.number="quickViewQty" 
-                  min="1" 
-                  class="w-10 h-full text-center text-xs font-bold bg-transparent border-none focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" 
-                />
-                <button 
-                  type="button"
-                  @click="incrementQty"
-                  class="w-8 h-full flex items-center justify-center hover:bg-surface-variant transition-colors text-sm font-bold border-none"
-                >+</button>
-              </div>
-
-              <!-- Xem Thêm -->
-              <button 
-                type="button"
-                @click="goToDetail(quickViewBook.slug); quickViewVisible = false"
-                class="flex min-h-11 flex-grow items-center justify-center rounded-xl border border-brand-green-strong bg-brand-green-strong px-4 text-sm font-bold text-white shadow-sm transition-colors duration-200 hover:bg-commerce cursor-pointer"
-              >
-                Xem thêm
-              </button>
-
-              <!-- Thêm vào giỏ -->
-              <button 
-                type="button"
-                @click="quickViewAddToCart"
-                class="flex min-h-11 flex-grow items-center justify-center rounded-xl border border-brand-green-strong bg-brand-green-strong px-4 text-sm font-bold text-white shadow-sm transition-colors duration-200 hover:bg-commerce cursor-pointer"
-              >
-                Thêm vào giỏ
-              </button>
-            </div>
-          </div>
-
-          <!-- Bottom Categories / Tags metadata -->
-          <div class="mt-6 pt-4 border-t border-outline-variant/20 text-[10px] text-outline uppercase tracking-wider flex flex-col gap-1">
-            <div><strong>Danh mục:</strong> {{ quickViewBook.category?.name || 'Sách mới' }}</div>
-            <div><strong>Tags:</strong> {{ getBookTags(quickViewBook).join(', ') }}</div>
-          </div>
-        </div>
-      </div>
-    </Dialog>
+    <BookQuickViewDialog
+      v-model:visible="quickViewVisible"
+      :book="quickViewBook"
+      @add-to-cart="addToCart"
+      @buy-now="buyNow"
+    />
   </div>
 </template>
 
@@ -303,9 +192,9 @@ import { useCartStore } from '@/stores/cart'
 import { useToast } from 'primevue/usetoast'
 import Skeleton from 'primevue/skeleton'
 import Paginator from 'primevue/paginator'
-import Dialog from 'primevue/dialog'
 import { useWishlistStore } from '@/stores/wishlist'
 import BookCard from '@/components/BookCard.vue'
+import BookQuickViewDialog from '@/components/BookQuickViewDialog.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -315,9 +204,11 @@ const toast = useToast()
 
 const categories = ref([])
 const loadingCategories = ref(false)
+const categoryError = ref(false)
 const selectedCategoryId = ref(null)
 const books = ref([])
 const loadingBooks = ref(false)
+const booksError = ref(false)
 const searchQuery = ref('')
 const totalRecords = ref(0)
 const first = ref(0)
@@ -355,12 +246,11 @@ const priceBands = [
 ]
 
 const selectedPriceBand = computed(() => priceBands.find((band) => band.value === filterPrice.value))
+const PAGE_SIZE = 16
 
 // Quick View State
 const quickViewVisible = ref(false)
 const quickViewBook = ref(null)
-const quickViewVersion = ref('standard')
-const quickViewQty = ref(1)
 
 const activeTitle = computed(() => {
   if (filterProduct.value === 'used_resale') return 'Sách cũ'
@@ -388,19 +278,21 @@ const filterButtonClass = (active) => [
 
 const fetchCategories = async () => {
   loadingCategories.value = true
+  categoryError.value = false
   try {
     const res = await apiClient.get('/api/categories')
     categories.value = readApiList(res.data)
-  } catch (e) { console.error('Lỗi tải danh mục:', e) }
+  } catch (e) { categoryError.value = true; console.error('Lỗi tải danh mục:', e) }
   finally { loadingCategories.value = false }
 }
 
 const fetchBooks = async () => {
   loadingBooks.value = true
+  booksError.value = false
   try {
     const params = {
       page: currentPage.value,
-      per_page: 12, // 12 items per page means exactly 3 rows of 4 items!
+      per_page: PAGE_SIZE,
       ...(selectedCategoryId.value && { category_id: selectedCategoryId.value }),
       ...(searchQuery.value.trim() && { search: searchQuery.value.trim() }),
       ...(['physical', 'ebook'].includes(filterProduct.value) && { type: filterProduct.value }),
@@ -413,7 +305,7 @@ const fetchBooks = async () => {
     const res = await apiClient.get('/api/books', { params })
     books.value = readApiList(res.data)
     totalRecords.value = readApiPagination(res.data).total
-  } catch (e) { console.error('Lỗi tải sách:', e) }
+  } catch (e) { booksError.value = true; console.error('Lỗi tải sách:', e) }
   finally { loadingBooks.value = false }
 }
 
@@ -468,53 +360,14 @@ const updateRouteQuery = () => {
   router.push({ name: 'catalog', query: nextQuery })
 }
 
-const cleanDescriptionText = (html) => {
-  if (!html) return ''
-  let text = html.replace(/<[^>]*>/g, '') // Xóa toàn bộ thẻ HTML
-  return text.replace(/&nbsp;/g, ' ').replace(/\u00a0/g, ' ') // Thay thế khoảng trắng không ngắt
-}
 
-const getBookTags = (book) => {
-  if (!book) return []
-  const tags = []
-  
-  if (book.author && book.author !== 'Đang cập nhật' && book.author !== 'Nhiều Tác Giả') {
-    tags.push(book.author)
-  }
-  if (book.category?.name) {
-    tags.push(book.category.name)
-  } else if (book.categories && book.categories.length > 0) {
-    tags.push(book.categories[0].name)
-  }
-  if (book.type === 'ebook') {
-    tags.push('E-book')
-    tags.push(`Phiên bản ${book.latest_ebook_version?.version || 1}`)
-  } else {
-    tags.push(book.cover_format || 'Sách giấy')
-  }
-  if (book.vendor?.name) {
-    tags.push(book.vendor.name)
-  }
-  if (book.sale_price && book.price > book.sale_price) {
-    tags.push('Khuyến mãi')
-  }
-  const releaseYear = parseInt(book.release_date)
-  const currentYear = new Date().getFullYear()
-  if (releaseYear && releaseYear >= currentYear - 1) {
-    tags.push('Sách mới')
-  }
-  return [...new Set(tags)]
-}
-
-const goToDetail = (slug) => router.push({ name: 'book-detail', params: { slug } })
-const formatCurrency = (v) => !v ? '0 đ' : new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(v)
-const addToCart = (book) => {
-  cartStore.addToCart(book, 1)
+const addToCart = (book, quantity = 1) => {
+  cartStore.addToCart(book, quantity)
   toast.add({ severity: 'success', summary: 'Thành công', detail: 'Đã thêm vào giỏ hàng!', life: 3000 })
 }
 
-const buyNow = (book) => {
-  cartStore.addToCart(book, 1)
+const buyNow = (book, quantity = 1) => {
+  cartStore.addToCart(book, quantity)
   router.push('/cart')
 }
 
@@ -533,37 +386,10 @@ const toggleWishlist = async (bookId) => {
   }
 }
 
-const getCoverUrl = (path) => {
-  if (!path) return ''
-  if (path.startsWith('http://') || path.startsWith('https://')) return path
-  if (path.startsWith('/storage/')) return path
-  if (path.includes('/storage/')) return path.substring(path.indexOf('/storage/'))
-  return `/storage/${path}`
-}
-
 // Quick View Actions
 const openQuickView = (book) => {
   quickViewBook.value = book
-  quickViewQty.value = 1
-  quickViewVersion.value = 'standard'
   quickViewVisible.value = true
-}
-
-const decrementQty = () => {
-  if (quickViewQty.value > 1) {
-    quickViewQty.value--
-  }
-}
-
-const incrementQty = () => {
-  quickViewQty.value++
-}
-
-const quickViewAddToCart = () => {
-  if (!quickViewBook.value) return
-  cartStore.addToCart(quickViewBook.value, quickViewQty.value)
-  toast.add({ severity: 'success', summary: 'Thành công', detail: `Đã thêm ${quickViewQty.value} cuốn vào giỏ hàng!`, life: 3000 })
-  quickViewVisible.value = false
 }
 
 // Handle search and category_id queries from navigation/tags
@@ -577,7 +403,7 @@ watch(() => route.query, (query) => {
   filterPrice.value = priceBands.some((band) => band.value === query.price) ? query.price : ''
   sortBy.value = ['price_asc', 'price_desc', 'popular'].includes(query.sort) ? query.sort : 'newest'
   currentPage.value = Math.max(Number(query.page) || 1, 1)
-  first.value = (currentPage.value - 1) * 12
+  first.value = (currentPage.value - 1) * PAGE_SIZE
   filtersOpen.value = false
   fetchBooks()
 }, { immediate: true, deep: true })

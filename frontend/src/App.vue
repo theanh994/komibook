@@ -41,7 +41,7 @@ watch(
 </script>
 
 <template>
-  <Toast />
+  <Toast position="top-right" class="app-toast !w-[calc(100vw-2rem)] sm:!w-96" />
   <ConfirmDialog />
   <div class="min-h-screen bg-background text-on-background flex flex-col font-inter">
     <a v-if="!$route.meta.hideHeader" class="skip-link" href="#main-content">

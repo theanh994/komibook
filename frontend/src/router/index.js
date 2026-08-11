@@ -144,7 +144,7 @@ const router = createRouter({
       path: '/used-books/manage',
       name: 'used-book-seller',
       component: () => import('@/views/used-books/UsedBookManagerView.vue'),
-      meta: { requiresAuth: true, title: 'Sách cũ của tôi' }
+      meta: { requiresAuth: false, title: 'Bán sách cũ C2C' }
     },
     {
       path: '/vendor/register',
@@ -167,8 +167,8 @@ const router = createRouter({
     {
       path: '/about',
       name: 'about',
-      component: () => import('@/views/PublicInfoView.vue'),
-      meta: { requiresAuth: false, pageKey: 'about', title: 'Về KomiBook' }
+      component: () => import('@/views/AboutView.vue'),
+      meta: { requiresAuth: false, title: 'Về KomiBook' }
     },
     {
       path: '/contact',
@@ -178,8 +178,8 @@ const router = createRouter({
     {
       path: '/faq',
       name: 'faq',
-      component: () => import('@/views/PublicInfoView.vue'),
-      meta: { requiresAuth: false, pageKey: 'faq', title: 'Câu hỏi thường gặp' }
+      component: () => import('@/views/FaqView.vue'),
+      meta: { requiresAuth: false, title: 'Câu hỏi thường gặp' }
     },
     {
       path: '/terms',
@@ -298,7 +298,7 @@ const router = createRouter({
           path: 'users',
           name: 'admin-users',
           component: () => import('@/views/admin/UsersView.vue'),
-          meta: { requiresAuth: true, role: 'admin', hideHeader: true, title: 'Quản lý Users' }
+          meta: { requiresAuth: true, role: 'admin', hideHeader: true, title: 'Quản lý người dùng' }
         },
         {
           path: 'books',
@@ -387,6 +387,12 @@ const router = createRouter({
           name: 'admin-approvals',
           component: () => import('@/views/admin/VendorApprovalsView.vue'),
           meta: { requiresAuth: true, role: 'admin', hideHeader: true, title: 'Quản lý đăng ký Nhà bán' }
+        },
+        {
+          path: 'used-books/moderation',
+          name: 'admin-used-books-moderation',
+          component: () => import('@/views/admin/AdminUsedBookModerationView.vue'),
+          meta: { requiresAuth: true, role: 'admin', hideHeader: true, title: 'Kiểm duyệt Sách Cũ' }
         },
         {
           path: 'articles',

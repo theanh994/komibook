@@ -19,6 +19,7 @@ class CouponController extends Controller
     {
         $validated = $request->validate([
             'code' => 'required|string|unique:coupons,code',
+            'coupon_type' => 'nullable|in:product,shipping',
             'discount_percent' => 'required|numeric|min:0|max:100',
             'min_order_value' => 'nullable|numeric|min:0',
             'max_discount_amount' => 'nullable|numeric|min:0',
@@ -28,6 +29,10 @@ class CouponController extends Controller
             'usage_limit' => 'nullable|integer|min:0',
             'status' => 'nullable|in:pending,active,inactive,rejected',
         ]);
+
+        if (($validated['coupon_type'] ?? 'product') === 'shipping') {
+            $validated['category_id'] = null;
+        }
 
         $coupon = Coupon::create($validated);
 
@@ -49,6 +54,7 @@ class CouponController extends Controller
     {
         $validated = $request->validate([
             'code' => 'required|string|unique:coupons,code,'.$coupon->id,
+            'coupon_type' => 'nullable|in:product,shipping',
             'discount_percent' => 'required|numeric|min:0|max:100',
             'min_order_value' => 'nullable|numeric|min:0',
             'max_discount_amount' => 'nullable|numeric|min:0',
@@ -58,6 +64,10 @@ class CouponController extends Controller
             'usage_limit' => 'nullable|integer|min:0',
             'status' => 'nullable|in:pending,active,inactive,rejected',
         ]);
+
+        if (($validated['coupon_type'] ?? $coupon->coupon_type ?? 'product') === 'shipping') {
+            $validated['category_id'] = null;
+        }
 
         $coupon->update($validated);
 

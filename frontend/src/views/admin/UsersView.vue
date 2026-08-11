@@ -9,7 +9,7 @@ import Tag from 'primevue/tag'
 import Select from 'primevue/select'
 import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
-import { useRouter } from 'vue-router'
+import { useRouter, RouterLink } from 'vue-router'
 
 const toast = useToast()
 const router = useRouter()
@@ -32,19 +32,20 @@ const sortOptions = [
   { label: 'Vai trò A → Z', value: 'role:asc' },
 ]
 
-// Track which user is being updated
-const updatingUserId = ref(null)
+// Track which user session is being terminated
+const terminatingUserId = ref(null)
 
 // ─── Role Config ───
 const roleMap = {
-  admin:    { label: 'Admin',    severity: 'danger',  icon: 'pi pi-shield' },
-  vendor:   { label: 'Vendor',   severity: 'info',    icon: 'pi pi-shop' },
-  customer: { label: 'Customer', severity: 'success', icon: 'pi pi-user' },
+  admin:    { label: 'Admin',      severity: 'danger',  icon: 'pi pi-shield' },
+  vendor:   { label: 'Vendor',     severity: 'info',    icon: 'pi pi-shop' },
+  customer: { label: 'Khách hàng', severity: 'success', icon: 'pi pi-user' },
 }
 
 const roleOptions = [
-  { label: 'Customer', value: 'customer' },
+  { label: 'Khách hàng', value: 'customer' },
   { label: 'Vendor', value: 'vendor' },
+  { label: 'Admin', value: 'admin' },
 ]
 
 const getRole = (role) => roleMap[role] || roleMap.customer
@@ -80,32 +81,6 @@ const fetchUsers = async () => {
   }
 }
 
-const updateRole = async (user, newRole) => {
-  if (user.role === newRole) return
-  updatingUserId.value = user.id
-  try {
-    const res = await apiClient.patch(`/api/admin/users/${user.id}/role`, {
-      role: newRole,
-    })
-    // Update local data
-    const idx = users.value.findIndex(u => u.id === user.id)
-    if (idx !== -1) {
-      users.value[idx] = res.data.data
-    }
-    toast.add({
-      severity: 'success',
-      summary: 'Thành công',
-      detail: `Đã cập nhật ${user.name} thành ${newRole}.`,
-      life: 3000,
-    })
-  } catch (e) {
-    const msg = e.response?.data?.message || 'Không thể cập nhật quyền.'
-    toast.add({ severity: 'error', summary: 'Lỗi', detail: msg, life: 4000 })
-  } finally {
-    updatingUserId.value = null
-  }
-}
-
 const onPage = (event) => {
   lazyParams.value = { ...event, page: event.page + 1 }
   fetchUsers()
@@ -125,14 +100,14 @@ const applySort = (value) => {
 
 const terminateSessions = async (user) => {
   if (!window.confirm(`Đăng xuất ${user.name} khỏi tất cả thiết bị?`)) return
-  updatingUserId.value = user.id
+  terminatingUserId.value = user.id
   try {
     const response = await apiClient.delete(`/api/admin/users/${user.id}/sessions`)
     toast.add({ severity: 'success', summary: 'Đã thu hồi phiên', detail: response.data.message, life: 3500 })
   } catch (exception) {
     toast.add({ severity: 'error', summary: 'Không thể thu hồi phiên', detail: exception.response?.data?.message || 'Vui lòng thử lại.', life: 3500 })
   } finally {
-    updatingUserId.value = null
+    terminatingUserId.value = null
   }
 }
 
@@ -145,28 +120,59 @@ onMounted(fetchUsers)
     <div class="page-header">
       <div>
         <h1 class="page-title">Quản lý người dùng</h1>
-        <p class="page-subtitle">Xem và phân quyền cho toàn bộ tài khoản trên hệ thống</p>
+        <p class="page-subtitle">Xem danh sách và thông tin tài khoản người dùng trên hệ thống (Phân quyền Nhà bán thực hiện tại trang Hồ sơ nhà bán).</p>
       </div>
       <div class="header-badge">
         <i class="pi pi-users"></i>
-        <span>{{ totalRecords }} users</span>
+        <span>{{ totalRecords }} tài khoản</span>
       </div>
     </div>
 
-    <form class="mb-4 grid gap-3 rounded-xl border border-slate-200 bg-white p-4 lg:grid-cols-[minmax(0,1fr)_190px_210px_auto]" role="search" @submit.prevent="applyFilters">
-      <label class="block text-sm font-semibold">Tìm tài khoản<InputText v-model.trim="search" class="mt-2 min-h-11 w-full" placeholder="Tên hoặc email…" /></label>
-      <label class="block text-sm font-semibold">Vai trò<Select v-model="roleFilter" class="mt-2 min-h-11 w-full" :options="[{ label: 'Tất cả', value: '' }, ...roleOptions]" optionLabel="label" optionValue="value" /></label>
-      <label class="block text-sm font-semibold">Sắp xếp<Select :modelValue="`${sortBy}:${sortDirection}`" class="mt-2 min-h-11 w-full" :options="sortOptions" optionLabel="label" optionValue="value" @update:modelValue="applySort" /></label>
-      <Button type="submit" label="Lọc danh sách" icon="pi pi-search" class="min-h-11 self-end" />
+    <!-- Integrated Filter & View Mode Toggle Bar -->
+    <form class="mb-4 flex flex-col md:flex-row items-stretch md:items-end justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-xs" role="search" @submit.prevent="applyFilters">
+      <div class="flex flex-wrap items-end gap-3 flex-1">
+        <label class="block text-xs font-bold text-slate-600 flex-1 min-w-[200px]">
+          Tìm tài khoản
+          <InputText v-model.trim="search" class="mt-1 min-h-10 w-full text-sm" placeholder="Tên hoặc email…" />
+        </label>
+
+        <label class="block text-xs font-bold text-slate-600 w-44">
+          Vai trò
+          <Select v-model="roleFilter" class="mt-1 min-h-10 w-full text-sm" :options="[{ label: 'Tất cả vai trò', value: '' }, ...roleOptions]" optionLabel="label" optionValue="value" />
+        </label>
+
+        <label class="block text-xs font-bold text-slate-600 w-52">
+          Sắp xếp
+          <Select :modelValue="`${sortBy}:${sortDirection}`" class="mt-1 min-h-10 w-full text-sm" :options="sortOptions" optionLabel="label" optionValue="value" @update:modelValue="applySort" />
+        </label>
+
+        <Button type="submit" label="Lọc danh sách" icon="pi pi-search" class="min-h-10" />
+      </div>
+
+      <!-- View Mode Buttons Integrated inside Filter Bar -->
+      <div class="flex items-center gap-2 border-t md:border-t-0 md:border-l border-slate-200 pt-3 md:pt-0 md:pl-3">
+        <span class="text-xs font-bold text-slate-500 shrink-0">Hiển thị:</span>
+        <div class="inline-flex rounded-xl border border-slate-200 bg-slate-50 p-1">
+          <button
+            type="button"
+            class="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all cursor-pointer"
+            :class="viewMode === 'table' ? 'bg-slate-900 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-200/60'"
+            @click="viewMode = 'table'"
+          >
+            <i class="pi pi-table"></i> Bảng
+          </button>
+
+          <button
+            type="button"
+            class="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all cursor-pointer"
+            :class="viewMode === 'cards' ? 'bg-slate-900 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-200/60'"
+            @click="viewMode = 'cards'"
+          >
+            <i class="pi pi-th-large"></i> Thẻ
+          </button>
+        </div>
+      </div>
     </form>
-
-    <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
-      <p class="m-0 text-sm text-slate-600">Hiển thị nhất quán theo lựa chọn sắp xếp; có thể đổi giữa bảng và thẻ.</p>
-      <div class="inline-flex rounded-lg border border-slate-200 bg-white p-1" aria-label="Kiểu hiển thị">
-        <button type="button" class="view-toggle" :class="{ active: viewMode === 'table' }" :aria-pressed="viewMode === 'table'" @click="viewMode = 'table'"><i class="pi pi-table" aria-hidden="true"></i> Bảng</button>
-        <button type="button" class="view-toggle" :class="{ active: viewMode === 'cards' }" :aria-pressed="viewMode === 'cards'" @click="viewMode = 'cards'"><i class="pi pi-th-large" aria-hidden="true"></i> Thẻ</button>
-      </div>
-    </div>
 
     <!-- Data Table Card -->
     <div v-if="viewMode === 'table'" class="table-card">
@@ -187,7 +193,7 @@ onMounted(fetchUsers)
         <template #empty>
           <div class="empty-state">
             <i class="pi pi-users"></i>
-            <p>Chưa có người dùng nào.</p>
+            <p>Chưa có người dùng nào phù hợp với bộ lọc.</p>
           </div>
         </template>
 
@@ -213,44 +219,30 @@ onMounted(fetchUsers)
           </template>
         </Column>
 
-        <!-- Role (Editable) -->
-        <Column header="Quyền hạn" style="min-width: 180px">
+        <!-- Role (Static Tag Badge) -->
+        <Column header="Quyền hạn" style="min-width: 140px">
           <template #body="{ data }">
-            <!-- Admin role: chỉ hiện badge, không cho sửa -->
-            <div v-if="data.role === 'admin'" class="admin-badge-wrap">
-              <Tag
-                :severity="getRole(data.role).severity"
-                :value="getRole(data.role).label"
-                :icon="getRole(data.role).icon"
-                rounded
-              />
-              <i class="pi pi-lock lock-icon" v-tooltip="'Không thể thay đổi quyền Admin'"></i>
-            </div>
-            <!-- Non-admin: dropdown để đổi role -->
-            <div v-else class="role-select-wrap">
-              <Select
-                :modelValue="data.role"
-                @update:modelValue="(val) => updateRole(data, val)"
-                :options="roleOptions"
-                optionLabel="label"
-                optionValue="value"
-                :loading="updatingUserId === data.id"
-                :disabled="updatingUserId === data.id"
-                class="role-select"
-                placeholder="Chọn quyền"
-              />
-            </div>
+            <Tag
+              :severity="getRole(data.role).severity"
+              :value="getRole(data.role).label"
+              :icon="getRole(data.role).icon"
+              rounded
+            />
           </template>
         </Column>
 
-        <!-- Vendor Info -->
-        <Column header="Gian hàng" style="min-width: 160px">
+        <!-- Vendor Info / Hồ sơ nhà bán -->
+        <Column header="Gian hàng" style="min-width: 180px">
           <template #body="{ data }">
-            <span v-if="data.vendor" class="vendor-name">
-              <i class="pi pi-shop vendor-shop-icon"></i>
-              {{ data.vendor.shop_name }}
-            </span>
-            <span v-else class="no-vendor">—</span>
+            <RouterLink
+              v-if="data.vendor"
+              to="/admin/approvals"
+              class="vendor-name font-bold text-indigo-600 hover:underline flex items-center gap-1.5"
+            >
+              <i class="pi pi-shop text-xs"></i>
+              <span>{{ data.vendor.shop_name }}</span>
+            </RouterLink>
+            <span v-else class="no-vendor text-slate-400">—</span>
           </template>
         </Column>
 
@@ -262,52 +254,71 @@ onMounted(fetchUsers)
         </Column>
 
         <!-- Hành động -->
-        <Column header="Hành động" style="min-width: 100px; text-align: right">
+        <Column header="Hành động" style="min-width: 120px; text-align: right">
           <template #body="{ data }">
-            <Button
-              icon="pi pi-eye"
-              text
-              rounded
-              severity="secondary"
-              @click="router.push({ name: 'admin-user-detail', params: { id: data.id } })"
-              v-tooltip.top="'Xem chi tiết'"
-            />
-            <Button
-              v-if="data.role !== 'admin'"
-              icon="pi pi-sign-out"
-              text
-              rounded
-              severity="danger"
-              :loading="updatingUserId === data.id"
-              @click="terminateSessions(data)"
-              v-tooltip.top="'Đăng xuất khỏi mọi thiết bị'"
-            />
+            <div class="flex items-center justify-end gap-1">
+              <Button
+                icon="pi pi-eye"
+                text
+                rounded
+                severity="secondary"
+                @click="router.push({ name: 'admin-user-detail', params: { id: data.id } })"
+                v-tooltip.top="'Xem chi tiết'"
+              />
+              <Button
+                v-if="data.role !== 'admin'"
+                icon="pi pi-sign-out"
+                text
+                rounded
+                severity="danger"
+                :loading="terminatingUserId === data.id"
+                @click="terminateSessions(data)"
+                v-tooltip.top="'Đăng xuất khỏi mọi thiết bị'"
+              />
+            </div>
           </template>
         </Column>
       </DataTable>
     </div>
 
+    <!-- Skeleton Loading -->
     <div v-else-if="loading" class="grid gap-4 md:grid-cols-2 xl:grid-cols-3" role="status" aria-label="Đang tải người dùng">
       <div v-for="index in 6" :key="index" class="h-44 animate-pulse rounded-xl bg-slate-200"></div>
     </div>
-    <div v-else-if="!users.length" class="empty-state rounded-xl border border-slate-200 bg-white">Chưa có người dùng phù hợp.</div>
+    <div v-else-if="!users.length" class="empty-state rounded-xl border border-slate-200 bg-white">Chưa có người dùng phù hợp với điều kiện lọc.</div>
+
+    <!-- Cards Grid View -->
     <div v-else class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-      <article v-for="user in users" :key="user.id" class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div class="flex items-start justify-between gap-3">
-          <div class="user-cell min-w-0">
-            <div class="user-avatar-badge" :class="'role-' + user.role"><i class="pi pi-user"></i></div>
-            <div class="user-meta"><strong class="user-name-text">{{ user.name }}</strong><span class="user-email-text">{{ user.email }}</span></div>
+      <article v-for="user in users" :key="user.id" class="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs flex flex-col justify-between hover:shadow-md transition-all">
+        <div>
+          <div class="flex items-start justify-between gap-3">
+            <div class="user-cell min-w-0">
+              <div class="user-avatar-badge" :class="'role-' + user.role"><i class="pi pi-user"></i></div>
+              <div class="user-meta">
+                <strong class="user-name-text">{{ user.name }}</strong>
+                <span class="user-email-text">{{ user.email }}</span>
+              </div>
+            </div>
+            <Tag :severity="getRole(user.role).severity" :value="getRole(user.role).label" :icon="getRole(user.role).icon" rounded />
           </div>
-          <Tag :severity="getRole(user.role).severity" :value="getRole(user.role).label" rounded />
+          <dl class="mt-4 grid grid-cols-[92px_1fr] gap-x-3 gap-y-2 text-sm">
+            <dt class="text-slate-500 font-semibold">ID</dt>
+            <dd class="m-0 font-bold text-slate-800">#{{ user.id }}</dd>
+            <dt class="text-slate-500 font-semibold">Gian hàng</dt>
+            <dd class="m-0 truncate">
+              <RouterLink v-if="user.vendor" to="/admin/approvals" class="font-bold text-indigo-600 hover:underline">
+                {{ user.vendor.shop_name }}
+              </RouterLink>
+              <span v-else class="text-slate-400">—</span>
+            </dd>
+            <dt class="text-slate-500 font-semibold">Tham gia</dt>
+            <dd class="m-0 text-slate-700">{{ formatDate(user.created_at) }}</dd>
+          </dl>
         </div>
-        <dl class="mt-4 grid grid-cols-[92px_1fr] gap-x-3 gap-y-2 text-sm">
-          <dt class="text-slate-500">ID</dt><dd class="m-0 font-semibold">#{{ user.id }}</dd>
-          <dt class="text-slate-500">Gian hàng</dt><dd class="m-0 truncate">{{ user.vendor?.shop_name || '—' }}</dd>
-          <dt class="text-slate-500">Tham gia</dt><dd class="m-0">{{ formatDate(user.created_at) }}</dd>
-        </dl>
-        <div class="mt-5 flex flex-wrap gap-2">
+
+        <div class="mt-5 flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
           <Button label="Chi tiết" icon="pi pi-eye" size="small" outlined @click="router.push({ name: 'admin-user-detail', params: { id: user.id } })" />
-          <Button v-if="user.role !== 'admin'" label="Thu hồi phiên" icon="pi pi-sign-out" size="small" severity="danger" outlined :loading="updatingUserId === user.id" @click="terminateSessions(user)" />
+          <Button v-if="user.role !== 'admin'" label="Thu hồi phiên" icon="pi pi-sign-out" size="small" severity="danger" outlined :loading="terminatingUserId === user.id" @click="terminateSessions(user)" />
         </div>
       </article>
     </div>
@@ -318,6 +329,8 @@ onMounted(fetchUsers)
 .admin-users {
   max-width: 100%;
 }
+
+.shadow-xs { box-shadow: 0px 2px 4px rgba(26,58,90,0.04); }
 
 /* ═══ PAGE HEADER ═══ */
 .page-header {
@@ -361,25 +374,6 @@ onMounted(fetchUsers)
   border: 1px solid #e2e8f0;
   overflow: hidden;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
-}
-
-.view-toggle {
-  min-height: 44px;
-  padding: 0 14px;
-  border: 0;
-  border-radius: 7px;
-  background: transparent;
-  color: #475569;
-  font-weight: 700;
-  cursor: pointer;
-}
-.view-toggle.active {
-  background: #002442;
-  color: #fff;
-}
-.view-toggle:focus-visible {
-  outline: 3px solid #2563eb;
-  outline-offset: 2px;
 }
 
 /* User ID */
@@ -445,41 +439,13 @@ onMounted(fetchUsers)
   text-overflow: ellipsis;
 }
 
-/* Admin badge */
-.admin-badge-wrap {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.lock-icon {
-  font-size: 12px;
-  color: #cbd5e1;
-}
-
-/* Role select */
-.role-select-wrap {
-  max-width: 150px;
-}
-.role-select {
-  width: 100%;
-}
-
 /* Vendor name */
 .vendor-name {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 6px;
   font-size: 13px;
-  font-weight: 500;
-  color: #334155;
-}
-.vendor-shop-icon {
-  color: #6366f1;
-  font-size: 12px;
-}
-.no-vendor {
-  color: #cbd5e1;
-  font-size: 13px;
+  font-weight: 600;
 }
 
 .date-text {

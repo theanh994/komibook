@@ -56,7 +56,8 @@ class CouponController extends Controller
     {
         return [
             'code' => ['required', 'string', 'max:40', Rule::unique('coupons', 'code')->ignore($couponId)],
-            'discount_percent' => 'required|numeric|min:1|max:90',
+            'coupon_type' => 'nullable|in:product,shipping',
+            'discount_percent' => 'required|numeric|min:1|max:100',
             'min_order_value' => 'nullable|integer|min:0',
             'max_discount_amount' => 'nullable|integer|min:0',
             'start_time' => 'required|date',
@@ -64,7 +65,7 @@ class CouponController extends Controller
             'usage_limit' => 'nullable|integer|min:1',
             'scope_book_ids' => 'nullable|array|max:100',
             'scope_book_ids.*' => 'integer|distinct',
-            'scope_type' => 'required|in:store,category,books',
+            'scope_type' => 'nullable|in:store,category,books',
             'category_id' => 'nullable|required_if:scope_type,category|integer|exists:categories,id',
             'stacking_policy' => 'required|in:allow,deny',
         ];
@@ -72,10 +73,11 @@ class CouponController extends Controller
 
     private function normalizeScope(array $validated, int $vendorId): array
     {
-        $scopeType = $validated['scope_type'];
+        $validated['coupon_type'] = $validated['coupon_type'] ?? 'product';
+        $scopeType = $validated['scope_type'] ?? 'store';
         unset($validated['scope_type']);
 
-        if ($scopeType === 'store') {
+        if ($validated['coupon_type'] === 'shipping' || $scopeType === 'store') {
             $validated['category_id'] = null;
             $validated['scope_book_ids'] = null;
         } elseif ($scopeType === 'category') {

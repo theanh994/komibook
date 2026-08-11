@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import apiClient from '@/services/axios'
+import { useCartStore } from '@/stores/cart'
 
 export const useAuthStore = defineStore('auth', {
   state: () => ({
@@ -34,10 +35,10 @@ export const useAuthStore = defineStore('auth', {
     async login(credentials) {
       // 1. Phải gọi lấy CSRF Cookie của Sanctum trước
       await apiClient.get('/sanctum/csrf-cookie')
-      
+
       // 2. Gửi thông tin đăng nhập
       const response = await apiClient.post('/api/auth/login', credentials)
-      
+
       // 3. Lấy thông tin user ngay sau khi đăng nhập thành công qua Cookie Session
       await this.fetchUser({ throwOnError: true })
       if (!this.user) {
@@ -49,11 +50,11 @@ export const useAuthStore = defineStore('auth', {
     async loginWithGoogle(googleData) {
       await apiClient.get('/sanctum/csrf-cookie')
       const response = await apiClient.post('/api/auth/google-login', googleData)
-      
+
       if (response.data.status === 'success') {
         await this.fetchUser()
       }
-      
+
       return response.data;
     },
 
@@ -76,11 +77,11 @@ export const useAuthStore = defineStore('auth', {
     async verifyPhoneOtp(phone, otp) {
       await apiClient.get('/sanctum/csrf-cookie')
       const response = await apiClient.post('/api/auth/phone/verify-otp', { phone, otp })
-      
+
       if (response.data.status === 'success') {
         await this.fetchUser()
       }
-      
+
       return response.data
     },
 
@@ -89,9 +90,16 @@ export const useAuthStore = defineStore('auth', {
         const response = await apiClient.get('/api/auth/me')
         const responseData = response.data.data || response.data
         this.user = responseData.user || responseData
+
+        // Cập nhật ngay lập tức giỏ hàng cho user vừa fetch thành công
+        const cartStore = useCartStore()
+        cartStore.loadCartForUser(this.user?.id || null)
+
         return this.user
       } catch (error) {
         this.user = null
+        const cartStore = useCartStore()
+        cartStore.loadCartForUser(null)
         if (throwOnError) throw error
       } finally {
         this.userFetched = true
@@ -102,6 +110,11 @@ export const useAuthStore = defineStore('auth', {
       const shouldNotifyServer = Boolean(this.user && !skipApi)
       this.user = null
       this.userFetched = true
+
+      // Chuyển lập tức giỏ hàng về giỏ của khách/rỗng khi đăng xuất
+      const cartStore = useCartStore()
+      cartStore.loadCartForUser(null)
+
       try {
         if (shouldNotifyServer) {
           await apiClient.post('/api/auth/logout', null, { timeout: 5000 })
@@ -114,7 +127,7 @@ export const useAuthStore = defineStore('auth', {
     async updateProfile(profileData) {
       const response = await apiClient.put('/api/profile/info', profileData)
       const responseData = response.data.data || response.data
-      
+
       if (this.user && responseData) {
         this.user = { ...this.user, ...responseData }
       }
