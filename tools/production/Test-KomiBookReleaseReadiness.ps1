@@ -39,25 +39,66 @@ if (-not (Test-Path -LiteralPath $configCache -PathType Leaf)) {
 
 $releaseDirectory = Split-Path $candidate -Parent
 $releaseSha = Split-Path $releaseDirectory -Leaf
-$frontendIndex = Join-Path $releaseDirectory 'frontend\dist-social\index.html'
+$frontendDist = Join-Path $releaseDirectory 'frontend\dist-social'
+$frontendIndex = Join-Path $frontendDist 'index.html'
+$frontendAssetDirectory = Join-Path $frontendDist 'assets'
 $assetNamespace = 'r' + $releaseSha.Substring(0, 8)
 
-if (-not (Test-Path -LiteralPath $frontendIndex -PathType Leaf)) {
+if (
+    -not (Test-Path -LiteralPath $frontendIndex -PathType Leaf) -or
+    -not (Test-Path -LiteralPath $frontendAssetDirectory -PathType Container)
+) {
     throw 'Candidate does not have a production frontend index.'
 }
 
-$frontendHtml = [IO.File]::ReadAllText($frontendIndex)
 $assetPrefix = "/assets/$assetNamespace/"
-$assetReferences = [regex]::Matches($frontendHtml, [regex]::Escape($assetPrefix) + '[^"''<> ]+') |
-    ForEach-Object { $_.Value } |
-    Select-Object -Unique
+$relativeAssetPrefix = "assets/$assetNamespace/"
+$versionedAssetPattern = '(?<![A-Za-z0-9_.-])/?assets/r[0-9a-f]{8}/'
+$unversionedRelativeAssetPattern = '(?<![/A-Za-z0-9_.-])assets/(?!r[0-9a-f]{8}/)'
+$frontendTextArtifacts = @(
+    Get-Item -LiteralPath $frontendIndex
+    Get-ChildItem -LiteralPath $frontendAssetDirectory -Recurse -File |
+        Where-Object { $_.Extension -in @('.js', '.css', '.html', '.json') }
+)
+
+$assetReferences = @(
+    $frontendTextArtifacts |
+        ForEach-Object {
+            $content = [IO.File]::ReadAllText($_.FullName)
+            if (
+                [regex]::IsMatch($content, '/assets/(?!r[0-9a-f]{8}/)') -or
+                [regex]::IsMatch($content, $unversionedRelativeAssetPattern)
+            ) {
+                throw "Candidate frontend contains an unversioned asset reference: $($_.FullName)"
+            }
+
+            $foreignNamespaces = @(
+                [regex]::Matches($content, $versionedAssetPattern) |
+                    ForEach-Object { $_.Value.TrimStart('/') } |
+                    Where-Object { $_ -ne $relativeAssetPrefix } |
+                    Select-Object -Unique
+            )
+            if ($foreignNamespaces.Count -gt 0) {
+                throw "Candidate frontend references a foreign asset namespace: $($foreignNamespaces -join ', ')"
+            }
+
+            [regex]::Matches(
+                $content,
+                '(?<![A-Za-z0-9_.-])/?' + [regex]::Escape($relativeAssetPrefix) + '[^"''<> )`,;]+'
+            ) |
+                ForEach-Object {
+                    if ($_.Value.StartsWith('/')) { $_.Value } else { '/' + $_.Value }
+                }
+        } |
+        Select-Object -Unique
+)
 
 if ($assetReferences.Count -eq 0) {
     throw 'Candidate frontend does not use its release asset namespace.'
 }
 
 $missingAssets = @($assetReferences | Where-Object {
-    $relativePath = $_.Substring('/assets/'.Length)
+    $relativePath = $_.Substring('/assets/'.Length) -replace '[?#].*$', ''
     -not (Test-Path -LiteralPath (Join-Path $sharedAssetsPath $relativePath) -PathType Leaf)
 })
 

@@ -37,7 +37,9 @@ if (Test-Path -LiteralPath $targetAssets) {
 }
 
 $assetPrefix = "/assets/$namespace/"
-$versionedAssetPattern = '/assets/r[0-9a-f]{8}/'
+$relativeAssetPrefix = "assets/$namespace/"
+$versionedAssetPattern = '(?<![A-Za-z0-9_.-])/?assets/r[0-9a-f]{8}/'
+$unversionedRelativeAssetPattern = '(?<![/A-Za-z0-9_.-])assets/(?!r[0-9a-f]{8}/)'
 $textArtifacts = @(
     Get-Item -LiteralPath $index
     Get-ChildItem -LiteralPath $sourceAssets -Recurse -File |
@@ -48,8 +50,8 @@ foreach ($artifact in $textArtifacts) {
     $content = [IO.File]::ReadAllText($artifact.FullName)
     $foreignNamespaces = @(
         [regex]::Matches($content, $versionedAssetPattern) |
-            ForEach-Object { $_.Value } |
-            Where-Object { $_ -ne $assetPrefix } |
+            ForEach-Object { $_.Value.TrimStart('/') } |
+            Where-Object { $_ -ne $relativeAssetPrefix } |
             Select-Object -Unique
     )
 
@@ -62,7 +64,20 @@ foreach ($artifact in $textArtifacts) {
         '/assets/(?!r[0-9a-f]{8}/)',
         [System.Text.RegularExpressions.MatchEvaluator] { param($match) $assetPrefix }
     )
+    $content = [regex]::Replace(
+        $content,
+        $unversionedRelativeAssetPattern,
+        [System.Text.RegularExpressions.MatchEvaluator] { param($match) $relativeAssetPrefix }
+    )
     $content = $content.Replace('/favicon.ico', $assetPrefix + 'favicon.ico')
+
+    if (
+        [regex]::IsMatch($content, '/assets/(?!r[0-9a-f]{8}/)') -or
+        [regex]::IsMatch($content, $unversionedRelativeAssetPattern)
+    ) {
+        throw "Frontend artifact still contains an unversioned asset reference: $($artifact.FullName)"
+    }
+
     [IO.File]::WriteAllText($artifact.FullName, $content, [Text.UTF8Encoding]::new($false))
 }
 
@@ -100,8 +115,13 @@ try {
         $textArtifacts |
             ForEach-Object {
                 $artifactContent = [IO.File]::ReadAllText($_.FullName)
-                [regex]::Matches($artifactContent, [regex]::Escape($assetPrefix) + '[^"''<> )`,;]+') |
-                    ForEach-Object { $_.Value }
+                [regex]::Matches(
+                    $artifactContent,
+                    '(?<![A-Za-z0-9_.-])/?' + [regex]::Escape($relativeAssetPrefix) + '[^"''<> )`,;]+'
+                ) |
+                    ForEach-Object {
+                        if ($_.Value.StartsWith('/')) { $_.Value } else { '/' + $_.Value }
+                    }
             } |
             Select-Object -Unique
     )
