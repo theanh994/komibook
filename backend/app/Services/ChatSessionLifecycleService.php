@@ -23,6 +23,7 @@ class ChatSessionLifecycleService
             return $this->transition($locked, $current, 'request_human', 'customer_requested_human', 'Yêu cầu gặp nhân viên đã được đưa vào hàng đợi hỗ trợ. AI sẽ tạm dừng trả lời cho đến khi nhân viên tiếp nhận.', [
                 'status' => ChatSession::STATUS_QUEUED, 'responder_mode' => ChatSession::MODE_HUMAN,
                 'assigned_user_id' => null, 'assigned_at' => null,
+                'auto_resume_at' => null, 'auto_resume_anchor_message_id' => null,
             ]);
         });
     }
@@ -39,6 +40,7 @@ class ChatSessionLifecycleService
             return $this->transition($locked, $current, 'resume_ai', 'customer_resumed_ai', 'Trợ lý AI đã được bật lại. Nội dung do AI tạo sẽ luôn được ghi nhận rõ ràng.', [
                 'status' => ChatSession::STATUS_OPEN, 'responder_mode' => ChatSession::MODE_AI,
                 'assigned_user_id' => null, 'assigned_at' => null,
+                'auto_resume_at' => null, 'auto_resume_anchor_message_id' => null,
             ]);
         });
     }
@@ -58,6 +60,7 @@ class ChatSessionLifecycleService
             return $this->transition($locked, $current, 'takeover', 'staff_accepted_handoff', "Xin chào! {$current->name} đã tiếp nhận cuộc trò chuyện này.", [
                 'status' => ChatSession::STATUS_ASSIGNED, 'responder_mode' => ChatSession::MODE_HUMAN,
                 'assigned_user_id' => $current->id, 'assigned_at' => now(),
+                'auto_resume_at' => null, 'auto_resume_anchor_message_id' => null,
             ]);
         });
     }
@@ -79,6 +82,7 @@ class ChatSessionLifecycleService
                 $locked = $this->transition($locked, $current, 'customer_reply', 'customer_replied_to_staff', 'Khách hàng đã phản hồi. Nhân viên tiếp tục phụ trách phiên hỗ trợ này.', [
                     'status' => ChatSession::STATUS_ASSIGNED, 'responder_mode' => ChatSession::MODE_HUMAN,
                     'assigned_user_id' => $locked->assigned_user_id,
+                    'auto_resume_at' => null, 'auto_resume_anchor_message_id' => null,
                 ]);
             } else {
                 $locked->update(['last_message_at' => now()]);
@@ -99,13 +103,115 @@ class ChatSessionLifecycleService
             $waiting = $this->tuple($locked, ChatSession::STATUS_WAITING_CUSTOMER, ChatSession::MODE_HUMAN, $current->id);
             abort_unless($assigned || $waiting, 409, 'Trạng thái phiên không hợp lệ.');
             $metadata = $metadataResolver ? $metadataResolver() : $metadata;
-            ChatMessage::create(['chat_session_id' => $locked->id, 'sender_type' => $current->role === 'admin' ? 'admin' : 'vendor', 'sender_id' => $current->id, 'message' => $message, 'metadata' => $metadata]);
+            $staffMessage = ChatMessage::create(['chat_session_id' => $locked->id, 'sender_type' => $current->role === 'admin' ? 'admin' : 'vendor', 'sender_id' => $current->id, 'message' => $message, 'metadata' => $metadata]);
+            $deadline = now()->addMinutes($this->idleTimeoutMinutes());
             if ($assigned) {
-                return $this->transition($locked, $current, 'staff_reply', 'staff_replied', 'Nhân viên đã phản hồi và đang chờ khách hàng trả lời.', ['status' => ChatSession::STATUS_WAITING_CUSTOMER, 'responder_mode' => ChatSession::MODE_HUMAN, 'assigned_user_id' => $current->id]);
+                return $this->transition($locked, $current, 'staff_reply', 'staff_replied', 'Nhân viên đã phản hồi và đang chờ khách hàng trả lời.', [
+                    'status' => ChatSession::STATUS_WAITING_CUSTOMER,
+                    'responder_mode' => ChatSession::MODE_HUMAN,
+                    'assigned_user_id' => $current->id,
+                    'auto_resume_at' => $deadline,
+                    'auto_resume_anchor_message_id' => $staffMessage->id,
+                ], [
+                    'auto_resume_at' => $deadline->toISOString(),
+                    'auto_resume_anchor_message_id' => $staffMessage->id,
+                    'idle_timeout_minutes' => $this->idleTimeoutMinutes(),
+                ]);
             }
-            $locked->update(['last_message_at' => now()]);
+            $locked->update([
+                'last_message_at' => now(),
+                'auto_resume_at' => $deadline,
+                'auto_resume_anchor_message_id' => $staffMessage->id,
+            ]);
 
             return $locked->fresh();
+        });
+    }
+
+    public function extendHumanWait(ChatSession $session, User $actor): ChatSession
+    {
+        return $this->withSession($session, $actor, function (ChatSession $locked, User $current): ChatSession {
+            $this->customerOwns($locked, $current);
+            abort_unless(
+                $locked->assigned_user_id !== null
+                    && $this->tuple($locked, ChatSession::STATUS_WAITING_CUSTOMER, ChatSession::MODE_HUMAN, $locked->assigned_user_id)
+                    && $locked->auto_resume_anchor_message_id !== null,
+                409,
+                'Phiên không thể gia hạn thời gian chờ.'
+            );
+
+            $deadline = now()->addMinutes($this->idleTimeoutMinutes());
+
+            return $this->transition($locked, $current, 'extend_human_wait', 'customer_requested_more_human_wait', 'Khách hàng đã chọn tiếp tục chờ tư vấn viên.', [
+                'status' => ChatSession::STATUS_WAITING_CUSTOMER,
+                'responder_mode' => ChatSession::MODE_HUMAN,
+                'assigned_user_id' => $locked->assigned_user_id,
+                'auto_resume_at' => $deadline,
+                'auto_resume_anchor_message_id' => $locked->auto_resume_anchor_message_id,
+            ], [
+                'auto_resume_at' => $deadline->toISOString(),
+                'idle_timeout_minutes' => $this->idleTimeoutMinutes(),
+            ]);
+        });
+    }
+
+    public function autoResumeIdle(int $sessionId): bool
+    {
+        return DB::transaction(function () use ($sessionId): bool {
+            $locked = ChatSession::query()->lockForUpdate()->find($sessionId);
+            if (! $locked
+                || $locked->assigned_user_id === null
+                || ! $this->tuple($locked, ChatSession::STATUS_WAITING_CUSTOMER, ChatSession::MODE_HUMAN, $locked->assigned_user_id)
+                || $locked->auto_resume_at === null
+                || $locked->auto_resume_at->isFuture()
+                || $locked->auto_resume_anchor_message_id === null) {
+                return false;
+            }
+
+            $users = User::query()
+                ->whereIn('id', collect([$locked->user_id, $locked->assigned_user_id])->filter()->sort()->values())
+                ->lockForUpdate()
+                ->get()
+                ->keyBy('id');
+            $owner = $users->get($locked->user_id);
+            $assignee = $users->get($locked->assigned_user_id);
+            if (! $owner || $owner->role !== 'customer' || ! $assignee || ! $this->isCanonicalAssignee($locked, $assignee)) {
+                return false;
+            }
+
+            $anchor = ChatMessage::query()->lockForUpdate()->find($locked->auto_resume_anchor_message_id);
+            $expectedSenderType = $assignee->role === 'admin' ? 'admin' : 'vendor';
+            if (! $anchor
+                || (int) $anchor->chat_session_id !== $locked->id
+                || (int) $anchor->sender_id !== $assignee->id
+                || $anchor->sender_type !== $expectedSenderType) {
+                return false;
+            }
+
+            $newerParticipantMessageExists = ChatMessage::query()
+                ->where('chat_session_id', $locked->id)
+                ->where('id', '>', $anchor->id)
+                ->whereIn('sender_type', ['customer', 'admin', 'vendor'])
+                ->exists();
+            if ($newerParticipantMessageExists) {
+                return false;
+            }
+
+            $this->transitionAsSystem($locked, 'auto_resume_ai', 'customer_idle_30m', 'Phiên tư vấn đã trở lại trợ lý tự động do không có phản hồi trong 30 phút. Trợ lý sẽ chỉ trả lời khi bạn gửi tin nhắn tiếp theo.', [
+                'status' => ChatSession::STATUS_OPEN,
+                'responder_mode' => ChatSession::MODE_AI,
+                'assigned_user_id' => null,
+                'assigned_at' => null,
+                'auto_resume_at' => null,
+                'auto_resume_anchor_message_id' => null,
+            ], [
+                'policy' => 'human_idle_auto_resume_v1',
+                'idle_timeout_minutes' => $this->idleTimeoutMinutes(),
+                'anchor_message_id' => $anchor->id,
+                'previous_assigned_user_id' => $assignee->id,
+            ]);
+
+            return true;
         });
     }
 
@@ -119,7 +225,7 @@ class ChatSessionLifecycleService
             abort_unless((int) $locked->assigned_user_id === $current->id, 403, 'Bạn cần tiếp nhận phiên trước khi hoàn tất.');
             abort_unless(in_array($locked->status, [ChatSession::STATUS_ASSIGNED, ChatSession::STATUS_WAITING_CUSTOMER], true) && $locked->responder_mode === ChatSession::MODE_HUMAN, 409, 'Trạng thái phiên không hợp lệ.');
 
-            return $this->transition($locked, $current, 'close', 'staff_closed', $resolution, ['status' => ChatSession::STATUS_RESOLVED, 'responder_mode' => ChatSession::MODE_HUMAN, 'assigned_user_id' => $current->id, 'resolved_at' => now()]);
+            return $this->transition($locked, $current, 'close', 'staff_closed', $resolution, ['status' => ChatSession::STATUS_RESOLVED, 'responder_mode' => ChatSession::MODE_HUMAN, 'assigned_user_id' => $current->id, 'resolved_at' => now(), 'auto_resume_at' => null, 'auto_resume_anchor_message_id' => null]);
         });
     }
 
@@ -138,7 +244,7 @@ class ChatSessionLifecycleService
                 'Trạng thái phiên không hợp lệ.'
             );
 
-            return $this->transition($locked, $current, 'reopen', 'customer_reopened_conversation', 'Cuộc trò chuyện đã được mở lại. Trợ lý AI sẽ hỗ trợ trước cho đến khi nhân viên tiếp nhận.', ['status' => ChatSession::STATUS_OPEN, 'responder_mode' => ChatSession::MODE_AI, 'assigned_user_id' => null, 'assigned_at' => null, 'resolved_at' => null]);
+            return $this->transition($locked, $current, 'reopen', 'customer_reopened_conversation', 'Cuộc trò chuyện đã được mở lại. Trợ lý AI sẽ hỗ trợ trước cho đến khi nhân viên tiếp nhận.', ['status' => ChatSession::STATUS_OPEN, 'responder_mode' => ChatSession::MODE_AI, 'assigned_user_id' => null, 'assigned_at' => null, 'resolved_at' => null, 'auto_resume_at' => null, 'auto_resume_anchor_message_id' => null]);
         });
     }
 
@@ -214,6 +320,24 @@ class ChatSessionLifecycleService
         abort_unless($actor->role === 'vendor' && $vendor && $session->target_type === ChatSession::TARGET_VENDOR && (int) $session->vendor_id === $vendor->id, 403);
     }
 
+    private function isCanonicalAssignee(ChatSession $session, User $assignee): bool
+    {
+        if ($session->target_type === ChatSession::TARGET_PLATFORM) {
+            return $session->vendor_id === null && $assignee->role === 'admin';
+        }
+
+        if ($session->target_type !== ChatSession::TARGET_VENDOR || $session->vendor_id === null || $assignee->role !== 'vendor') {
+            return false;
+        }
+
+        return Vendor::withoutGlobalScopes()
+            ->lockForUpdate()
+            ->whereKey($session->vendor_id)
+            ->where('user_id', $assignee->id)
+            ->where('status', 'active')
+            ->exists();
+    }
+
     private function tuple(ChatSession $session, string $status, string $mode, ?int $assignee): bool
     {
         return $session->status === $status && $session->responder_mode === $mode && $session->assigned_user_id === $assignee;
@@ -224,14 +348,29 @@ class ChatSessionLifecycleService
         abort_unless($this->tuple($session, $status, $mode, $assignee), 409, 'Trạng thái phiên không hợp lệ.');
     }
 
-    private function transition(ChatSession $session, User $actor, string $operation, string $reason, string $message, array $to): ChatSession
+    private function transition(ChatSession $session, User $actor, string $operation, string $reason, string $message, array $to, array $metadata = []): ChatSession
+    {
+        return $this->applyTransition($session, $actor->role, $actor->id, $operation, $reason, $message, $to, $metadata);
+    }
+
+    private function transitionAsSystem(ChatSession $session, string $operation, string $reason, string $message, array $to, array $metadata = []): ChatSession
+    {
+        return $this->applyTransition($session, 'system', null, $operation, $reason, $message, $to, $metadata);
+    }
+
+    private function applyTransition(ChatSession $session, string $actorType, ?int $actorId, string $operation, string $reason, string $message, array $to, array $metadata): ChatSession
     {
         $from = ['status' => $session->status, 'responder_mode' => $session->responder_mode, 'assigned_user_id' => $session->assigned_user_id];
         $before = $session->lock_version;
         $to = array_merge($to, ['lock_version' => $before + 1, 'last_message_at' => now()]);
         $session->update($to);
-        ChatMessage::create(['chat_session_id' => $session->id, 'sender_type' => 'system', 'message' => $message, 'metadata' => ['event' => 'chat_session_transition', 'schema_version' => 1, 'operation' => $operation, 'reason' => $reason, 'actor_type' => $actor->role, 'actor_id' => $actor->id, 'from' => $from, 'to' => ['status' => $to['status'], 'responder_mode' => $to['responder_mode'], 'assigned_user_id' => $to['assigned_user_id']], 'target_type' => $session->target_type, 'vendor_id' => $session->vendor_id, 'lock_version_before' => $before, 'lock_version_after' => $before + 1]]);
+        ChatMessage::create(['chat_session_id' => $session->id, 'sender_type' => 'system', 'message' => $message, 'metadata' => array_merge(['event' => 'chat_session_transition', 'schema_version' => 1, 'operation' => $operation, 'reason' => $reason, 'actor_type' => $actorType, 'actor_id' => $actorId, 'from' => $from, 'to' => ['status' => $to['status'], 'responder_mode' => $to['responder_mode'], 'assigned_user_id' => $to['assigned_user_id']], 'target_type' => $session->target_type, 'vendor_id' => $session->vendor_id, 'lock_version_before' => $before, 'lock_version_after' => $before + 1], $metadata)]);
 
         return $session->fresh();
+    }
+
+    private function idleTimeoutMinutes(): int
+    {
+        return max(1, min(1440, (int) config('chat.human_idle_auto_resume_minutes', 30)));
     }
 }

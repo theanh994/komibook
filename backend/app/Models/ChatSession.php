@@ -52,6 +52,8 @@ class ChatSession extends Model
         'last_message_at',
         'assigned_at',
         'resolved_at',
+        'auto_resume_at',
+        'auto_resume_anchor_message_id',
     ];
 
     protected $hidden = ['guest_token_hash'];
@@ -66,6 +68,8 @@ class ChatSession extends Model
             'last_message_at' => 'datetime',
             'assigned_at' => 'datetime',
             'resolved_at' => 'datetime',
+            'auto_resume_at' => 'datetime',
+            'auto_resume_anchor_message_id' => 'integer',
         ];
     }
 

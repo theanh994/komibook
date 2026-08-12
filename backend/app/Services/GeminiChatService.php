@@ -77,8 +77,18 @@ class GeminiChatService
         }
 
         $reply = $this->structuredOrderReply($knowledge, $effectiveQuery);
+        $bookDetailReply = $this->structuredBookDetailReply($knowledge, $effectiveQuery);
+        if ($this->isAmbiguousBookDetail($knowledge, $effectiveQuery)) {
+            $metadata['delivery'] = 'local_grounded';
+            $metadata['engine'] = $this->engineInfo('local_grounded');
+
+            return ['message' => $bookDetailReply, 'metadata' => $metadata];
+        }
         if ($reply === null) {
             $reply = $this->structuredCouponReply($knowledge, $effectiveQuery);
+        }
+        if ($reply === null && $bookDetailReply !== null && ! $this->externalAiAvailable()) {
+            $reply = $bookDetailReply;
         }
         if ($reply === null) {
             $reply = $this->structuredCatalogReply($knowledge, $effectiveQuery);
@@ -100,7 +110,7 @@ class GeminiChatService
         }
 
         if ($reply === null) {
-            $reply = $this->groundedFallback($knowledge, $userMessage);
+            $reply = $bookDetailReply ?? $this->groundedFallback($knowledge, $userMessage);
             $metadata['delivery'] = 'local_grounded';
         } elseif (! isset($metadata['delivery'])) {
             $metadata['delivery'] = 'gemini';
@@ -509,6 +519,179 @@ PROMPT;
         }
 
         return null;
+    }
+
+    /** @param array<string, mixed> $knowledge */
+    private function structuredBookDetailReply(array $knowledge, string $query): ?string
+    {
+        if (($knowledge['primary_intent'] ?? null) !== 'book' || ! $this->isBookDetailQuery($query)) {
+            return null;
+        }
+
+        $book = $this->selectDetailBook($knowledge, $query);
+        if ($book === null) {
+            return 'Mình tìm thấy nhiều sách phù hợp nhưng chưa thể xác định chính xác cuốn bạn hỏi. Bạn vui lòng cho mình biết rõ tựa sách hoặc chọn đúng cuốn sách để mình tra thông tin công khai.';
+        }
+
+        $citation = collect($knowledge['entries'] ?? [])
+            ->first(fn (mixed $entry): bool => is_array($entry) && ($entry['type'] ?? null) === 'book' && ($entry['id'] ?? null) === ($book['id'] ?? null));
+        $source = is_array($citation) && isset($citation['citation']) ? " [{$citation['citation']}]" : '';
+        $facets = $this->requestedBookFacets($query);
+
+        if ($facets === []) {
+            return $this->genericBookDetailReply($book).$source;
+        }
+
+        $lines = collect($facets)->map(function (string $facet) use ($book): string {
+            [$label, $field, $formatter] = $this->bookFacetDefinition($facet);
+            $value = str_contains($field, '.') ? data_get($book, $field) : ($book[$field] ?? null);
+            if ($facet === 'rating') {
+                return $book['rating_avg'] === null
+                    ? "• {$label}: KomiBook chưa có nhận xét công khai."
+                    : "• {$label}: {$book['rating_avg']}/5 từ {$book['review_count']} nhận xét công khai.";
+            }
+            if ($value === null || $value === '') {
+                return "• {$label}: KomiBook chưa có dữ liệu công khai cho mục này.";
+            }
+
+            return "• {$label}: ".($formatter ? $formatter($value, $book) : $value).'.';
+        })->implode("\n");
+
+        return "Thông tin công khai của “{$book['display_title']}”:\n{$lines}{$source}";
+    }
+
+    /** @param array<string, mixed> $knowledge @return array<string, mixed>|null */
+    private function selectDetailBook(array $knowledge, string $query): ?array
+    {
+        $context = $knowledge['context_book'] ?? null;
+        if (is_array($context)) {
+            return $context;
+        }
+
+        $books = array_values(array_filter($knowledge['recommended_books'] ?? [], 'is_array'));
+        if (count($books) === 1) {
+            return $books[0];
+        }
+
+        $normalizedQuery = $this->normalizedBookText($query);
+        $matches = array_values(array_filter($books, function (array $book) use ($normalizedQuery): bool {
+            $title = $this->normalizedBookText((string) ($book['title'] ?? ''));
+
+            return $title !== '' && str_contains($normalizedQuery, $title);
+        }));
+
+        if ($matches === []) {
+            return null;
+        }
+
+        $longestTitleLength = max(array_map(fn (array $book): int => mb_strlen($this->normalizedBookText((string) $book['title'])), $matches));
+        $exactTitleMatches = array_values(array_filter($matches, fn (array $book): bool => mb_strlen($this->normalizedBookText((string) $book['title'])) === $longestTitleLength));
+
+        return count($exactTitleMatches) === 1 ? $exactTitleMatches[0] : null;
+    }
+
+    /** @param array<string, mixed> $knowledge */
+    private function isAmbiguousBookDetail(array $knowledge, string $query): bool
+    {
+        return ($knowledge['primary_intent'] ?? null) === 'book'
+            && $this->isBookDetailQuery($query)
+            && $this->selectDetailBook($knowledge, $query) === null;
+    }
+
+    private function isBookDetailQuery(string $query): bool
+    {
+        return $this->requestedBookFacets($query) !== [] || $this->containsAny($query, ['thông tin sách', 'thông tin cuốn', 'thông tin cuốn sách']);
+    }
+
+    /** @return list<string> */
+    private function requestedBookFacets(string $query): array
+    {
+        $facets = [
+            'isbn' => ['isbn'],
+            'translator' => ['dịch giả', 'người dịch'],
+            'pages' => ['số trang', 'bao nhiêu trang'],
+            'dimensions' => ['kích thước', 'khổ sách'],
+            'cover_format' => ['bìa'],
+            'weight' => ['trọng lượng'],
+            'language' => ['ngôn ngữ'],
+            'target_age' => ['độ tuổi'],
+            'release_date' => ['ngày phát hành'],
+            'print_edition' => ['tái bản', 'ấn bản'],
+            'publisher' => ['nhà xuất bản', 'nxb'],
+            'supplier' => ['nhà cung cấp'],
+            'responsible_organization' => ['đơn vị chịu trách nhiệm'],
+            'description' => ['mô tả', 'nội dung', 'giới thiệu'],
+            'price' => ['giá', 'bao nhiêu tiền'],
+            'stock' => ['tồn kho', 'còn hàng'],
+            'author' => ['tác giả'],
+            'categories' => ['thể loại', 'danh mục'],
+            'series_title' => ['bộ sách', 'thuộc bộ'],
+            'rating' => ['đánh giá', 'nhận xét'],
+        ];
+
+        return collect($facets)->filter(fn (array $needles): bool => $this->containsAny($query, $needles))->keys()->values()->all();
+    }
+
+    /** @return array{0: string, 1: string, 2: (callable(mixed, array<string, mixed>): string)|null} */
+    private function bookFacetDefinition(string $facet): array
+    {
+        return match ($facet) {
+            'isbn' => ['ISBN', 'isbn', null],
+            'translator' => ['Dịch giả', 'translator', null],
+            'pages' => ['Số trang', 'pages', fn (mixed $value): string => "{$value} trang"],
+            'dimensions' => ['Kích thước', 'dimensions', null],
+            'cover_format' => ['Bìa', 'cover_format', null],
+            'weight' => ['Trọng lượng', 'weight', null],
+            'language' => ['Ngôn ngữ', 'language', null],
+            'target_age' => ['Độ tuổi phù hợp', 'target_age', null],
+            'release_date' => ['Ngày phát hành', 'release_date', null],
+            'print_edition' => ['Ấn bản', 'edition_label', null],
+            'publisher' => ['Nhà xuất bản', 'commercial_parties.publisher', null],
+            'supplier' => ['Nhà cung cấp', 'commercial_parties.supplier', null],
+            'responsible_organization' => ['Đơn vị chịu trách nhiệm', 'commercial_parties.responsible_organization', null],
+            'description' => ['Mô tả', 'description', null],
+            'price' => ['Giá', 'display_price', fn (mixed $value, array $book): string => number_format((int) $value).'đ'.($book['sale_price'] !== null ? ' (giá niêm yết '.number_format((int) $book['price']).'đ)' : '')],
+            'stock' => ['Tồn kho hiển thị', 'stock', fn (mixed $value): string => (string) $value],
+            'author' => ['Tác giả', 'author', null],
+            'categories' => ['Thể loại', 'category_names', fn (mixed $value): string => implode(', ', $value)],
+            'series_title' => ['Bộ sách', 'series_title', null],
+            'rating' => ['Đánh giá', 'rating_avg', null],
+        };
+    }
+
+    /** @param array<string, mixed> $book */
+    private function genericBookDetailReply(array $book): string
+    {
+        $items = [
+            'Tác giả' => $book['author'] ?? null,
+            'Dịch giả' => $book['translator'] ?? null,
+            'ISBN' => $book['isbn'] ?? null,
+            'Ấn bản' => $book['edition_label'] ?? null,
+            'Thể loại' => ($book['category_names'] ?? []) === [] ? null : implode(', ', $book['category_names']),
+            'Mô tả' => $book['description'] ?? null,
+            'Kích thước' => $book['dimensions'] ?? null,
+            'Bìa' => $book['cover_format'] ?? null,
+            'Trọng lượng' => $book['weight'] ?? null,
+            'Ngôn ngữ' => $book['language'] ?? null,
+            'Độ tuổi' => $book['target_age'] ?? null,
+            'Số trang' => isset($book['pages']) ? $book['pages'].' trang' : null,
+            'Ngày phát hành' => $book['release_date'] ?? null,
+            'Nhà xuất bản' => data_get($book, 'commercial_parties.publisher'),
+            'Nhà cung cấp' => data_get($book, 'commercial_parties.supplier'),
+            'Đơn vị chịu trách nhiệm' => data_get($book, 'commercial_parties.responsible_organization'),
+            'Giá đang áp dụng' => number_format((int) $book['display_price']).'đ',
+            'Loại / định dạng' => trim(($book['type'] ?? '').' / '.($book['format'] ?? '')),
+            'Tồn kho hiển thị' => isset($book['stock']) ? (string) $book['stock'] : null,
+        ];
+
+        $available = collect($items)->filter(fn (mixed $value): bool => $value !== null && $value !== '')->map(fn (mixed $value, string $label): string => "• {$label}: {$value}")->implode("\n");
+
+        return "Thông tin công khai của “{$book['display_title']}”:\n{$available}";
+    }
+
+    private function normalizedBookText(string $value): string
+    {
+        return preg_replace('/[^\p{L}\p{N}]+/u', '', mb_strtolower($value)) ?? '';
     }
 
     /** @param array{sources: array<int, array<string, mixed>>, entries: array<int, array<string, mixed>>, recommended_books: array<int, array<string, mixed>>, recommended_coupons?: array<int, array<string, mixed>>, recommended_orders?: array<int, array<string, mixed>>} $knowledge */

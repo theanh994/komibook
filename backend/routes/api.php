@@ -474,6 +474,7 @@ Route::prefix('chat')->group(function () {
         Route::post('/sessions/{session}/messages/{message}/feedback', [ChatController::class, 'submitFeedback'])->middleware('throttle:20,1');
         Route::post('/sessions/{session}/request-human', [ChatController::class, 'requestHuman'])->middleware('throttle:10,1');
         Route::post('/sessions/{session}/resume-ai', [ChatController::class, 'resumeAi'])->middleware('throttle:10,1');
+        Route::post('/sessions/{session}/extend-human-wait', [ChatController::class, 'extendHumanWait'])->middleware('throttle:10,1');
     });
 
     Route::middleware(['auth:sanctum', 'role:admin'])->prefix('admin')->group(function () {

@@ -48,9 +48,9 @@ class ChatController extends Controller
     public function conversations(Request $request): JsonResponse
     {
         $actor = $this->customer($request);
-        $sessions = ChatSession::query()->with(['vendor:id,shop_name,slug', 'lastMessage'])->where('user_id', $actor->id)->orderByDesc('last_message_at')->get();
+        $sessions = ChatSession::query()->with(['vendor:id,shop_name,slug', 'assignedUser:id,name', 'lastMessage'])->where('user_id', $actor->id)->orderByDesc('last_message_at')->get();
 
-        return response()->json(['success' => true, 'conversations' => $sessions->map(fn (ChatSession $s) => ['id' => $s->id, 'target_type' => $s->target_type, 'vendor_id' => $s->vendor_id, 'vendor' => $s->vendor, 'responder_mode' => $s->responder_mode, 'status' => $s->status, 'last_message' => $s->lastMessage, 'last_message_at' => $s->last_message_at])->values()]);
+        return response()->json(['success' => true, 'conversations' => $sessions->map(fn (ChatSession $s) => ['id' => $s->id, 'target_type' => $s->target_type, 'vendor_id' => $s->vendor_id, 'vendor' => $s->vendor, 'responder_mode' => $s->responder_mode, 'status' => $s->status, 'assigned_user' => $s->assignedUser, 'last_message' => $s->lastMessage, 'last_message_at' => $s->last_message_at])->values()]);
     }
 
     public function showSession(Request $request, ChatSession $session): JsonResponse
@@ -164,6 +164,15 @@ class ChatController extends Controller
         $actor = $this->customer($request);
         $this->assertCustomer($session, $actor);
         $session = $this->lifecycleService->resumeAi($session, $actor);
+
+        return response()->json(['success' => true, 'session' => $this->payload($session, true)]);
+    }
+
+    public function extendHumanWait(Request $request, ChatSession $session): JsonResponse
+    {
+        $actor = $this->customer($request);
+        $this->assertCustomer($session, $actor);
+        $session = $this->lifecycleService->extendHumanWait($session, $actor);
 
         return response()->json(['success' => true, 'session' => $this->payload($session, true)]);
     }
@@ -326,7 +335,7 @@ class ChatController extends Controller
     private function payload(ChatSession $session, bool $messages = false, int $afterId = 0): array
     {
         $session->loadMissing(['vendor:id,shop_name,slug', 'assignedUser:id,name']);
-        $data = ['id' => $session->id, 'target_type' => $session->target_type, 'vendor_id' => $session->vendor_id, 'vendor' => $session->vendor, 'responder_mode' => $session->responder_mode, 'status' => $session->status, 'assigned_user' => $session->assignedUser, 'support_ticket_id' => $session->support_ticket_id, 'subject' => $session->subject, 'category' => $session->category, 'last_message_at' => $session->last_message_at, 'created_at' => $session->created_at, 'external_ai' => $this->geminiService->externalAiPolicyMetadata($session)];
+        $data = ['id' => $session->id, 'target_type' => $session->target_type, 'vendor_id' => $session->vendor_id, 'vendor' => $session->vendor, 'responder_mode' => $session->responder_mode, 'status' => $session->status, 'assigned_user' => $session->assignedUser, 'support_ticket_id' => $session->support_ticket_id, 'subject' => $session->subject, 'category' => $session->category, 'last_message_at' => $session->last_message_at, 'auto_resume_at' => $session->auto_resume_at, 'human_idle_timeout_minutes' => max(1, min(1440, (int) config('chat.human_idle_auto_resume_minutes', 30))), 'created_at' => $session->created_at, 'external_ai' => $this->geminiService->externalAiPolicyMetadata($session)];
         if ($messages) {
             $query = $session->messages();
             $data['messages'] = $afterId ? $query->where('id', '>', $afterId)->orderBy('id')->limit(200)->get() : $query->orderByDesc('id')->limit(200)->get()->sortBy('id')->values();

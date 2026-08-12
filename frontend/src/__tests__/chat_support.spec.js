@@ -137,6 +137,37 @@ describe('Unified chat support store', () => {
     store.stopPolling()
   })
 
+  it('lets the customer extend only a canonical waiting-customer deadline', async () => {
+    const post = vi.spyOn(apiClient, 'post').mockResolvedValue({
+      data: {
+        session: sessionPayload({
+          status: 'waiting_customer',
+          responder_mode: 'human',
+          assigned_user: { id: 7 },
+          auto_resume_at: '2026-08-12T10:30:00.000Z',
+          human_idle_timeout_minutes: 30,
+        }),
+      },
+    })
+    const store = useChatStore()
+    store.applySession(sessionPayload({
+      status: 'waiting_customer',
+      responder_mode: 'human',
+      assigned_user: { id: 7 },
+      auto_resume_at: '2026-08-12T10:00:00.000Z',
+    }), true)
+
+    expect(store.canExtendHumanWait).toBe(true)
+    await store.extendHumanWait()
+
+    expect(post).toHaveBeenCalledWith('/api/chat/sessions/41/extend-human-wait')
+    expect(store.session.auto_resume_at).toBe('2026-08-12T10:30:00.000Z')
+    store.applySession(sessionPayload({ status: 'assigned', responder_mode: 'human', assigned_user: { id: 7 }, auto_resume_at: null }), true)
+    expect(store.canExtendHumanWait).toBe(false)
+    store.applySession(sessionPayload({ status: 'waiting_customer', responder_mode: 'human', assigned_user: { id: 7 }, auto_resume_at: 'invalid' }), true)
+    expect(store.canExtendHumanWait).toBe(false)
+  })
+
   it('fails closed for queued and malformed customer send states', async () => {
     const post = vi.spyOn(apiClient, 'post')
     const store = useChatStore()
@@ -220,6 +251,9 @@ describe('Unified chat support store', () => {
     expect(widget).toContain("if (!chatStore.session) return 'Đang khởi tạo phiên hỗ trợ'")
     expect(widget).toContain('v-if="!chatStore.showConversationList && chatStore.session && chatStore.isAiActive && showNoticeBanner"')
     expect(widget).toContain("if (chatStore.isAiActive) return 'Trợ lý AI tự động'")
+    expect(widget).toContain('v-if="chatStore.canExtendHumanWait"')
+    expect(widget).toContain('Tiếp tục chờ tư vấn viên thêm')
+    expect(widget).toContain('min-h-11')
   })
 
   it('requires an explicit consent action and never adds it to session creation or sending', async () => {

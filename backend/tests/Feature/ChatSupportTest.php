@@ -6,6 +6,7 @@ use App\Enums\ArticleStatus;
 use App\Http\Controllers\Api\ChatController;
 use App\Models\Article;
 use App\Models\Book;
+use App\Models\BookCommercialParty;
 use App\Models\Category;
 use App\Models\ChatMessage;
 use App\Models\ChatSession;
@@ -13,18 +14,25 @@ use App\Models\Coupon;
 use App\Models\HelpArticle;
 use App\Models\MembershipTier;
 use App\Models\Order;
+use App\Models\Organization;
+use App\Models\Review;
 use App\Models\Series;
 use App\Models\User;
 use App\Models\Vendor;
+use App\Models\VendorOrganizationRelationship;
 use App\Services\ChatSessionLifecycleService;
 use App\Services\GeminiChatService;
+use App\Services\OrganizationRelationshipService;
+use App\Services\OrganizationReviewService;
 use App\Services\RagSearchService;
+use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Symfony\Component\HttpKernel\Exception\HttpException;
@@ -409,7 +417,7 @@ class ChatSupportTest extends TestCase
         $this->assertStringContainsString('2 đầu sách', $reply);
     }
 
-    public function test_customer_reply_after_thirty_minutes_keeps_human_assignment(): void
+    public function test_customer_reply_before_scheduler_claim_keeps_human_assignment(): void
     {
         config()->set('services.gemini.enabled', false);
         $customer = User::factory()->create(['role' => 'customer']);
@@ -433,7 +441,7 @@ class ChatSupportTest extends TestCase
         $this->assertTrue($messages->contains(fn (array $message) => $message['sender_type'] === 'customer'));
     }
 
-    public function test_scheduler_no_longer_resumes_idle_human_conversations(): void
+    public function test_scheduler_ignores_legacy_waiting_sessions_without_a_persisted_deadline(): void
     {
         $admin = User::factory()->create(['role' => 'admin']);
         [, $vendor] = $this->vendor('idle-scheduler');
@@ -457,7 +465,7 @@ class ChatSupportTest extends TestCase
             ]),
         ]);
 
-        $this->assertArrayNotHasKey('chat:resume'.'-idle-ai', Artisan::all());
+        $this->assertArrayHasKey('chat:auto-resume-idle', Artisan::all());
 
         $sessions->each(function (ChatSession $session): void {
             $session->refresh();
@@ -470,6 +478,177 @@ class ChatSupportTest extends TestCase
             ]);
         });
         $this->assertSame('', Artisan::output());
+    }
+
+    public function test_scheduler_auto_resumes_idle_platform_support_once_without_calling_gemini(): void
+    {
+        config()->set('chat.human_idle_auto_resume_minutes', 30);
+        Http::preventStrayRequests();
+        $scheduledCommands = collect(app(Schedule::class)->events())
+            ->map(fn ($event): string => (string) $event->command);
+        $this->assertTrue($scheduledCommands->contains(
+            fn (string $command): bool => str_contains($command, 'chat:auto-resume-idle --limit=100')
+        ));
+        $customer = User::factory()->create(['role' => 'customer']);
+        $admin = User::factory()->create(['role' => 'admin']);
+        $sessionId = $this->actingAs($customer)->postJson('/api/chat/sessions', ['target_type' => 'platform'])->json('session.id');
+        $this->actingAs($customer)->postJson("/api/chat/sessions/{$sessionId}/request-human")->assertOk();
+        $this->actingAs($admin, 'sanctum')->postJson("/api/chat/admin/sessions/{$sessionId}/takeover")->assertOk();
+        $this->actingAs($admin, 'sanctum')->postJson("/api/chat/admin/sessions/{$sessionId}/reply", ['message' => 'Bạn cần thêm gì không?'])
+            ->assertOk()
+            ->assertJsonPath('session.status', ChatSession::STATUS_WAITING_CUSTOMER);
+        $this->actingAs($customer, 'sanctum')->getJson('/api/chat/conversations')
+            ->assertOk()
+            ->assertJsonPath('conversations.0.assigned_user.id', $admin->id);
+
+        $waiting = ChatSession::findOrFail($sessionId);
+        $this->assertNotNull($waiting->auto_resume_at);
+        $this->assertNotNull($waiting->auto_resume_anchor_message_id);
+        $messageCountBefore = $waiting->messages()->count();
+        $aiMessageCountBefore = $waiting->messages()->where('sender_type', 'ai')->count();
+
+        $this->travel(29)->minutes();
+        $this->artisan('chat:auto-resume-idle')->assertSuccessful();
+        $this->assertSame(ChatSession::STATUS_WAITING_CUSTOMER, $waiting->fresh()->status);
+
+        $this->travel(2)->minutes();
+        $this->artisan('chat:auto-resume-idle')->assertSuccessful();
+        $resumed = $waiting->fresh();
+        $this->assertSame(ChatSession::STATUS_OPEN, $resumed->status);
+        $this->assertSame(ChatSession::MODE_AI, $resumed->responder_mode);
+        $this->assertNull($resumed->assigned_user_id);
+        $this->assertNull($resumed->auto_resume_at);
+        $this->assertNull($resumed->auto_resume_anchor_message_id);
+        $this->assertSame($aiMessageCountBefore, $resumed->messages()->where('sender_type', 'ai')->count());
+        $this->assertSame($messageCountBefore + 1, $resumed->messages()->count());
+        $audit = $resumed->messages()->where('sender_type', 'system')->latest('id')->firstOrFail();
+        $this->assertSame('auto_resume_ai', data_get($audit->metadata, 'operation'));
+        $this->assertSame('customer_idle_30m', data_get($audit->metadata, 'reason'));
+        $this->assertSame('system', data_get($audit->metadata, 'actor_type'));
+        $this->assertNull(data_get($audit->metadata, 'actor_id'));
+
+        $this->artisan('chat:auto-resume-idle')->assertSuccessful();
+        $this->assertSame($messageCountBefore + 1, $resumed->messages()->count());
+        Http::assertNothingSent();
+    }
+
+    public function test_customer_can_extend_human_wait_and_the_original_deadline_cannot_resume_ai(): void
+    {
+        config()->set('chat.human_idle_auto_resume_minutes', 30);
+        Http::preventStrayRequests();
+        $customer = User::factory()->create(['role' => 'customer']);
+        $admin = User::factory()->create(['role' => 'admin']);
+        $sessionId = $this->actingAs($customer)->postJson('/api/chat/sessions', ['target_type' => 'platform'])->json('session.id');
+        $this->actingAs($customer)->postJson("/api/chat/sessions/{$sessionId}/request-human")->assertOk();
+        $this->actingAs($admin, 'sanctum')->postJson("/api/chat/admin/sessions/{$sessionId}/takeover")->assertOk();
+        $this->actingAs($admin, 'sanctum')->postJson("/api/chat/admin/sessions/{$sessionId}/reply", ['message' => 'Bạn cần thêm gì không?'])->assertOk();
+        $originalDeadline = ChatSession::findOrFail($sessionId)->auto_resume_at;
+
+        $this->travel(25)->minutes();
+        $response = $this->actingAs($customer, 'sanctum')->postJson("/api/chat/sessions/{$sessionId}/extend-human-wait")
+            ->assertOk()
+            ->assertJsonPath('session.status', ChatSession::STATUS_WAITING_CUSTOMER)
+            ->assertJsonPath('session.responder_mode', ChatSession::MODE_HUMAN);
+        $this->assertNotNull($response->json('session.auto_resume_at'));
+        $extended = ChatSession::findOrFail($sessionId);
+        $this->assertTrue($extended->auto_resume_at->greaterThan($originalDeadline));
+        $this->assertSame('extend_human_wait', data_get($extended->messages()->latest('id')->firstOrFail()->metadata, 'operation'));
+
+        $this->travel(6)->minutes();
+        $this->artisan('chat:auto-resume-idle')->assertSuccessful();
+        $this->assertSame(ChatSession::STATUS_WAITING_CUSTOMER, $extended->fresh()->status);
+
+        $this->travel(25)->minutes();
+        $this->artisan('chat:auto-resume-idle')->assertSuccessful();
+        $this->assertSame(ChatSession::STATUS_OPEN, $extended->fresh()->status);
+        Http::assertNothingSent();
+    }
+
+    public function test_idle_auto_resume_fails_closed_on_newer_participant_message_and_invalid_anchor(): void
+    {
+        config()->set('chat.human_idle_auto_resume_minutes', 1);
+        $customer = User::factory()->create(['role' => 'customer']);
+        $admin = User::factory()->create(['role' => 'admin']);
+        $sessionId = $this->actingAs($customer)->postJson('/api/chat/sessions', ['target_type' => 'platform'])->json('session.id');
+        $this->actingAs($customer)->postJson("/api/chat/sessions/{$sessionId}/request-human")->assertOk();
+        $this->actingAs($admin, 'sanctum')->postJson("/api/chat/admin/sessions/{$sessionId}/takeover")->assertOk();
+        $this->actingAs($admin, 'sanctum')->postJson("/api/chat/admin/sessions/{$sessionId}/reply", ['message' => 'Phản hồi đã gửi'])->assertOk();
+        $session = ChatSession::findOrFail($sessionId);
+
+        ChatMessage::create([
+            'chat_session_id' => $sessionId,
+            'sender_type' => 'customer',
+            'sender_id' => $customer->id,
+            'message' => 'Tin nhắn đến sau anchor',
+        ]);
+        $this->travel(2)->minutes();
+        $this->artisan('chat:auto-resume-idle')->assertSuccessful();
+        $this->assertSame(ChatSession::STATUS_WAITING_CUSTOMER, $session->fresh()->status);
+
+        $session->update(['auto_resume_anchor_message_id' => PHP_INT_MAX]);
+        $this->artisan('chat:auto-resume-idle')->assertSuccessful();
+        $this->assertSame(ChatSession::STATUS_WAITING_CUSTOMER, $session->fresh()->status);
+        $this->assertFalse($session->messages()->get()->contains(
+            fn (ChatMessage $message): bool => data_get($message->metadata, 'operation') === 'auto_resume_ai'
+        ));
+    }
+
+    public function test_idle_auto_resume_supports_active_vendor_scope_and_rejects_assignee_drift(): void
+    {
+        config()->set('chat.human_idle_auto_resume_minutes', 1);
+        $customer = User::factory()->create(['role' => 'customer']);
+        [$vendorUser, $vendor] = $this->vendor('idle-vendor');
+        $sessionId = $this->actingAs($customer)->postJson('/api/chat/sessions', [
+            'target_type' => 'vendor',
+            'vendor_id' => $vendor->id,
+        ])->json('session.id');
+        $this->actingAs($customer)->postJson("/api/chat/sessions/{$sessionId}/request-human", [
+            'target_type' => 'vendor',
+            'vendor_id' => $vendor->id,
+        ])->assertOk();
+        $this->actingAs($vendorUser, 'sanctum')->postJson("/api/chat/vendor/sessions/{$sessionId}/takeover")->assertOk();
+        $this->actingAs($vendorUser, 'sanctum')->postJson("/api/chat/vendor/sessions/{$sessionId}/reply", ['message' => 'Shop đã phản hồi'])->assertOk();
+
+        $this->travel(2)->minutes();
+        $this->artisan('chat:auto-resume-idle')->assertSuccessful();
+        $this->assertSame(ChatSession::STATUS_OPEN, ChatSession::findOrFail($sessionId)->status);
+
+        $otherCustomer = User::factory()->create(['role' => 'customer']);
+        $drift = ChatSession::create([
+            'user_id' => $otherCustomer->id,
+            'vendor_id' => $vendor->id,
+            'assigned_user_id' => User::factory()->create(['role' => 'vendor'])->id,
+            'target_type' => ChatSession::TARGET_VENDOR,
+            'responder_mode' => ChatSession::MODE_HUMAN,
+            'status' => ChatSession::STATUS_WAITING_CUSTOMER,
+            'auto_resume_at' => now()->subMinute(),
+        ]);
+        $anchor = ChatMessage::create([
+            'chat_session_id' => $drift->id,
+            'sender_type' => 'vendor',
+            'sender_id' => $drift->assigned_user_id,
+            'message' => 'Không thuộc đúng gian hàng',
+        ]);
+        $drift->update(['auto_resume_anchor_message_id' => $anchor->id]);
+
+        $this->artisan('chat:auto-resume-idle')->assertSuccessful();
+        $this->assertSame(ChatSession::STATUS_WAITING_CUSTOMER, $drift->fresh()->status);
+        $this->assertNotNull($drift->fresh()->assigned_user_id);
+    }
+
+    public function test_chat_idle_auto_resume_migration_is_reversible(): void
+    {
+        $migration = require database_path('migrations/2026_08_12_000000_add_idle_auto_resume_to_chat_sessions.php');
+        $this->assertTrue(Schema::hasColumn('chat_sessions', 'auto_resume_at'));
+        $this->assertTrue(Schema::hasColumn('chat_sessions', 'auto_resume_anchor_message_id'));
+
+        $migration->down();
+        $this->assertFalse(Schema::hasColumn('chat_sessions', 'auto_resume_at'));
+        $this->assertFalse(Schema::hasColumn('chat_sessions', 'auto_resume_anchor_message_id'));
+
+        $migration->up();
+        $this->assertTrue(Schema::hasColumn('chat_sessions', 'auto_resume_at'));
+        $this->assertTrue(Schema::hasColumn('chat_sessions', 'auto_resume_anchor_message_id'));
     }
 
     public function test_partner_author_help_articles_are_not_public_or_available_to_rag(): void
@@ -1722,6 +1901,182 @@ class ChatSupportTest extends TestCase
         $this->assertSame(0, ChatMessage::query()->where('chat_session_id', $epoch->id)->where('sender_type', 'ai')->count());
     }
 
+    public function test_local_book_detail_answers_context_facets_truthfully_and_cites_the_book(): void
+    {
+        config()->set('services.gemini.enabled', false);
+        $customer = User::factory()->create(['role' => 'customer']);
+        [, $vendor] = $this->vendor('detail-context');
+        $category = Category::create(['name' => 'Khoa học viễn tưởng', 'slug' => 'sci-fi-detail']);
+        $book = $this->publishedBook($vendor, $category, [
+            'title' => 'Bản đồ Sao', 'slug' => 'ban-do-sao', 'translator' => 'Người Dịch', 'isbn' => '978-123-456',
+            'pages' => 320, 'dimensions' => '13 x 20 cm', 'cover_format' => 'Bìa mềm', 'weight' => '350 g',
+            'language' => 'Tiếng Việt', 'target_age' => '14+', 'release_date' => '2026-08-01', 'print_edition' => 2,
+            'description' => 'Mô tả công khai của Bản đồ Sao.', 'sale_price' => 90000,
+        ]);
+        $sessionId = $this->actingAs($customer)->postJson('/api/chat/sessions', ['target_type' => 'platform'])->json('session.id');
+
+        $messages = $this->actingAs($customer)->postJson("/api/chat/sessions/{$sessionId}/messages", [
+            'message' => 'ISBN, dịch giả, số trang, kích thước, bìa, trọng lượng, ngôn ngữ, độ tuổi, ngày phát hành, tái bản, giá, nhà xuất bản và đánh giá sách này?',
+            'context_book_id' => $book->id,
+        ])->assertOk()->json('session.messages');
+        $reply = collect($messages)->last();
+
+        $this->assertSame('local_grounded', $reply['metadata']['delivery']);
+        $this->assertStringContainsString('978-123-456', $reply['message']);
+        $this->assertStringContainsString('Người Dịch', $reply['message']);
+        $this->assertStringContainsString('320 trang', $reply['message']);
+        $this->assertStringContainsString('Tái bản lần 2', $reply['message']);
+        $this->assertStringContainsString('Nhà xuất bản: KomiBook chưa có dữ liệu công khai', $reply['message']);
+        $this->assertStringContainsString('chưa có nhận xét công khai', $reply['message']);
+        $this->assertStringContainsString('[S1]', $reply['message']);
+        $this->assertSame($book->id, $reply['metadata']['sources'][0]['id']);
+
+        $unambiguous = app(GeminiChatService::class)->generateReply(ChatSession::findOrFail($sessionId), 'ISBN 978-123-456 có bao nhiêu trang?');
+        $this->assertSame('local_grounded', $unambiguous['metadata']['delivery']);
+        $this->assertStringContainsString('320 trang', $unambiguous['message']);
+
+        $firstEdition = $this->publishedBook($vendor, $category, [
+            'title' => 'Sách Ấn Bản Đầu', 'slug' => 'sach-an-ban-dau', 'print_edition' => 1,
+        ]);
+        $firstEditionReply = app(GeminiChatService::class)->generateReply(ChatSession::findOrFail($sessionId), 'thông tin sách', $firstEdition->id);
+        $this->assertStringContainsString('Ấn bản đầu tiên', $firstEditionReply['message']);
+        $this->assertStringNotContainsString('Tái bản lần 1', $firstEditionReply['message']);
+        $firstEditionKnowledge = app(RagSearchService::class)->buildKnowledge(ChatSession::findOrFail($sessionId), 'thông tin sách', $firstEdition->id);
+        $this->assertStringContainsString('Ấn bản đầu tiên', collect($firstEditionKnowledge['entries'])->firstWhere('type', 'book')['content']);
+    }
+
+    public function test_weak_book_facets_require_a_book_anchor_but_valid_context_promotes_detail_intent(): void
+    {
+        config()->set('services.gemini.enabled', false);
+        $customer = User::factory()->create(['role' => 'customer']);
+        [, $vendor] = $this->vendor('weak-book-facet');
+        $category = Category::create(['name' => 'Facet', 'slug' => 'facet']);
+        $book = $this->publishedBook($vendor, $category, ['title' => 'Sách Có Mô Tả', 'slug' => 'sach-co-mo-ta', 'description' => 'Mô tả sách công khai.']);
+        HelpArticle::create(['category_name' => 'Chính sách', 'title' => 'Chính sách đổi trả', 'content' => 'Nội dung chính sách đổi trả.', 'status' => 'published']);
+        Article::create(['title' => 'Bài viết giới thiệu sách', 'slug' => 'bai-viet-gioi-thieu-sach', 'body' => 'Nội dung bài viết giới thiệu sách.', 'status' => ArticleStatus::Published->value, 'published_at' => now()]);
+        $session = ChatSession::create(['user_id' => $customer->id, 'target_type' => 'platform', 'responder_mode' => 'ai', 'status' => 'open']);
+
+        $help = app(RagSearchService::class)->buildKnowledge($session, 'nội dung chính sách đổi trả');
+        $this->assertSame('help', $help['primary_intent']);
+        $this->assertNotEmpty($help['entries']);
+        $this->assertSame('help', $help['entries'][0]['type']);
+
+        $article = app(RagSearchService::class)->buildKnowledge($session, 'nội dung bài viết giới thiệu sách');
+        $this->assertSame('article', $article['primary_intent']);
+        $this->assertSame('article', $article['entries'][0]['type']);
+        $policyWithAnchor = app(RagSearchService::class)->buildKnowledge($session, 'giới thiệu chính sách cuốn sách đổi trả');
+        $this->assertSame('help', $policyWithAnchor['primary_intent']);
+        $this->assertSame('help', $policyWithAnchor['entries'][0]['type']);
+        $anchoredBook = app(RagSearchService::class)->buildKnowledge($session, 'mô tả sách Có Mô Tả');
+        $this->assertSame('book', $anchoredBook['primary_intent']);
+        $this->assertSame($book->id, $anchoredBook['recommended_books'][0]['id']);
+
+        $detail = app(RagSearchService::class)->buildKnowledge($session, 'mô tả', $book->id);
+        $this->assertSame('book', $detail['primary_intent']);
+        $this->assertSame($book->id, $detail['context_book']['id']);
+        $reply = app(GeminiChatService::class)->generateReply($session, 'mô tả', $book->id);
+        $this->assertSame('local_grounded', $reply['metadata']['delivery']);
+        $this->assertStringContainsString('Mô tả sách công khai.', $reply['message']);
+    }
+
+    public function test_rag_book_detail_search_and_reviews_use_only_public_authoritative_data(): void
+    {
+        $customer = User::factory()->create(['role' => 'customer']);
+        [, $vendor] = $this->vendor('detail-search');
+        $vendor->update(['is_demo' => true]);
+        $category = Category::create(['name' => 'Văn học Bắc Âu', 'slug' => 'nordic-detail']);
+        $book = $this->publishedBook($vendor, $category, [
+            'title' => 'Tựa Sách Rõ Ràng', 'slug' => 'tua-sach-ro-rang', 'author' => 'Tác giả Bắc Âu',
+            'translator' => 'Dịch giả Rõ Ràng', 'isbn' => 'ISBN-UNIQUE-8899', 'views' => 999,
+        ]);
+        $book->categories()->attach($category->id);
+        $this->authoritativeParty($book, $vendor, 'publisher', 'NXB Công Khai Chuẩn');
+        BookCommercialParty::create(['book_id' => $book->id, 'organization_id' => Organization::query()->firstOrFail()->id, 'role' => 'supplier', 'status' => 'pending', 'active_slot' => 'active']);
+        Review::create(['user_id' => User::factory()->create(['role' => 'customer'])->id, 'book_id' => $book->id, 'rating' => 4, 'comment' => 'Công khai', 'active_key' => 1, 'moderation_status' => 'published']);
+        Review::create(['user_id' => User::factory()->create(['role' => 'customer'])->id, 'book_id' => $book->id, 'rating' => 5, 'comment' => 'Riêng tư', 'active_key' => 1, 'moderation_status' => 'pending']);
+        Review::create(['user_id' => User::factory()->create(['role' => 'customer'])->id, 'book_id' => $book->id, 'rating' => 1, 'comment' => 'Không hoạt động', 'active_key' => null, 'moderation_status' => 'published']);
+        $session = ChatSession::create(['user_id' => $customer->id, 'target_type' => 'platform', 'responder_mode' => 'ai', 'status' => 'open']);
+
+        foreach (['ISBN-UNIQUE-8899', 'Dịch giả Rõ Ràng', 'Văn học Bắc Âu', 'NXB Công Khai Chuẩn', 'Tác giả Bắc Âu'] as $query) {
+            $knowledge = app(RagSearchService::class)->buildKnowledge($session, $query);
+            $this->assertSame([$book->id], collect($knowledge['recommended_books'])->pluck('id')->all(), $query);
+        }
+        $entry = collect(app(RagSearchService::class)->buildKnowledge($session, 'NXB Công Khai Chuẩn')['entries'])->firstWhere('type', 'book');
+        $this->assertStringContainsString('NXB Công Khai Chuẩn', $entry['content']);
+        $this->assertStringNotContainsString('pending', $entry['content']);
+        $this->assertStringContainsString('Đánh giá 4/5', $entry['content']);
+        $this->assertStringContainsString('(1 nhận xét)', $entry['content']);
+    }
+
+    public function test_local_detail_selection_fails_closed_for_ambiguous_books_and_vendor_scope_stays_private(): void
+    {
+        $this->configureGemini();
+        Http::preventStrayRequests();
+        $customer = User::factory()->create(['role' => 'customer']);
+        [, $vendorA] = $this->vendor('detail-tenant-a');
+        [, $vendorB] = $this->vendor('detail-tenant-b');
+        $category = Category::create(['name' => 'Chi tiết', 'slug' => 'chi-tiet']);
+        $first = $this->publishedBook($vendorA, $category, ['title' => 'Sách Trùng', 'slug' => 'sach-trung-a', 'views' => 999]);
+        $this->publishedBook($vendorA, $category, ['title' => 'Sách Trùng Khác', 'slug' => 'sach-trung-b']);
+        $otherVendor = $this->publishedBook($vendorB, $category, ['title' => 'Sách Bí Mật Shop B', 'slug' => 'secret-b']);
+        $this->publishedBook($vendorA, $category, ['title' => 'Bản Nháp', 'slug' => 'draft-detail', 'status' => 'draft']);
+        $inactive = Vendor::withoutGlobalScopes()->create(['user_id' => User::factory()->create(['role' => 'vendor'])->id, 'shop_name' => 'Shop tắt', 'slug' => 'shop-tat-detail', 'status' => 'inactive']);
+        $this->publishedBook($inactive, $category, ['title' => 'Sách Vendor Tắt', 'slug' => 'inactive-detail']);
+        $session = ChatSession::create([
+            'user_id' => $customer->id, 'vendor_id' => $vendorA->id, 'target_type' => 'vendor', 'responder_mode' => 'ai', 'status' => 'open',
+            'external_ai_consent_version' => GeminiChatService::EXTERNAL_AI_POLICY_VERSION,
+            'external_ai_consent_scope' => GeminiChatService::EXTERNAL_AI_CONSENT_SCOPE,
+            'external_ai_consented_at' => now(),
+        ]);
+
+        $reply = app(GeminiChatService::class)->generateReply($session, 'Thông tin sách');
+        $this->assertSame('local_grounded', $reply['metadata']['delivery']);
+        $this->assertStringContainsString('chưa thể xác định chính xác', $reply['message']);
+        Http::assertNothingSent();
+        $this->assertStringNotContainsString((string) $first->views, $reply['message']);
+        $this->assertStringNotContainsString($otherVendor->title, json_encode($reply, JSON_UNESCAPED_UNICODE));
+        $this->assertStringNotContainsString('Bản Nháp', json_encode($reply, JSON_UNESCAPED_UNICODE));
+        $this->assertStringNotContainsString('Sách Vendor Tắt', json_encode($reply, JSON_UNESCAPED_UNICODE));
+
+        config()->set('services.gemini.enabled', false);
+        $longTitleReply = app(GeminiChatService::class)->generateReply($session, 'Thông tin sách Sách Trùng Khác');
+        $this->assertSame('local_grounded', $longTitleReply['metadata']['delivery']);
+        $this->assertStringContainsString('Sách Trùng Khác', $longTitleReply['message']);
+        $this->assertStringNotContainsString('chưa thể xác định chính xác', $longTitleReply['message']);
+    }
+
+    public function test_provider_prompt_receives_allowlisted_public_book_detail_without_sensitive_organization_fields(): void
+    {
+        $this->configureGemini();
+        $session = $this->providerSession();
+        [, $vendor] = $this->vendor('detail-provider');
+        $vendor->update(['is_demo' => true]);
+        $category = Category::create(['name' => 'Provider detail', 'slug' => 'provider-detail']);
+        $book = $this->publishedBook($vendor, $category, [
+            'title' => 'Sách Prompt Công Khai', 'slug' => 'sach-prompt-cong-khai', 'isbn' => 'PROMPT-ISBN-42',
+            'description' => 'Mô tả công khai được phép gửi.',
+        ]);
+        $this->authoritativeParty($book, $vendor, 'publisher', 'NXB Prompt Công Khai');
+        Http::preventStrayRequests();
+        Http::fake(['*gemini-primary*' => Http::response([
+            'candidates' => [['content' => ['parts' => [['text' => 'Phản hồi có căn cứ [S1].']]]]],
+        ])]);
+
+        $result = app(GeminiChatService::class)->generateReply($session, 'ISBN và nhà xuất bản của Sách Prompt Công Khai?');
+
+        $this->assertSame('gemini', $result['metadata']['delivery']);
+        Http::assertSent(function ($request): bool {
+            $prompt = data_get($request->data(), 'contents.0.parts.0.text', '');
+
+            return str_contains($prompt, 'PROMPT-ISBN-42')
+                && str_contains($prompt, 'NXB Prompt Công Khai')
+                && ! str_contains($prompt, 'chưa có dữ liệu công khai')
+                && ! str_contains($prompt, 'Legal')
+                && ! str_contains($prompt, 'verification_document')
+                && ! str_contains($prompt, 'authority_fingerprint');
+        });
+    }
+
     private function configureGemini(array $overrides = []): void
     {
         $settings = array_merge([
@@ -1808,5 +2163,22 @@ class ChatSupportTest extends TestCase
             'status' => 'published',
             'publishing_status' => 'published',
         ], $overrides));
+    }
+
+    private function authoritativeParty(Book $book, Vendor $vendor, string $role, string $displayName): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+        $organization = Organization::create([
+            'legal_name' => $displayName.' Legal', 'display_name' => $displayName, 'slug' => Str::slug($displayName).'-'.Str::lower(Str::random(4)),
+            'organization_types' => [$role], 'status' => 'pending_review', 'data_mode' => 'demo',
+        ]);
+        app(OrganizationReviewService::class)->transition($organization, 'demo_accepted', $admin, 'Accepted demo fixture.', 'chat-detail-org-'.$book->id.'-'.$role);
+        $relationship = VendorOrganizationRelationship::create([
+            'vendor_id' => $vendor->id, 'organization_id' => $organization->id, 'role' => 'self_legal_entity', 'status' => 'submitted',
+            'is_demo' => true, 'evidence_mode' => 'demo_statement', 'demo_reference' => 'CHAT-DETAIL-DEMO-'.$book->id, 'submitted_at' => now()->subDay(),
+            'effective_from' => now()->subDay(), 'operation_key' => 'chat-detail-rel-'.$book->id.'-'.$role,
+        ]);
+        app(OrganizationRelationshipService::class)->transition($relationship, 'demo_accepted', $admin, 'Accepted demo fixture.', 'chat-detail-rel-review-'.$book->id.'-'.$role);
+        BookCommercialParty::create(['book_id' => $book->id, 'organization_id' => $organization->id, 'vendor_organization_relationship_id' => $relationship->id, 'role' => $role, 'status' => 'demo_accepted', 'active_slot' => 'active']);
     }
 }

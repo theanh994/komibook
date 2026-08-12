@@ -28,6 +28,7 @@ export const useChatStore = defineStore('chat', {
     isAiActive() { return Boolean(this.session) && this.status === 'open' && this.responderMode === 'ai' && this.session.assigned_user === null },
     isQueued() { return Boolean(this.session) && this.status === 'queued' && this.responderMode === 'human' && this.session.assigned_user === null },
     isHumanActive() { return Boolean(this.session) && ['assigned', 'waiting_customer'].includes(this.status) && this.responderMode === 'human' && this.session.assigned_user != null },
+    canExtendHumanWait() { return this.isHumanActive && this.status === 'waiting_customer' && Number.isFinite(Date.parse(this.session?.auto_resume_at)) },
     canSendMessage() { return Boolean(this.session) && (this.isAiActive || this.isHumanActive) },
     isTerminal() { return Boolean(this.session) && ['resolved', 'closed'].includes(this.status) },
     externalAi: state => state.session?.external_ai || { available: false, consented: false, required: true, scope: [] },
@@ -276,6 +277,22 @@ export const useChatStore = defineStore('chat', {
         this.applySession(response.data.session, true)
       } catch (error) {
         this.error = userSafeApiError(error, 'Không thể bật lại trợ lý AI.')
+      } finally {
+        this.sending = false
+      }
+    },
+
+    async extendHumanWait() {
+      if (!this.session || this.sending || !this.canExtendHumanWait) return false
+      this.sending = true
+      this.error = ''
+      try {
+        const response = await apiClient.post(`/api/chat/sessions/${this.session.id}/extend-human-wait`)
+        this.applySession(response.data.session, true)
+        return true
+      } catch (error) {
+        this.error = userSafeApiError(error, 'Không thể gia hạn thời gian chờ tư vấn viên.')
+        return false
       } finally {
         this.sending = false
       }

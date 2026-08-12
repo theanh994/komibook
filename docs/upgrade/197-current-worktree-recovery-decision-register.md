@@ -80,7 +80,7 @@ Quyết định này hợp nhất ADR Phase 4A với kế hoạch Ví KomiBook m
 - Rate limit không được nhân số request qua một danh sách model không được duyệt. Mỗi request phải có giới hạn attempt, timeout và telemetry không chứa nội dung nhạy cảm.
 - Attachment private và lịch sử chat chỉ được gửi ra provider khi có policy/consent rõ; không mặc định gửi toàn bộ ảnh base64 hoặc lịch sử đa lượt.
 - RAG no-match trả trạng thái no-match rõ ràng, không lấy record mới nhất để tạo ngữ cảnh giả.
-- Session đã queued/assigned cho người thật không tự mất ownership chỉ vì quá 30 phút; auto-resume phải có state/actor/policy riêng và audit.
+- Session queued/assigned không tự mất ownership. Sau phản hồi của nhân viên, phiên `waiting_customer + human` có deadline 30 phút gắn với đúng tin nhắn phản hồi; scheduler chỉ chuyển về `open + ai` khi tuple, owner, assignee, vendor và anchor vẫn hợp lệ, tăng `lock_version`, ghi actor hệ thống/policy/audit và không tự gọi Gemini. Khách hàng có thể phản hồi hoặc chọn tiếp tục chờ để hủy/gia hạn deadline.
 
 ### D8 — Pricing/reporting đọc từ nguồn chuẩn, không suy đoán bằng chuỗi hoặc tỷ lệ giả
 

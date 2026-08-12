@@ -38,6 +38,13 @@ class RagSearchService
         }
 
         $intent = $this->primaryIntent($query);
+        $contextBook = null;
+        if ($intent === 'generic' && $contextBookId) {
+            $contextBook = $this->findContextBook($scope, $contextBookId);
+            if ($contextBook !== null) {
+                $intent = 'book';
+            }
+        }
         if ($intent === 'human_support') {
             return $this->envelope([], [], [], [], null, null, $scope, 'matched', 'human_support', $intent);
         }
@@ -48,7 +55,6 @@ class RagSearchService
         $tiers = [];
         $coupons = [];
         $orders = [];
-        $contextBook = null;
         $catalogSummary = null;
         $state = 'no_match';
         $reason = 'no_relevant_source';
@@ -76,7 +82,7 @@ class RagSearchService
                 break;
 
             case 'book':
-                $contextBook = $contextBookId ? $this->findContextBook($scope, $contextBookId) : null;
+                $contextBook ??= $contextBookId ? $this->findContextBook($scope, $contextBookId) : null;
                 $books = $this->searchBooks($scope, $query, 6);
                 if ($contextBook && ! collect($books)->contains('id', $contextBook['id'])) {
                     array_unshift($books, $contextBook);
@@ -99,6 +105,16 @@ class RagSearchService
                 $tiers = $this->searchMembershipTiers($query);
                 [$state, $reason] = $tiers === [] ? ['no_match', 'membership_not_found'] : ['matched', 'matched'];
                 break;
+
+            case 'generic':
+                // A bare public title, author, category, ISBN, or organization name
+                // should still be searchable without guessing from unrelated records.
+                $books = $this->searchBooks($scope, $query, 6);
+                if ($books !== []) {
+                    $intent = 'book';
+                    [$state, $reason] = ['matched', 'matched'];
+                }
+                break;
         }
 
         return $this->envelope($books, $articles, $help, $tiers, $coupons, $orders, $scope, $state, $reason, $intent, $contextBook, $catalogSummary);
@@ -118,7 +134,7 @@ class RagSearchService
         if ($this->isCatalogSummaryIntent($query)) {
             return 'catalog';
         }
-        if ($this->detectBookIntent($query)) {
+        if ($this->detectStrongBookIntent($query)) {
             return 'book';
         }
         if ($this->detectArticleIntent($query)) {
@@ -126,6 +142,9 @@ class RagSearchService
         }
         if ($this->detectHelpIntent($query)) {
             return 'help';
+        }
+        if ($this->detectWeakBookFacetIntent($query)) {
+            return 'book';
         }
         if ($this->detectMembershipIntent($query)) {
             return 'membership';
@@ -185,10 +204,13 @@ class RagSearchService
             $series = $book['series_title']
                 ? " Thuộc bộ {$book['series_title']} với {$book['series_book_count']} đầu sách đang công bố: ".implode(', ', $book['series_books']).'.'
                 : '';
-            $rating = " · Đánh giá {$book['rating_avg']}/5★ ({$book['review_count']} nhận xét)";
+            $rating = $book['rating_avg'] === null
+                ? ' · Đánh giá: chưa có nhận xét công khai'
+                : " · Đánh giá {$book['rating_avg']}/5★ ({$book['review_count']} nhận xét)";
             $wishlist = ! empty($book['wishlist_count']) ? " · {$book['wishlist_count']} lượt Yêu thích" : '';
             $views = ! empty($book['views']) ? " · {$book['views']} lượt xem" : '';
-            $sources[] = ['type' => 'book', 'id' => $book['id'], 'title' => $book['title'], 'url' => "/book/{$book['slug']}", 'content' => "{$book['title']} — Tác giả: {$book['author']}; giá ".number_format($book['display_price'])."đ; loại {$book['type']}; tồn kho {$book['stock']}; Thể loại: {$book['category_name']}; gian hàng {$book['vendor_name']}{$rating}{$wishlist}{$views}. Mô tả: {$book['description']}{$series}"];
+            $detail = $this->bookSourceContent($book);
+            $sources[] = ['type' => 'book', 'id' => $book['id'], 'title' => $book['display_title'], 'url' => "/book/{$book['slug']}", 'content' => "{$detail}{$rating}{$wishlist}{$views}{$series}"];
         }
         foreach ($articles as $article) {
             $sources[] = ['type' => 'article', 'id' => $article['id'], 'title' => $article['title'], 'url' => "/blog/{$article['slug']}", 'content' => $article['content']];
@@ -236,9 +258,9 @@ class RagSearchService
     private function searchBooks(array $scope, string $query, int $limit): array
     {
         $keywords = $this->keywords($query);
-        $builder = $this->publicBooks($scope)->with(['category:id,name', 'vendor:id,shop_name,slug', 'series:id,title'])->withCount(['reviews', 'wishlists'])->withAvg('reviews', 'rating');
+        $builder = $this->bookDetailsQuery($scope);
         if ($this->isTrendingIntent($query) || $this->isCatalogSummaryIntent($query) && $keywords === []) {
-            $books = $builder->get()->sortByDesc(fn (Book $book) => ($book->views ?? 0) + (($book->wishlists_count ?? 0) * 50) + (($book->reviews_count ?? 0) * 100))->take($limit);
+            $books = $builder->get()->sortByDesc(fn (Book $book) => ($book->views ?? 0) + (($book->wishlists_count ?? 0) * 50) + (($book->public_reviews_count ?? 0) * 100))->take($limit);
         } else {
             if ($keywords === []) {
                 return [];
@@ -246,7 +268,17 @@ class RagSearchService
             $builder->where(function (Builder $search) use ($keywords) {
                 foreach ($keywords as $keyword) {
                     $like = '%'.$this->escapeLike($keyword).'%';
-                    $search->orWhere('books.title', 'like', $like)->orWhere('books.author', 'like', $like)->orWhere('books.description', 'like', $like)->orWhereHas('category', fn (Builder $category) => $category->where('name', 'like', $like));
+                    $search->orWhere('books.title', 'like', $like)
+                        ->orWhere('books.author', 'like', $like)
+                        ->orWhere('books.translator', 'like', $like)
+                        ->orWhere('books.isbn', 'like', $like)
+                        ->orWhere('books.description', 'like', $like)
+                        ->orWhereHas('series', fn (Builder $series) => $series->where('title', 'like', $like))
+                        ->orWhereHas('category', fn (Builder $category) => $category->where('name', 'like', $like))
+                        ->orWhereHas('categories', fn (Builder $category) => $category->where('name', 'like', $like))
+                        ->orWhereHas('activeCommercialParties', fn (Builder $parties) => $parties
+                            ->whereIn('role', ['publisher', 'supplier', 'responsible_organization'])
+                            ->whereHas('organization', fn (Builder $organization) => $organization->where('display_name', 'like', $like)));
                 }
             });
             $books = $builder->get()->sortByDesc('views')->take($limit);
@@ -258,7 +290,7 @@ class RagSearchService
     /** @param array<string, mixed> $scope */
     private function findContextBook(array $scope, int $bookId): ?array
     {
-        $book = $this->publicBooks($scope)->with(['category:id,name', 'vendor:id,shop_name,slug', 'series:id,title'])->withCount(['reviews', 'wishlists'])->withAvg('reviews', 'rating')->find($bookId);
+        $book = $this->bookDetailsQuery($scope)->find($bookId);
 
         return $book ? $this->bookPayload($scope, $book) : null;
     }
@@ -270,11 +302,124 @@ class RagSearchService
     }
 
     /** @param array<string, mixed> $scope */
+    private function bookDetailsQuery(array $scope): Builder
+    {
+        return $this->publicBooks($scope)
+            ->with([
+                'category:id,name',
+                'categories:id,name',
+                'vendor:id,shop_name,slug',
+                'series:id,title',
+                'activeCommercialParties' => fn ($parties) => $parties
+                    ->select(['id', 'book_id', 'organization_id', 'role'])
+                    ->whereIn('role', ['publisher', 'supplier', 'responsible_organization']),
+                'activeCommercialParties.organization:id,display_name',
+            ])
+            ->withCount([
+                'reviews as public_reviews_count' => fn (Builder $reviews) => $reviews
+                    ->where('active_key', 1)
+                    ->where('moderation_status', 'published'),
+                'wishlists',
+            ])
+            ->withAvg([
+                'reviews as public_rating_avg' => fn (Builder $reviews) => $reviews
+                    ->where('active_key', 1)
+                    ->where('moderation_status', 'published'),
+            ], 'rating');
+    }
+
+    /** @param array<string, mixed> $scope */
     private function bookPayload(array $scope, Book $book): array
     {
         $seriesBooks = $book->series_id ? $this->publicBooks($scope)->where('series_id', $book->series_id)->orderBy('title')->pluck('title')->all() : [];
+        $categoryNames = collect([$book->category?->name])
+            ->merge($book->categories->pluck('name'))
+            ->filter(fn (mixed $name): bool => is_string($name) && trim($name) !== '')
+            ->unique()
+            ->values()
+            ->all();
+        $commercialParties = $book->activeCommercialParties
+            ->mapWithKeys(function ($party): array {
+                $name = $party->organization?->display_name;
 
-        return ['id' => $book->id, 'slug' => $book->slug, 'title' => $book->title, 'author' => $book->author, 'price' => $book->price, 'sale_price' => $book->sale_price, 'display_price' => $book->currentPrice(), 'cover_image' => $book->cover_image, 'type' => $book->type, 'stock' => $book->stock, 'category_name' => $book->category?->name ?? 'Chưa phân loại', 'vendor_name' => $book->vendor?->shop_name ?? 'KomiBook', 'description' => Str::limit(trim(strip_tags((string) $book->description)), 240), 'rating_avg' => round((float) ($book->reviews_avg_rating ?? 5), 1), 'review_count' => (int) ($book->reviews_count ?? 0), 'wishlist_count' => (int) ($book->wishlists_count ?? 0), 'views' => (int) ($book->views ?? 0), 'series_title' => $book->series?->title, 'series_book_count' => count($seriesBooks), 'series_books' => $seriesBooks];
+                return is_string($name) && trim($name) !== '' ? [$party->role => trim($name)] : [];
+            })
+            ->all();
+
+        return [
+            'id' => $book->id,
+            'slug' => $book->slug,
+            'title' => $book->title,
+            'display_title' => $book->display_title,
+            'print_edition' => max(1, (int) ($book->print_edition ?? 1)),
+            'edition_label' => $this->editionLabel($book->print_edition),
+            'author' => $book->author,
+            'translator' => $book->translator,
+            'description' => Str::limit(trim(strip_tags((string) $book->description)), 700),
+            'isbn' => $book->isbn,
+            'dimensions' => $book->dimensions,
+            'cover_format' => $book->cover_format,
+            'weight' => $book->weight,
+            'language' => $book->language,
+            'target_age' => $book->target_age,
+            'pages' => $book->pages,
+            'release_date' => $book->release_date,
+            'price' => $book->price,
+            'sale_price' => $book->sale_price,
+            'display_price' => $book->currentPrice(),
+            'cover_image' => $book->cover_image,
+            'type' => $book->type,
+            'format' => $book->format ?? $book->type,
+            'stock' => $book->stock,
+            'category_name' => $categoryNames[0] ?? null,
+            'category_names' => $categoryNames,
+            'vendor_name' => $book->vendor?->shop_name,
+            'commercial_parties' => $commercialParties,
+            'rating_avg' => $book->public_rating_avg === null ? null : round((float) $book->public_rating_avg, 1),
+            'review_count' => (int) ($book->public_reviews_count ?? 0),
+            'wishlist_count' => (int) ($book->wishlists_count ?? 0),
+            'views' => (int) ($book->views ?? 0),
+            'series_title' => $book->series?->title,
+            'series_book_count' => count($seriesBooks),
+            'series_books' => $seriesBooks,
+        ];
+    }
+
+    /** @param array<string, mixed> $book */
+    private function bookSourceContent(array $book): string
+    {
+        $parts = [
+            "{$book['display_title']} — Tác giả: {$book['author']}",
+            "Ấn bản: {$book['edition_label']}",
+            'Giá niêm yết: '.number_format((int) $book['price']).'đ',
+            'Giá đang áp dụng: '.number_format((int) $book['display_price']).'đ',
+            "Loại: {$book['type']}",
+            'Tồn kho hiển thị: '.((int) $book['stock']),
+        ];
+
+        foreach ([
+            'translator' => 'Dịch giả', 'isbn' => 'ISBN', 'format' => 'Định dạng', 'dimensions' => 'Kích thước',
+            'cover_format' => 'Bìa', 'weight' => 'Trọng lượng', 'language' => 'Ngôn ngữ', 'target_age' => 'Độ tuổi',
+            'pages' => 'Số trang', 'release_date' => 'Ngày phát hành',
+        ] as $field => $label) {
+            if ($book[$field] !== null && $book[$field] !== '') {
+                $parts[] = "{$label}: {$book[$field]}";
+            }
+        }
+
+        if ($book['category_names'] !== []) {
+            $parts[] = 'Thể loại: '.implode(', ', $book['category_names']);
+        }
+        foreach (['publisher' => 'Nhà xuất bản', 'supplier' => 'Nhà cung cấp', 'responsible_organization' => 'Đơn vị chịu trách nhiệm'] as $role => $label) {
+            if (isset($book['commercial_parties'][$role])) {
+                $parts[] = "{$label}: {$book['commercial_parties'][$role]}";
+            }
+        }
+        if ($book['description'] !== null && $book['description'] !== '') {
+            $parts[] = "Mô tả: {$book['description']}";
+        }
+
+        return implode('; ', $parts).'.';
     }
 
     /** @param array<string, mixed> $scope */
@@ -376,9 +521,29 @@ class RagSearchService
         return $this->containsAny($text, ['tư vấn viên', 'nhân viên', 'người thật', 'gặp shop', 'gặp admin', 'hỗ trợ trực tiếp']);
     }
 
-    private function detectBookIntent(string $text): bool
+    private function detectStrongBookIntent(string $text): bool
     {
-        return $this->containsAny($text, ['gợi ý', 'tìm sách', 'mua sách', 'sách hay', 'sách này', 'cuốn', 'tập', 'tác giả', 'thể loại', 'ebook', 'sách giấy', 'quan tâm', 'xem nhiều', 'hot', 'bán chạy']);
+        return $this->containsAny($text, ['gợi ý', 'tìm sách', 'mua sách', 'sách hay', 'sách này', 'tập', 'tác giả', 'thể loại', 'ebook', 'sách giấy', 'quan tâm', 'xem nhiều', 'hot', 'bán chạy', 'isbn', 'dịch giả', 'người dịch', 'số trang', 'kích thước', 'khổ sách', 'trọng lượng', 'ngôn ngữ', 'độ tuổi', 'ngày phát hành', 'tái bản', 'ấn bản', 'nhà xuất bản', 'nxb', 'nhà cung cấp', 'đơn vị chịu trách nhiệm', 'tồn kho', 'thông tin sách']);
+    }
+
+    private function detectWeakBookFacetIntent(string $text): bool
+    {
+        return $this->containsAny($text, ['mô tả', 'nội dung', 'giới thiệu', 'giá', 'đánh giá', 'nhận xét', 'bìa'])
+            && $this->hasBookAnchor($text);
+    }
+
+    private function hasBookAnchor(string $text): bool
+    {
+        $text = str_replace('chính sách', '', mb_strtolower($text));
+
+        return preg_match('/(?:^|[^\p{L}\p{N}])(?:sách|cuốn|tựa)(?:$|[^\p{L}\p{N}])/u', $text) === 1;
+    }
+
+    private function editionLabel(mixed $edition): string
+    {
+        $edition = max(1, (int) $edition);
+
+        return $edition === 1 ? 'Ấn bản đầu tiên' : "Tái bản lần {$edition}";
     }
 
     private function detectCouponIntent(string $text): bool

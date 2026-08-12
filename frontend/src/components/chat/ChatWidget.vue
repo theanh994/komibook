@@ -256,6 +256,12 @@
       </div>
 
       <footer v-if="!chatStore.showConversationList" class="border-t border-outline-variant bg-surface-container-lowest p-3">
+        <div v-if="chatStore.canExtendHumanWait" class="mb-2 rounded-xl border border-outline-variant bg-surface-container-low px-3 py-2 text-sm text-on-surface" role="status">
+          <p>Phiên sẽ tự trở lại chatbot lúc <strong>{{ autoResumeTime }}</strong> nếu bạn không phản hồi.</p>
+          <button type="button" class="mt-2 min-h-11 cursor-pointer rounded-lg border border-brand-green-strong px-3 font-bold text-brand-green-strong transition-colors hover:bg-brand-green-container focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-green-strong disabled:cursor-not-allowed disabled:opacity-50" :disabled="chatStore.sending" @click="chatStore.extendHumanWait()">
+            Tiếp tục chờ tư vấn viên thêm {{ chatStore.session?.human_idle_timeout_minutes || 30 }} phút
+          </button>
+        </div>
         <div class="mb-2 flex flex-wrap gap-2">
           <button v-if="chatStore.isQueued" type="button" class="min-h-11 cursor-pointer rounded-lg border border-brand-green-strong px-3 text-sm font-bold text-brand-green-strong transition-colors hover:bg-brand-green-container" :disabled="chatStore.sending" @click="chatStore.resumeAi()"><span class="material-symbols-outlined mr-1 align-middle text-lg" aria-hidden="true">smart_toy</span>Quay lại AI</button>
         </div>
@@ -302,6 +308,12 @@ watch(
 const chatTitle = computed(() => chatStore.showConversationList ? 'Lịch sử trò chuyện' : chatStore.targetType === 'vendor' ? (chatStore.vendorName || chatStore.session?.vendor?.shop_name || 'Hỗ trợ gian hàng') : 'Trợ lý KomiBook')
 const platformConversation = computed(() => chatStore.conversations.find(conversation => conversation.target_type === 'platform'))
 const vendorConversations = computed(() => chatStore.conversations.filter(conversation => conversation.target_type === 'vendor'))
+const autoResumeTime = computed(() => {
+  if (!chatStore.session?.auto_resume_at) return ''
+  const deadline = new Date(chatStore.session.auto_resume_at)
+  if (Number.isNaN(deadline.getTime())) return 'thời điểm đã được hệ thống xác nhận'
+  return new Intl.DateTimeFormat('vi-VN', { hour: '2-digit', minute: '2-digit' }).format(deadline)
+})
 const statusText = computed(() => {
   if (chatStore.showConversationList) return 'Các cuộc trò chuyện đã lưu'
   if (!chatStore.session) return 'Đang khởi tạo phiên hỗ trợ'

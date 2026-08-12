@@ -12,3 +12,4 @@ Schedule::command('checkout-sessions:expire')->everyMinute()->withoutOverlapping
 Schedule::command('order-side-effects:dispatch --limit=100')->everyMinute()->withoutOverlapping();
 Schedule::command('campaigns:dispatch-due --limit=25')->everyMinute()->withoutOverlapping();
 Schedule::command('articles:publish-due --limit=50')->everyMinute()->withoutOverlapping();
+Schedule::command('chat:auto-resume-idle --limit=100')->everyMinute()->withoutOverlapping(5);
