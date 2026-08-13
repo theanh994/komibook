@@ -146,6 +146,84 @@ function Get-TaskConfigurationSignature([string]$Xml) {
     return ($nodes -join "`n")
 }
 
+function Get-AuditLogFiles([string]$Directory) {
+    # The launcher keeps these files bounded by retention and size. Restrict
+    # inspection to the known filename scheme so a task verification never
+    # reads unrelated shared logs.
+    @(Get-ChildItem -LiteralPath $Directory -File -ErrorAction Stop |
+        Where-Object { $_.Name -match '^chat-auto-resume-\d{4}-\d{2}-\d{2}\.log(?:\.1)?$' } |
+        Sort-Object LastWriteTimeUtc -Descending |
+        Select-Object -First 30)
+}
+
+function Get-AuditLogBaseline([string]$Directory) {
+    $files = @{}
+    foreach ($file in (Get-AuditLogFiles $Directory)) {
+        $files[$file.Name] = [pscustomobject]@{
+            Length = [int64]$file.Length
+            LastWriteTimeUtc = $file.LastWriteTimeUtc
+        }
+    }
+
+    [pscustomobject]@{
+        CapturedAtUtc = (Get-Date).ToUniversalTime()
+        Files = $files
+    }
+}
+
+function Test-AuditLogFileChanged([System.IO.FileInfo]$File, [pscustomobject]$Baseline) {
+    if (-not $Baseline.Files.ContainsKey($File.Name)) {
+        return $true
+    }
+
+    $previous = $Baseline.Files[$File.Name]
+    return $File.Length -gt $previous.Length -or $File.LastWriteTimeUtc -gt $previous.LastWriteTimeUtc
+}
+
+function Get-NewSuccessfulAuditRecord([string]$Directory, [string]$Sha, [pscustomobject]$Baseline) {
+    foreach ($file in (Get-AuditLogFiles $Directory)) {
+        if (-not (Test-AuditLogFileChanged $file $Baseline)) {
+            continue
+        }
+
+        # Read only a bounded tail from a bounded, scheduler-owned log file.
+        # A malformed line must not disclose its contents or make a stale
+        # record acceptable.
+        foreach ($line in @(Get-Content -LiteralPath $file.FullName -Tail 200 -ErrorAction Stop)) {
+            if ([string]::IsNullOrWhiteSpace($line)) {
+                continue
+            }
+
+            try {
+                $record = $line | ConvertFrom-Json -ErrorAction Stop
+                $recordTimestamp = [DateTime]::MinValue
+                if (-not [DateTime]::TryParse([string]$record.timestamp_utc, [ref]$recordTimestamp)) {
+                    continue
+                }
+
+                $recordTimestamp = $recordTimestamp.ToUniversalTime()
+                $exitCode = 1
+                if (-not [int]::TryParse([string]$record.exit_code, [ref]$exitCode)) {
+                    continue
+                }
+
+                if ($recordTimestamp -gt $Baseline.CapturedAtUtc -and
+                    [string]$record.release_sha -ceq $Sha -and
+                    [string]$record.phase -ceq 'artisan' -and
+                    [string]$record.result -ceq 'success' -and
+                    $exitCode -eq 0) {
+                    return $record
+                }
+            } catch {
+                # Never surface an audit-line payload, which could include a
+                # manually edited or otherwise unrelated record.
+            }
+        }
+    }
+
+    return $null
+}
+
 function Disable-TaskAndVerify {
     $task = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
     if ($null -eq $task) { return }
@@ -227,17 +305,22 @@ try {
     if ($RunNow) {
         $baseline = Get-ScheduledTaskInfo -TaskName $TaskName -ErrorAction Stop
         $previousLastRun = $baseline.LastRunTime
+        $auditBaseline = Get-AuditLogBaseline $context.LogDirectory
         Start-ScheduledTask -TaskName $TaskName -ErrorAction Stop
         $deadline = (Get-Date).AddSeconds($VerificationWaitSeconds)
+        $verifiedRecord = $null
         do {
             Start-Sleep -Milliseconds 500
             $info = Get-ScheduledTaskInfo -TaskName $TaskName -ErrorAction Stop
             $state = (Get-ScheduledTask -TaskName $TaskName -ErrorAction Stop).State
             $hasNewRun = $info.LastRunTime -gt $previousLastRun
-        } while ((-not $hasNewRun -or $state -eq 'Running') -and (Get-Date) -lt $deadline)
-        if (-not $hasNewRun -or $state -eq 'Running' -or $info.LastTaskResult -ne 0) { throw 'scheduled run verification failed.' }
+            if ($hasNewRun -and $state -ne 'Running' -and $info.LastTaskResult -eq 0) {
+                $verifiedRecord = Get-NewSuccessfulAuditRecord $context.LogDirectory $context.Sha $auditBaseline
+            }
+        } while ((-not $hasNewRun -or $state -eq 'Running' -or $info.LastTaskResult -ne 0 -or $null -eq $verifiedRecord) -and (Get-Date) -lt $deadline)
+        if (-not $hasNewRun -or $state -eq 'Running' -or $info.LastTaskResult -ne 0 -or $null -eq $verifiedRecord) { throw 'scheduled run verification failed.' }
 
-        Write-Output "Verified $TaskName runtime execution for release $($context.Sha). Interactive-user task: it runs only while this user is logged in; it does not provide logged-out or reboot continuity."
+        Write-Output "Verified $TaskName runtime execution for release $($context.Sha) through a new launcher audit record. Interactive-user task: it runs only while this user is logged in; it does not provide logged-out or reboot continuity."
         exit 0
     }
 

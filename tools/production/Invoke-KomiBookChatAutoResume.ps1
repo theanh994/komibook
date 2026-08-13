@@ -102,10 +102,13 @@ function Write-AuditLog([string]$Directory, [string]$Sha, [string]$Phase, [strin
             result = $Result
         }
         if ($null -ne $ExitCode) {
-            $record.exit_code = $ExitCode
+            # [ordered]@{} produces an OrderedDictionary. Dot-property writes
+            # are not supported reliably under Windows PowerShell 5.1 and can
+            # make logging silently fail inside this best-effort boundary.
+            $record['exit_code'] = $ExitCode
         }
         if ($ExceptionClass) {
-            $record.exception_class = $ExceptionClass
+            $record['exception_class'] = $ExceptionClass
         }
         ($record | ConvertTo-Json -Compress) | Add-Content -LiteralPath $path -Encoding UTF8
 
@@ -169,15 +172,18 @@ try {
     $startInfo.RedirectStandardError = $true
     $process = New-Object System.Diagnostics.Process
     $process.StartInfo = $startInfo
-    $process.add_OutputDataReceived({ param($sender, $eventArgs) })
-    $process.add_ErrorDataReceived({ param($sender, $eventArgs) })
     if (-not $process.Start()) {
         throw 'artisan process start failed.'
     }
-    $process.BeginOutputReadLine()
-    $process.BeginErrorReadLine()
+
+    # Event callbacks run on a thread without a PowerShell runspace under
+    # Windows PowerShell 5.1. Drain both redirected streams asynchronously
+    # instead; their contents are intentionally never emitted or logged.
+    $stdoutTask = $process.StandardOutput.ReadToEndAsync()
+    $stderrTask = $process.StandardError.ReadToEndAsync()
     $process.WaitForExit()
-    $process.WaitForExit()
+    [void]$stdoutTask.GetAwaiter().GetResult()
+    [void]$stderrTask.GetAwaiter().GetResult()
     $exitCode = $process.ExitCode
     Write-AuditLog $auditDirectory $sha $phase $(if ($exitCode -eq 0) { 'success' } else { 'failure' }) $exitCode ''
     exit $exitCode
