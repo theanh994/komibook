@@ -165,11 +165,17 @@ class RagSearchService
             return null;
         }
 
+        // Legacy internal callers may build public-only knowledge without an owner;
+        // authenticated personal sessions always require a supported current role.
+        if ($session->user && ! in_array($session->user->role, ChatSession::PERSONAL_OWNER_ROLES, true)) {
+            return null;
+        }
+
         if ($session->target_type === ChatSession::TARGET_PLATFORM && $session->vendor_id === null) {
             return ['session' => $session, 'vendor' => null, 'user' => $session->user];
         }
 
-        if ($session->target_type !== ChatSession::TARGET_VENDOR || $session->vendor_id === null) {
+        if (($session->user && $session->user->role !== 'customer') || $session->target_type !== ChatSession::TARGET_VENDOR || $session->vendor_id === null) {
             return null;
         }
 
@@ -186,7 +192,7 @@ class RagSearchService
     {
         return [
             'context' => '', 'sources' => [], 'entries' => [], 'recommended_books' => [], 'recommended_coupons' => [], 'recommended_orders' => [],
-            'context_book' => null, 'catalog_summary' => null, 'session_user_id' => null, 'scope_vendor_id' => null,
+            'context_book' => null, 'catalog_summary' => null, 'session_user_id' => null, 'scope_vendor_id' => null, 'scope_owner_role' => null,
             'match_state' => $state, 'match_reason' => $reason, 'primary_intent' => $intent,
         ];
     }
@@ -251,6 +257,7 @@ class RagSearchService
             'session_user_id' => $scope['user']?->id, 'match_state' => $state, 'match_reason' => $reason, 'primary_intent' => $intent,
             'scope_target_type' => $scope['session']->target_type,
             'scope_vendor_id' => $scope['session']->vendor_id,
+            'scope_owner_role' => $scope['user']?->role,
         ];
     }
 

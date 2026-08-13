@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\ChatSession;
+use App\Models\User;
 use App\Models\Vendor;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -10,7 +11,7 @@ use Illuminate\Support\Str;
 
 class GeminiChatService
 {
-    public const EXTERNAL_AI_POLICY_VERSION = '2026-08-09.1';
+    public const EXTERNAL_AI_POLICY_VERSION = '2026-08-13.1';
 
     public const EXTERNAL_AI_CONSENT_SCOPE = ['current_message', 'public_grounding_context'];
 
@@ -47,7 +48,7 @@ class GeminiChatService
             ];
         }
 
-        if ($knowledge['primary_intent'] === 'human_support') {
+        if ($knowledge['primary_intent'] === 'human_support' && $this->humanSupportAvailable($knowledge)) {
             $metadata['delivery'] = 'local_grounded';
             $metadata['action'] = 'offer_human_support';
             $metadata['quick_replies'] = [($knowledge['scope_target_type'] ?? ChatSession::TARGET_PLATFORM) === ChatSession::TARGET_VENDOR ? 'Gặp nhân viên shop' : 'Gặp tư vấn viên KomiBook'];
@@ -56,10 +57,17 @@ class GeminiChatService
             return ['message' => 'Mình có thể chuyển cuộc trò chuyện này tới người hỗ trợ. Hãy chọn “Gặp nhân viên” để xác nhận đúng đội KomiBook hoặc đúng gian hàng.', 'metadata' => $metadata];
         }
 
+        if ($knowledge['primary_intent'] === 'human_support') {
+            $metadata['delivery'] = 'local_grounded';
+            $metadata['engine'] = $this->engineInfo('local_grounded');
+
+            return ['message' => 'Hỗ trợ trực tiếp với nhân viên hiện chỉ dành cho tài khoản khách hàng. Tôi vẫn có thể trả lời về thông tin công khai của KomiBook.', 'metadata' => $metadata];
+        }
+
         if ($knowledge['match_state'] !== 'matched') {
             $metadata['delivery'] = 'local_grounded';
             $metadata['engine'] = $this->engineInfo('local_grounded');
-            $metadata['quick_replies'] = ['Gợi ý mã giảm giá', 'Tra cứu đơn hàng', 'Tìm sách theo thể loại', 'Gặp tư vấn viên KomiBook'];
+            $metadata['quick_replies'] = $this->roleAwareQuickReplies($knowledge);
 
             return ['message' => $this->noMatchReply($knowledge), 'metadata' => $metadata];
         }
@@ -139,7 +147,40 @@ class GeminiChatService
             $metadata['quick_replies'] = collect($quick)->unique()->take(4)->values()->all();
         }
 
+        $metadata['quick_replies'] = $this->roleAwareQuickReplies($knowledge, $metadata['quick_replies'] ?? []);
+
         return ['message' => $reply, 'metadata' => $metadata];
+    }
+
+    /** @param array<string, mixed> $knowledge @param list<string> $quickReplies @return list<string> */
+    private function roleAwareQuickReplies(array $knowledge, array $quickReplies = []): array
+    {
+        $base = $quickReplies === [] ? ['Gợi ý mã giảm giá', 'Tìm sách theo thể loại'] : $quickReplies;
+        if ($this->ownerRole($knowledge) === 'customer') {
+            $base[] = 'Tra cứu đơn hàng';
+        }
+        if ($this->humanSupportAvailable($knowledge)) {
+            $base[] = 'Gặp tư vấn viên KomiBook';
+        }
+
+        return collect($base)
+            ->reject(fn (string $reply): bool => $this->ownerRole($knowledge) !== 'customer'
+                && (str_contains(mb_strtolower($reply), 'đơn hàng') || str_contains(mb_strtolower($reply), 'nhân viên') || str_contains(mb_strtolower($reply), 'tư vấn viên')))
+            ->unique()->take(4)->values()->all();
+    }
+
+    /** @param array<string, mixed> $knowledge */
+    private function ownerRole(array $knowledge): ?string
+    {
+        $role = $knowledge['scope_owner_role'] ?? null;
+
+        return is_string($role) && in_array($role, ChatSession::PERSONAL_OWNER_ROLES, true) ? $role : null;
+    }
+
+    /** @param array<string, mixed> $knowledge */
+    private function humanSupportAvailable(array $knowledge): bool
+    {
+        return $this->ownerRole($knowledge) === 'customer';
     }
 
     private function resolveEffectiveQuery(ChatSession $session, string $userMessage): string
@@ -275,7 +316,7 @@ PROMPT;
 
         return [
             'available' => $this->externalAiAvailable(),
-            'consented' => $session?->hasActiveExternalAiConsent(self::EXTERNAL_AI_POLICY_VERSION, self::EXTERNAL_AI_CONSENT_SCOPE, $session->user) ?? false,
+            'consented' => $session?->user ? $session->hasActiveExternalAiConsent(self::EXTERNAL_AI_POLICY_VERSION, self::externalAiConsentScopeFor($session->user->role), $session->user) : false,
             'required' => true,
             'version' => self::EXTERNAL_AI_POLICY_VERSION,
             'scope' => self::EXTERNAL_AI_CONSENT_SCOPE,
@@ -294,7 +335,15 @@ PROMPT;
         return $enabled && $apiKey !== '' && $primaryModel !== '' && in_array($primaryModel, $allowedModels, true);
     }
 
-    /** @param array{owner_id: int, target_type: string, vendor_id: int|null} $expected */
+    /** @return list<string> */
+    public static function externalAiConsentScopeFor(string $role): array
+    {
+        abort_unless(in_array($role, ChatSession::PERSONAL_OWNER_ROLES, true), 403);
+
+        return [...self::EXTERNAL_AI_CONSENT_SCOPE, 'owner_role:'.$role];
+    }
+
+    /** @param array{owner_id: int, owner_role: string, target_type: string, vendor_id: int|null} $expected */
     private function persistedScopeMayUseExternalAi(int $sessionId, array $expected): bool
     {
         $session = ChatSession::query()->with('user:id,role')->find($sessionId);
@@ -303,7 +352,8 @@ PROMPT;
             || $session->user_id === null
             || (int) $session->user_id !== $expected['owner_id']
             || $session->user?->id !== $expected['owner_id']
-            || $session->user->role !== 'customer'
+            || $session->user->role !== $expected['owner_role']
+            || ! in_array($session->user->role, ChatSession::PERSONAL_OWNER_ROLES, true)
             || $session->status !== ChatSession::STATUS_OPEN
             || $session->responder_mode !== ChatSession::MODE_AI
             || $session->assigned_user_id !== null
@@ -323,6 +373,9 @@ PROMPT;
                 return false;
             }
         } elseif ($session->target_type === ChatSession::TARGET_VENDOR) {
+            if ($session->user->role !== 'customer') {
+                return false;
+            }
             if ($session->vendor_id === null || ! Vendor::withoutGlobalScopes()->whereKey($session->vendor_id)->where('status', 'active')->exists()) {
                 return false;
             }
@@ -330,10 +383,10 @@ PROMPT;
             return false;
         }
 
-        return $session->hasActiveExternalAiConsent(self::EXTERNAL_AI_POLICY_VERSION, self::EXTERNAL_AI_CONSENT_SCOPE, $session->user);
+        return $session->hasActiveExternalAiConsent(self::EXTERNAL_AI_POLICY_VERSION, self::externalAiConsentScopeFor($session->user->role), $session->user);
     }
 
-    /** @return array{owner_id: int, target_type: string, vendor_id: int|null}|null */
+    /** @return array{owner_id: int, owner_role: string, target_type: string, vendor_id: int|null}|null */
     private function expectedProviderScope(ChatSession $session, array $knowledge): ?array
     {
         if (! array_key_exists('session_user_id', $knowledge)
@@ -363,7 +416,16 @@ PROMPT;
             return null;
         }
 
-        return ['owner_id' => (int) $ownerId, 'target_type' => $targetType, 'vendor_id' => $normalizedVendorId];
+        $session->loadMissing('user:id,role');
+        $ownerRole = $knowledge['scope_owner_role'] ?? $session->user?->role;
+        if (! in_array($ownerRole, ChatSession::PERSONAL_OWNER_ROLES, true)) {
+            return null;
+        }
+        if ($ownerRole !== 'customer' && ($targetType !== ChatSession::TARGET_PLATFORM || $normalizedVendorId !== null)) {
+            return null;
+        }
+
+        return ['owner_id' => (int) $ownerId, 'owner_role' => $ownerRole, 'target_type' => $targetType, 'vendor_id' => $normalizedVendorId];
     }
 
     /** @param array<string, mixed> $knowledge */

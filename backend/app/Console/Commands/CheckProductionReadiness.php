@@ -185,9 +185,35 @@ class CheckProductionReadiness extends Command
         }
 
         if (is_array($value)) {
-            return implode(',', $value);
+            $encoded = json_encode(
+                $value,
+                JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE | JSON_PARTIAL_OUTPUT_ON_ERROR,
+            );
+
+            return $this->truncateDisplay($encoded === false ? '[unrenderable array]' : $encoded);
         }
 
-        return (string) $value;
+        if ($value === null) {
+            return 'null';
+        }
+
+        if (is_scalar($value) || $value instanceof \Stringable) {
+            return $this->truncateDisplay((string) $value);
+        }
+
+        return '['.get_debug_type($value).']';
+    }
+
+    private function truncateDisplay(string $value): string
+    {
+        $limit = 500;
+
+        if (function_exists('mb_strwidth') && function_exists('mb_strimwidth')) {
+            return mb_strwidth($value, 'UTF-8') > $limit
+                ? mb_strimwidth($value, 0, $limit - 3, '...', 'UTF-8')
+                : $value;
+        }
+
+        return strlen($value) > $limit ? substr($value, 0, $limit - 3).'...' : $value;
     }
 }

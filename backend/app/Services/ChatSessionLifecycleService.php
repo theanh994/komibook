@@ -69,7 +69,7 @@ class ChatSessionLifecycleService
     public function customerMessage(ChatSession $session, User $actor, string $message, ?array $metadata, ?callable $metadataResolver = null): array
     {
         return $this->withSession($session, $actor, function (ChatSession $locked, User $current) use ($message, $metadata, $metadataResolver): array {
-            $this->customerOwns($locked, $current);
+            $this->ownerOwns($locked, $current);
             abort_if($locked->isTerminal(), 409, 'Phiên hỗ trợ đã kết thúc.');
             $isAi = $this->tuple($locked, ChatSession::STATUS_OPEN, ChatSession::MODE_AI, null);
             $isAssigned = $locked->assigned_user_id !== null && $this->tuple($locked, ChatSession::STATUS_ASSIGNED, ChatSession::MODE_HUMAN, $locked->assigned_user_id);
@@ -89,7 +89,7 @@ class ChatSessionLifecycleService
                 $locked->refresh();
             }
 
-            return [$locked, $isAi];
+            return [$locked->setRelation('user', $current), $isAi];
         });
     }
 
@@ -259,7 +259,8 @@ class ChatSessionLifecycleService
                 && $locked->vendor_id === $expected->vendor_id
                 && $locked->conversation_key === $expected->conversation_key
                 && $locked->lock_version === $expected->lock_version;
-            if (! $sameIdentity || ! $this->hasCanonicalScope($locked) || ! $owner || $owner->role !== 'customer' || ! $this->tuple($locked, ChatSession::STATUS_OPEN, ChatSession::MODE_AI, null)) {
+            $expectedOwnerRole = $expected->relationLoaded('user') ? $expected->user?->role : null;
+            if (! $sameIdentity || ! $owner || ($expectedOwnerRole !== null && $expectedOwnerRole !== $owner->role) || ! in_array($owner->role, ChatSession::PERSONAL_OWNER_ROLES, true) || ! $this->hasCanonicalScope($locked, $owner) || ! $this->tuple($locked, ChatSession::STATUS_OPEN, ChatSession::MODE_AI, null)) {
                 return [$locked->fresh(), false];
             }
             ChatMessage::create(['chat_session_id' => $locked->id, 'sender_type' => 'ai', 'message' => $message, 'metadata' => $metadata]);
@@ -274,10 +275,18 @@ class ChatSessionLifecycleService
         return DB::transaction(function () use ($session, $actor, $callback): mixed {
             $locked = ChatSession::query()->lockForUpdate()->findOrFail($session->id);
             $current = User::query()->lockForUpdate()->findOrFail($actor->id);
-            $this->canonicalScope($locked);
+            $this->canonicalScope($locked, $current);
 
             return $callback($locked, $current);
         });
+    }
+
+    private function ownerOwns(ChatSession $session, User $actor): void
+    {
+        abort_unless(in_array($actor->role, ChatSession::PERSONAL_OWNER_ROLES, true)
+            && $session->user_id !== null
+            && (int) $session->user_id === $actor->id
+            && ($actor->role === 'customer' || $this->isCanonicalPersonalAiTuple($session)), 403);
     }
 
     private function customerOwns(ChatSession $session, User $actor): void
@@ -298,15 +307,26 @@ class ChatSessionLifecycleService
         abort_unless($vendor, 409, 'Gian hàng hiện không thể nhận hỗ trợ.');
     }
 
-    private function hasCanonicalScope(ChatSession $session): bool
+    private function hasCanonicalScope(ChatSession $session, ?User $owner = null): bool
     {
         if ($session->target_type === ChatSession::TARGET_PLATFORM) {
-            return $session->vendor_id === null;
+            return $session->vendor_id === null
+                && ($owner === null || $owner->role === 'customer' || $this->isCanonicalPersonalAiTuple($session));
         }
 
-        return $session->target_type === ChatSession::TARGET_VENDOR
+        return ($owner === null || $owner->role === 'customer')
+            && $session->target_type === ChatSession::TARGET_VENDOR
             && $session->vendor_id !== null
             && Vendor::withoutGlobalScopes()->lockForUpdate()->whereKey($session->vendor_id)->where('status', 'active')->exists();
+    }
+
+    private function isCanonicalPersonalAiTuple(ChatSession $session): bool
+    {
+        return $session->target_type === ChatSession::TARGET_PLATFORM
+            && $session->vendor_id === null
+            && $session->status === ChatSession::STATUS_OPEN
+            && $session->responder_mode === ChatSession::MODE_AI
+            && $session->assigned_user_id === null;
     }
 
     private function staffOwnsScope(ChatSession $session, User $actor): void

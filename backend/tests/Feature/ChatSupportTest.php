@@ -974,7 +974,7 @@ class ChatSupportTest extends TestCase
         $this->actingAs($customer, 'sanctum')->postJson($url, ['consent' => true, 'policy_version' => GeminiChatService::EXTERNAL_AI_POLICY_VERSION])->assertUnprocessable();
         $session->update([
             'external_ai_consent_version' => GeminiChatService::EXTERNAL_AI_POLICY_VERSION,
-            'external_ai_consent_scope' => GeminiChatService::EXTERNAL_AI_CONSENT_SCOPE,
+            'external_ai_consent_scope' => GeminiChatService::externalAiConsentScopeFor('customer'),
             'external_ai_consented_at' => now(),
         ]);
         $this->actingAs($customer, 'sanctum')->postJson($url, ['consent' => false, 'policy_version' => GeminiChatService::EXTERNAL_AI_POLICY_VERSION])->assertOk();
@@ -999,7 +999,7 @@ class ChatSupportTest extends TestCase
         }
     }
 
-    public function test_role_changed_owner_cannot_use_external_ai_and_session_metadata_is_truthful(): void
+    public function test_role_changed_owner_must_reconsent_before_external_ai_can_be_used(): void
     {
         $this->configureGemini(['max_attempts' => 2]);
         $session = $this->providerSession();
@@ -1010,7 +1010,7 @@ class ChatSupportTest extends TestCase
 
         $this->actingAs($owner, 'sanctum')
             ->postJson("/api/chat/sessions/{$session->id}/messages", ['message' => 'current-message-after-role-change'])
-            ->assertForbidden();
+            ->assertOk()->assertJsonPath('session.external_ai.consented', false);
         Http::assertNothingSent();
     }
 
@@ -1098,7 +1098,7 @@ class ChatSupportTest extends TestCase
             'responder_mode' => ChatSession::MODE_AI,
             'status' => ChatSession::STATUS_OPEN,
             'external_ai_consent_version' => GeminiChatService::EXTERNAL_AI_POLICY_VERSION,
-            'external_ai_consent_scope' => GeminiChatService::EXTERNAL_AI_CONSENT_SCOPE,
+            'external_ai_consent_scope' => GeminiChatService::externalAiConsentScopeFor('customer'),
             'external_ai_consented_at' => now(),
         ]);
         $staleVendor = $vendorSession->fresh();
@@ -1183,7 +1183,7 @@ class ChatSupportTest extends TestCase
             'responder_mode' => ChatSession::MODE_AI,
             'status' => ChatSession::STATUS_OPEN,
             'external_ai_consent_version' => GeminiChatService::EXTERNAL_AI_POLICY_VERSION,
-            'external_ai_consent_scope' => GeminiChatService::EXTERNAL_AI_CONSENT_SCOPE,
+            'external_ai_consent_scope' => GeminiChatService::externalAiConsentScopeFor('customer'),
             'external_ai_consented_at' => now(),
         ]);
         $snapshot = $session->fresh();
@@ -1217,7 +1217,7 @@ class ChatSupportTest extends TestCase
             'responder_mode' => ChatSession::MODE_AI,
             'status' => ChatSession::STATUS_OPEN,
             'external_ai_consent_version' => GeminiChatService::EXTERNAL_AI_POLICY_VERSION,
-            'external_ai_consent_scope' => GeminiChatService::EXTERNAL_AI_CONSENT_SCOPE,
+            'external_ai_consent_scope' => GeminiChatService::externalAiConsentScopeFor('customer'),
             'external_ai_consented_at' => now(),
         ]);
         $cases = [
@@ -1535,7 +1535,7 @@ class ChatSupportTest extends TestCase
         $nonCustomer = User::factory()->create(['role' => 'vendor']);
         $nonCustomerSession = ChatSession::create(['user_id' => $nonCustomer->id, 'target_type' => 'vendor', 'vendor_id' => $vendor->id, 'responder_mode' => 'ai', 'status' => 'open']);
         $denied = app(RagSearchService::class)->buildKnowledge($nonCustomerSession, 'đơn gần đây');
-        $this->assertSame(['denied', 'owner_required', 'order'], [$denied['match_state'], $denied['match_reason'], $denied['primary_intent']]);
+        $this->assertSame(['denied', 'invalid_session_scope', 'generic'], [$denied['match_state'], $denied['match_reason'], $denied['primary_intent']]);
     }
 
     public function test_follow_up_detection_does_not_inherit_personal_orders_into_an_independent_book_request(): void
@@ -2077,6 +2077,86 @@ class ChatSupportTest extends TestCase
         });
     }
 
+    public function test_vendor_and_admin_have_isolated_platform_ai_only_sessions_and_role_bound_consent(): void
+    {
+        $this->configureGemini();
+        $vendor = User::factory()->create(['role' => 'vendor']);
+        $admin = User::factory()->create(['role' => 'admin']);
+        [, $shop] = $this->vendor('personal-owner-scope');
+
+        $vendorSession = $this->actingAs($vendor, 'sanctum')->postJson('/api/chat/sessions', ['target_type' => 'platform'])
+            ->assertOk()->assertJsonPath('session.human_support_available', false)->json('session');
+        $adminSession = $this->actingAs($admin, 'sanctum')->postJson('/api/chat/sessions', ['target_type' => 'platform'])
+            ->assertOk()->assertJsonPath('session.human_support_available', false)->json('session');
+        $this->assertNotSame($vendorSession['id'], $adminSession['id']);
+        $this->actingAs($vendor, 'sanctum')->postJson('/api/chat/sessions', ['target_type' => 'vendor', 'vendor_id' => $shop->id])->assertForbidden();
+        $this->actingAs($vendor, 'sanctum')->postJson("/api/chat/sessions/{$vendorSession['id']}/request-human")->assertForbidden();
+        $this->actingAs($admin, 'sanctum')->postJson("/api/chat/sessions/{$vendorSession['id']}/messages", ['message' => 'private'])->assertForbidden();
+
+        $this->actingAs($vendor, 'sanctum')->postJson("/api/chat/sessions/{$vendorSession['id']}/external-ai-consent", ['consent' => true, 'policy_version' => GeminiChatService::EXTERNAL_AI_POLICY_VERSION])
+            ->assertOk()->assertJsonPath('session.external_ai.scope', GeminiChatService::EXTERNAL_AI_CONSENT_SCOPE);
+        $stored = ChatSession::findOrFail($vendorSession['id']);
+        $this->assertSame(GeminiChatService::externalAiConsentScopeFor('vendor'), $stored->external_ai_consent_scope);
+        User::query()->whereKey($vendor->id)->update(['role' => 'admin']);
+        $freshVendor = $vendor->fresh();
+        $this->actingAs($freshVendor, 'sanctum')->getJson("/api/chat/sessions/{$vendorSession['id']}")->assertOk()->assertJsonPath('session.external_ai.consented', false);
+    }
+
+    public function test_vendor_and_admin_can_read_their_own_private_ai_attachments(): void
+    {
+        Storage::fake('local');
+        config()->set('services.gemini.enabled', false);
+        foreach (['vendor', 'admin'] as $role) {
+            $owner = User::factory()->create(['role' => $role]);
+            $other = User::factory()->create(['role' => 'admin']);
+            $sessionId = $this->actingAs($owner, 'sanctum')->postJson('/api/chat/sessions', ['target_type' => 'platform'])->assertOk()->json('session.id');
+            $response = $this->actingAs($owner, 'sanctum')->post("/api/chat/sessions/{$sessionId}/messages", ['image' => UploadedFile::fake()->image("{$role}.png")])->assertOk();
+            $message = collect($response->json('session.messages'))->firstWhere('sender_type', 'customer');
+            $url = "/api/chat/sessions/{$sessionId}/messages/{$message['id']}/attachment";
+            $this->actingAs($owner, 'sanctum')->get($url)->assertOk();
+            $this->actingAs($other, 'sanctum')->get($url)->assertForbidden();
+        }
+    }
+
+    public function test_role_drifted_human_tuples_are_unavailable_to_noncustomer_personal_chat_actions(): void
+    {
+        Storage::fake('local');
+        $staff = User::factory()->create(['role' => 'admin']);
+        foreach ([ChatSession::STATUS_ASSIGNED, ChatSession::STATUS_WAITING_CUSTOMER] as $status) {
+            foreach (['vendor', 'admin'] as $role) {
+                $owner = User::factory()->create(['role' => 'customer']);
+                $session = ChatSession::create([
+                    'user_id' => $owner->id,
+                    'conversation_key' => "user:{$owner->id}:platform",
+                    'target_type' => 'platform',
+                    'responder_mode' => 'human',
+                    'status' => $status,
+                    'assigned_user_id' => $staff->id,
+                ]);
+                $message = ChatMessage::create([
+                    'chat_session_id' => $session->id,
+                    'sender_type' => 'customer',
+                    'sender_id' => $owner->id,
+                    'message' => 'private attachment',
+                    'metadata' => ['attachment' => ['stored_name' => 'private.png']],
+                ]);
+                Storage::disk('local')->put("chat-attachments/{$session->id}/private.png", 'private');
+                User::query()->whereKey($owner->id)->update(['role' => $role]);
+                $actor = $owner->fresh();
+                $before = ChatMessage::query()->where('chat_session_id', $session->id)->count();
+
+                $this->actingAs($actor, 'sanctum')->postJson('/api/chat/sessions', ['target_type' => 'platform'])->assertForbidden();
+                $this->actingAs($actor, 'sanctum')->getJson("/api/chat/sessions/{$session->id}")->assertForbidden();
+                $this->actingAs($actor, 'sanctum')->postJson("/api/chat/sessions/{$session->id}/messages", ['message' => 'must not write'])->assertForbidden();
+                $this->actingAs($actor, 'sanctum')->postJson("/api/chat/sessions/{$session->id}/messages/{$message->id}/feedback", ['feedback' => 'helpful'])->assertForbidden();
+                $this->actingAs($actor, 'sanctum')->get("/api/chat/sessions/{$session->id}/messages/{$message->id}/attachment")->assertForbidden();
+                $this->actingAs($actor, 'sanctum')->postJson("/api/chat/sessions/{$session->id}/external-ai-consent", ['consent' => false, 'policy_version' => GeminiChatService::EXTERNAL_AI_POLICY_VERSION])->assertForbidden();
+                $this->actingAs($actor, 'sanctum')->getJson('/api/chat/conversations')->assertOk()->assertJsonCount(0, 'conversations');
+                $this->assertSame($before, ChatMessage::query()->where('chat_session_id', $session->id)->count());
+            }
+        }
+    }
+
     private function configureGemini(array $overrides = []): void
     {
         $settings = array_merge([
@@ -2106,7 +2186,7 @@ class ChatSupportTest extends TestCase
             'responder_mode' => 'ai',
             'status' => 'open',
             'external_ai_consent_version' => GeminiChatService::EXTERNAL_AI_POLICY_VERSION,
-            'external_ai_consent_scope' => GeminiChatService::EXTERNAL_AI_CONSENT_SCOPE,
+            'external_ai_consent_scope' => GeminiChatService::externalAiConsentScopeFor('customer'),
             'external_ai_consented_at' => now(),
         ]);
     }
@@ -2124,7 +2204,7 @@ class ChatSupportTest extends TestCase
     /** @return array{match_state: string, entries: list<array<string, string>>} */
     private function providerKnowledge(string $content, ChatSession $session): array
     {
-        $scope = ['session_user_id' => $session->user_id, 'scope_target_type' => $session->target_type, 'scope_vendor_id' => $session->vendor_id];
+        $scope = ['session_user_id' => $session->user_id, 'scope_owner_role' => 'customer', 'scope_target_type' => $session->target_type, 'scope_vendor_id' => $session->vendor_id];
 
         return trim($content) === '' ? array_merge($scope, ['match_state' => 'matched', 'entries' => []]) : array_merge($scope, ['match_state' => 'matched', 'entries' => [[
             'type' => 'help',

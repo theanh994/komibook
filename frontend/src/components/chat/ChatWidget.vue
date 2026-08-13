@@ -90,7 +90,7 @@
           </div>
           <div class="flex shrink-0 items-center gap-1.5">
             <button
-              v-if="chatStore.isAiActive"
+              v-if="chatStore.isAiActive && chatStore.humanSupportAvailable"
               type="button"
               class="inline-flex items-center gap-1 rounded bg-surface-container-lowest px-2 py-0.5 font-bold text-secondary border border-secondary/40 text-[11px] hover:bg-secondary-fixed cursor-pointer transition-colors"
               :disabled="chatStore.sending"
@@ -496,7 +496,7 @@ const handleSend = async () => {
 
 const handleQuickReply = reply => {
   const lower = reply.toLocaleLowerCase('vi-VN')
-  if (lower.includes('gặp') && (lower.includes('nhân viên') || lower.includes('tư vấn viên'))) {
+  if (chatStore.humanSupportAvailable && lower.includes('gặp') && (lower.includes('nhân viên') || lower.includes('tư vấn viên'))) {
     chatStore.requestHumanSupport()
     return
   }

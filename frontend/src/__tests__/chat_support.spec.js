@@ -13,7 +13,8 @@ const sessionPayload = overrides => ({
   responder_mode: 'ai',
   status: 'open',
   assigned_user: null,
-  external_ai: { available: true, consented: false, required: true, version: '2026-08-09.1', scope: ['current_message', 'public_grounding_context'] },
+  human_support_available: true,
+  external_ai: { available: true, consented: false, required: true, version: '2026-08-13.1', scope: ['current_message', 'public_grounding_context'] },
   messages: [{ id: 1, sender_type: 'ai', message: 'Xin chào' }],
   ...overrides,
 })
@@ -283,8 +284,8 @@ describe('Unified chat support store', () => {
     await store.setExternalAiConsent(true)
     await store.setExternalAiConsent(false)
 
-    expect(post).toHaveBeenNthCalledWith(2, '/api/chat/sessions/41/external-ai-consent', { consent: true, policy_version: '2026-08-09.1' })
-    expect(post).toHaveBeenNthCalledWith(3, '/api/chat/sessions/41/external-ai-consent', { consent: false, policy_version: '2026-08-09.1' })
+    expect(post).toHaveBeenNthCalledWith(2, '/api/chat/sessions/41/external-ai-consent', { consent: true, policy_version: '2026-08-13.1' })
+    expect(post).toHaveBeenNthCalledWith(3, '/api/chat/sessions/41/external-ai-consent', { consent: false, policy_version: '2026-08-13.1' })
     expect(store.hasExternalAiConsent).toBe(false)
     store.stopPolling()
   })
@@ -300,6 +301,34 @@ describe('Unified chat support store', () => {
     expect(store.session).toBeNull()
     expect(store.messages).toEqual([])
     expect(store.pollTimer).toBeNull()
+  })
+
+  it('does not expose or call human support for a platform-only personal AI session', async () => {
+    const post = vi.spyOn(apiClient, 'post').mockResolvedValue({ data: { session: sessionPayload({ human_support_available: false }) } })
+    const store = useChatStore()
+
+    store.applySession(sessionPayload({ human_support_available: false }), true)
+    expect(store.humanSupportAvailable).toBe(false)
+    await store.requestHumanSupport()
+    expect(post).not.toHaveBeenCalled()
+    const widget = readFileSync(new URL('../components/chat/ChatWidget.vue', import.meta.url), 'utf8')
+    expect(widget).toContain('chatStore.isAiActive && chatStore.humanSupportAvailable')
+  })
+
+  it('fails closed for a noncustomer human tuple even when it looks assigned', async () => {
+    const post = vi.spyOn(apiClient, 'post')
+    const store = useChatStore()
+
+    store.applySession(sessionPayload({
+      human_support_available: false,
+      status: 'assigned',
+      responder_mode: 'human',
+      assigned_user: { id: 7 },
+    }), true)
+    expect(store.isHumanActive).toBe(true)
+    expect(store.canSendMessage).toBe(false)
+    await store.sendMessage('must not send')
+    expect(post).not.toHaveBeenCalled()
   })
 
   it('keeps Gemini consent available through compact progressive disclosure', () => {

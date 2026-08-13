@@ -28,8 +28,9 @@ export const useChatStore = defineStore('chat', {
     isAiActive() { return Boolean(this.session) && this.status === 'open' && this.responderMode === 'ai' && this.session.assigned_user === null },
     isQueued() { return Boolean(this.session) && this.status === 'queued' && this.responderMode === 'human' && this.session.assigned_user === null },
     isHumanActive() { return Boolean(this.session) && ['assigned', 'waiting_customer'].includes(this.status) && this.responderMode === 'human' && this.session.assigned_user != null },
+    humanSupportAvailable: state => state.session?.human_support_available === true,
     canExtendHumanWait() { return this.isHumanActive && this.status === 'waiting_customer' && Number.isFinite(Date.parse(this.session?.auto_resume_at)) },
-    canSendMessage() { return Boolean(this.session) && (this.isAiActive || this.isHumanActive) },
+    canSendMessage() { return Boolean(this.session) && (this.isAiActive || (this.humanSupportAvailable && this.isHumanActive)) },
     isTerminal() { return Boolean(this.session) && ['resolved', 'closed'].includes(this.status) },
     externalAi: state => state.session?.external_ai || { available: false, consented: false, required: true, scope: [] },
     hasExternalAiConsent() { return this.externalAi.consented === true },
@@ -252,7 +253,7 @@ export const useChatStore = defineStore('chat', {
     },
 
     async requestHumanSupport() {
-      if (!this.session || this.sending || this.isTerminal) return
+      if (!this.session || this.sending || this.isTerminal || !this.humanSupportAvailable) return
       this.sending = true
       this.error = ''
       try {

@@ -24,8 +24,9 @@ class ChatController extends Controller
     public function createSession(Request $request): JsonResponse
     {
         $data = $request->validate(['target_type' => 'nullable|in:platform,vendor', 'vendor_id' => 'nullable|required_if:target_type,vendor|exists:vendors,id']);
-        $actor = $this->customer($request);
+        $actor = $this->personalOwner($request);
         $target = $data['target_type'] ?? ChatSession::TARGET_PLATFORM;
+        abort_unless($actor->role === 'customer' || $target === ChatSession::TARGET_PLATFORM, 403);
         $vendorId = $target === ChatSession::TARGET_VENDOR ? (int) $data['vendor_id'] : null;
         if ($vendorId && ! Vendor::withoutGlobalScopes()->whereKey($vendorId)->where('status', 'active')->exists()) {
             abort(422, 'Gian hàng này hiện không thể nhận yêu cầu hỗ trợ.');
@@ -35,11 +36,11 @@ class ChatController extends Controller
         if (! $session) {
             $session = ChatSession::create(['user_id' => $actor->id, 'vendor_id' => $vendorId, 'conversation_key' => $key, 'target_type' => $target, 'responder_mode' => ChatSession::MODE_AI, 'status' => ChatSession::STATUS_OPEN, 'last_message_at' => now()]);
             $vendor = $vendorId ? Vendor::withoutGlobalScopes()->find($vendorId) : null;
-            ChatMessage::create(['chat_session_id' => $session->id, 'sender_type' => 'ai', 'message' => $vendor ? "Xin chào! Tôi là Trợ lý AI KomiBook đang hỗ trợ cho gian hàng {$vendor->shop_name}. Tôi có thể tư vấn sách của shop hoặc chuyển bạn tới nhân viên gian hàng." : 'Xin chào! Tôi là Trợ lý AI KomiBook. Tôi có thể gợi ý sách, tóm tắt bài viết, giải đáp chính sách và chuyển bạn tới tư vấn viên khi cần.', 'metadata' => ['ai_disclosure' => true, 'quick_replies' => $vendor ? ['Tư vấn sách của shop', 'Chính sách giao hàng', 'Gặp nhân viên shop'] : ['Gợi ý sách theo nhu cầu', 'Hạng VIP và quyền lợi', 'Tóm tắt bài viết', 'Gặp tư vấn viên KomiBook']]]);
+            ChatMessage::create(['chat_session_id' => $session->id, 'sender_type' => 'ai', 'message' => $vendor ? "Xin chào! Tôi là Trợ lý AI KomiBook đang hỗ trợ cho gian hàng {$vendor->shop_name}. Tôi có thể tư vấn sách của shop hoặc chuyển bạn tới nhân viên gian hàng." : 'Xin chào! Tôi là Trợ lý AI KomiBook. Tôi có thể gợi ý sách, tóm tắt bài viết và giải đáp chính sách công khai.', 'metadata' => ['ai_disclosure' => true, 'quick_replies' => $this->initialQuickReplies($actor, $vendor !== null)]]);
         } elseif ($session->isTerminal()) {
             $session = $this->lifecycleService->reopen($session, $actor);
         } else {
-            $this->assertCustomer($session, $actor);
+            $this->assertOwner($session, $actor);
         }
 
         return response()->json(['success' => true, 'session' => $this->payload($session, true)]);
@@ -47,23 +48,31 @@ class ChatController extends Controller
 
     public function conversations(Request $request): JsonResponse
     {
-        $actor = $this->customer($request);
-        $sessions = ChatSession::query()->with(['vendor:id,shop_name,slug', 'assignedUser:id,name', 'lastMessage'])->where('user_id', $actor->id)->orderByDesc('last_message_at')->get();
+        $actor = $this->personalOwner($request);
+        $sessions = ChatSession::query()->with(['vendor:id,shop_name,slug', 'assignedUser:id,name', 'lastMessage'])
+            ->where('user_id', $actor->id)
+            ->when($actor->role !== 'customer', fn (Builder $query) => $query
+                ->where('target_type', ChatSession::TARGET_PLATFORM)
+                ->whereNull('vendor_id')
+                ->where('status', ChatSession::STATUS_OPEN)
+                ->where('responder_mode', ChatSession::MODE_AI)
+                ->whereNull('assigned_user_id'))
+            ->orderByDesc('last_message_at')->get();
 
         return response()->json(['success' => true, 'conversations' => $sessions->map(fn (ChatSession $s) => ['id' => $s->id, 'target_type' => $s->target_type, 'vendor_id' => $s->vendor_id, 'vendor' => $s->vendor, 'responder_mode' => $s->responder_mode, 'status' => $s->status, 'assigned_user' => $s->assignedUser, 'last_message' => $s->lastMessage, 'last_message_at' => $s->last_message_at])->values()]);
     }
 
     public function showSession(Request $request, ChatSession $session): JsonResponse
     {
-        $this->assertCustomer($session, $this->customer($request));
+        $this->assertOwner($session, $this->personalOwner($request));
 
         return response()->json(['success' => true, 'session' => $this->payload($session, true, max(0, $request->integer('after_id')))]);
     }
 
     public function sendMessage(Request $request, ChatSession $session): JsonResponse
     {
-        $actor = $this->customer($request);
-        $this->assertCustomer($session, $actor);
+        $actor = $this->personalOwner($request);
+        $this->assertOwner($session, $actor);
         $data = $request->validate(['message' => 'nullable|string|max:2000|required_without:image', 'image' => 'nullable|image|mimes:jpg,jpeg,png,webp,gif|max:5120|required_without:message', 'context_book_id' => 'nullable|integer|min:1']);
         $attachment = null;
         try {
@@ -86,23 +95,24 @@ class ChatController extends Controller
 
     public function updateExternalAiConsent(Request $request, ChatSession $session): JsonResponse
     {
-        $actor = $this->customer($request);
-        $this->assertCustomer($session, $actor);
+        $actor = $this->personalOwner($request);
+        $this->assertOwner($session, $actor);
         $data = $request->validate(['consent' => ['required', 'boolean'], 'policy_version' => ['required', 'string']]);
         abort_unless(hash_equals(GeminiChatService::EXTERNAL_AI_POLICY_VERSION, $data['policy_version']), 422);
         $updated = DB::transaction(function () use ($session, $actor, $data): ChatSession {
             $locked = ChatSession::query()->lockForUpdate()->findOrFail($session->id);
             $owner = User::query()->lockForUpdate()->findOrFail($actor->id);
-            $this->assertCustomer($locked, $owner);
+            $this->assertOwner($locked, $owner);
             $grant = (bool) $data['consent'];
-            $active = $locked->hasActiveExternalAiConsent(GeminiChatService::EXTERNAL_AI_POLICY_VERSION, GeminiChatService::EXTERNAL_AI_CONSENT_SCOPE, $owner);
+            $scope = GeminiChatService::externalAiConsentScopeFor($owner->role);
+            $active = $locked->hasActiveExternalAiConsent(GeminiChatService::EXTERNAL_AI_POLICY_VERSION, $scope, $owner);
             $unrevoked = $locked->external_ai_consented_at && ! $locked->external_ai_consent_revoked_at;
             if (($grant && $active) || (! $grant && ! $unrevoked)) {
                 return $locked;
             }
             if ($grant) {
                 abort_unless($this->geminiService->externalAiAvailable(), 422);
-                $locked->update(['external_ai_consent_version' => GeminiChatService::EXTERNAL_AI_POLICY_VERSION, 'external_ai_consent_scope' => GeminiChatService::EXTERNAL_AI_CONSENT_SCOPE, 'external_ai_consented_at' => now(), 'external_ai_consent_revoked_at' => null, 'lock_version' => $locked->lock_version + 1]);
+                $locked->update(['external_ai_consent_version' => GeminiChatService::EXTERNAL_AI_POLICY_VERSION, 'external_ai_consent_scope' => $scope, 'external_ai_consented_at' => now(), 'external_ai_consent_revoked_at' => null, 'lock_version' => $locked->lock_version + 1]);
                 ChatMessage::create(['chat_session_id' => $locked->id, 'sender_type' => 'system', 'message' => 'Bạn đã cho phép gửi câu hỏi hiện tại và ngữ cảnh công khai liên quan của KomiBook tới Google Gemini. Lịch sử trò chuyện và hình ảnh không được gửi.', 'metadata' => ['event' => 'external_ai_consent_granted', 'policy_version' => GeminiChatService::EXTERNAL_AI_POLICY_VERSION, 'scope' => GeminiChatService::EXTERNAL_AI_CONSENT_SCOPE]]);
             } else {
                 $locked->update(['external_ai_consent_revoked_at' => now(), 'lock_version' => $locked->lock_version + 1]);
@@ -117,7 +127,7 @@ class ChatController extends Controller
 
     public function submitFeedback(Request $request, ChatSession $session, ChatMessage $message): JsonResponse
     {
-        $this->assertCustomer($session, $this->customer($request));
+        $this->assertOwner($session, $this->personalOwner($request));
         abort_unless($message->chat_session_id === $session->id, 404);
         abort_unless($message->sender_type === 'ai', 422, 'Chỉ có thể đánh giá câu trả lời của Trợ lý AI.');
         $data = $request->validate(['feedback' => 'required|in:helpful,unhelpful', 'comment' => 'nullable|string|max:500']);
@@ -130,10 +140,13 @@ class ChatController extends Controller
     {
         abort_unless($message->chat_session_id === $session->id, 404);
         $actor = $request->user('sanctum');
-        if ($actor && in_array($actor->role, ['admin', 'vendor'], true)) {
+        $currentOwner = $actor instanceof User ? User::query()->find($actor->id) : null;
+        if ($currentOwner && $session->user_id !== null && (int) $session->user_id === $currentOwner->id) {
+            $this->assertOwner($session, $currentOwner);
+        } elseif ($actor && in_array($actor->role, ['admin', 'vendor'], true)) {
             $this->assertStaffReadable($session, $actor);
         } else {
-            $this->assertCustomer($session, $this->customer($request));
+            abort(403);
         }
         $attachment = $message->metadata['attachment'] ?? null;
         abort_unless(is_array($attachment) && isset($attachment['stored_name']), 404);
@@ -248,9 +261,48 @@ class ChatController extends Controller
         return $current;
     }
 
+    private function personalOwner(Request $request): User
+    {
+        $actor = $request->user('sanctum');
+        abort_unless($actor instanceof User, 403);
+        $current = User::query()->findOrFail($actor->id);
+        abort_unless($actor->role === $current->role && in_array($current->role, ChatSession::PERSONAL_OWNER_ROLES, true), 403);
+
+        return $current;
+    }
+
+    private function assertOwner(ChatSession $session, User $actor): void
+    {
+        abort_unless(in_array($actor->role, ChatSession::PERSONAL_OWNER_ROLES, true)
+            && $session->user_id !== null
+            && (int) $session->user_id === $actor->id
+            && ($actor->role === 'customer' || $this->isCanonicalPersonalAiTuple($session)), 403);
+    }
+
+    private function isCanonicalPersonalAiTuple(ChatSession $session): bool
+    {
+        return $session->target_type === ChatSession::TARGET_PLATFORM
+            && $session->vendor_id === null
+            && $session->status === ChatSession::STATUS_OPEN
+            && $session->responder_mode === ChatSession::MODE_AI
+            && $session->assigned_user_id === null;
+    }
+
     private function assertCustomer(ChatSession $session, User $actor): void
     {
         abort_unless($actor->role === 'customer' && $session->user_id !== null && (int) $session->user_id === $actor->id, 403);
+    }
+
+    /** @return list<string> */
+    private function initialQuickReplies(User $actor, bool $vendorTarget): array
+    {
+        if ($actor->role !== 'customer') {
+            return ['Gợi ý sách theo nhu cầu', 'Hạng VIP và quyền lợi', 'Tóm tắt bài viết'];
+        }
+
+        return $vendorTarget
+            ? ['Tư vấn sách của shop', 'Chính sách giao hàng', 'Gặp nhân viên shop']
+            : ['Gợi ý sách theo nhu cầu', 'Hạng VIP và quyền lợi', 'Tóm tắt bài viết', 'Gặp tư vấn viên KomiBook'];
     }
 
     private function assertStaff(ChatSession $session, User $actor): void
@@ -335,7 +387,8 @@ class ChatController extends Controller
     private function payload(ChatSession $session, bool $messages = false, int $afterId = 0): array
     {
         $session->loadMissing(['vendor:id,shop_name,slug', 'assignedUser:id,name']);
-        $data = ['id' => $session->id, 'target_type' => $session->target_type, 'vendor_id' => $session->vendor_id, 'vendor' => $session->vendor, 'responder_mode' => $session->responder_mode, 'status' => $session->status, 'assigned_user' => $session->assignedUser, 'support_ticket_id' => $session->support_ticket_id, 'subject' => $session->subject, 'category' => $session->category, 'last_message_at' => $session->last_message_at, 'auto_resume_at' => $session->auto_resume_at, 'human_idle_timeout_minutes' => max(1, min(1440, (int) config('chat.human_idle_auto_resume_minutes', 30))), 'created_at' => $session->created_at, 'external_ai' => $this->geminiService->externalAiPolicyMetadata($session)];
+        $session->loadMissing('user:id,role');
+        $data = ['id' => $session->id, 'target_type' => $session->target_type, 'vendor_id' => $session->vendor_id, 'vendor' => $session->vendor, 'responder_mode' => $session->responder_mode, 'status' => $session->status, 'assigned_user' => $session->assignedUser, 'support_ticket_id' => $session->support_ticket_id, 'subject' => $session->subject, 'category' => $session->category, 'last_message_at' => $session->last_message_at, 'auto_resume_at' => $session->auto_resume_at, 'human_idle_timeout_minutes' => max(1, min(1440, (int) config('chat.human_idle_auto_resume_minutes', 30))), 'created_at' => $session->created_at, 'human_support_available' => $session->user?->role === 'customer', 'external_ai' => $this->geminiService->externalAiPolicyMetadata($session)];
         if ($messages) {
             $query = $session->messages();
             $data['messages'] = $afterId ? $query->where('id', '>', $afterId)->orderBy('id')->limit(200)->get() : $query->orderByDesc('id')->limit(200)->get()->sortBy('id')->values();

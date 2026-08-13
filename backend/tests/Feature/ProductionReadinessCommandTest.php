@@ -19,6 +19,7 @@ use App\Models\WarehouseStock;
 use App\Services\ProductionMediaIntegrityService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\DB as FacadesDB;
 use Illuminate\Support\Facades\Schema;
@@ -41,6 +42,51 @@ class ProductionReadinessCommandTest extends TestCase
             $this->artisan('production:readiness', ['--json' => true])
                 ->expectsOutputToContain('"status": "ready"')
                 ->assertSuccessful();
+        } finally {
+            app()->detectEnvironment(fn () => $originalEnvironment);
+        }
+    }
+
+    public function test_readiness_json_mode_is_valid_and_ready(): void
+    {
+        $originalEnvironment = app()->environment();
+        app()->detectEnvironment(fn () => 'production');
+        $this->configureHealthyRuntime();
+        config(['production_safety.public_media_references' => []]);
+
+        try {
+            $this->assertSame(0, Artisan::call('production:readiness', ['--json' => true]));
+            $payload = json_decode(Artisan::output(), true, 512, JSON_THROW_ON_ERROR);
+
+            $this->assertSame('ready', $payload['status']);
+            $this->assertIsArray($payload['checks']);
+        } finally {
+            app()->detectEnvironment(fn () => $originalEnvironment);
+        }
+    }
+
+    public function test_readiness_table_mode_renders_nested_media_and_inventory_arrays(): void
+    {
+        $originalEnvironment = app()->environment();
+        app()->detectEnvironment(fn () => 'production');
+        $this->configureHealthyRuntime();
+        config(['production_safety.public_media_references' => [
+            ['table' => 'users', 'columns' => ['avatar']],
+        ]]);
+        DB::table('users')->insert([
+            'name' => 'Nested Table',
+            'email' => 'nested-table@example.test',
+            'password' => 'not-used',
+            'avatar' => 'avatars/missing-nested.webp',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        try {
+            $this->artisan('production:readiness')
+                ->expectsOutputToContain('{"checked":1,"missing_count":1,"missing":["users.avatar#')
+                ->expectsOutputToContain('{"unsafe_count":0,"safe_legacy_count":0,"unsafe":[],"safe_legacy":[]}')
+                ->assertFailed();
         } finally {
             app()->detectEnvironment(fn () => $originalEnvironment);
         }

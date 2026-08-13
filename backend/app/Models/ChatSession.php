@@ -12,6 +12,8 @@ class ChatSession extends Model
 {
     use HasFactory;
 
+    public const PERSONAL_OWNER_ROLES = ['customer', 'vendor', 'admin'];
+
     public const TARGET_PLATFORM = 'platform';
 
     public const TARGET_VENDOR = 'vendor';
@@ -114,7 +116,7 @@ class ChatSession extends Model
         return $this->user_id !== null
             && $owner !== null
             && $owner->id === $this->user_id
-            && $owner->role === 'customer'
+            && in_array($owner->role, self::PERSONAL_OWNER_ROLES, true)
             && $this->external_ai_consented_at !== null
             && $this->external_ai_consent_revoked_at === null
             && $this->external_ai_consent_version === $policyVersion
