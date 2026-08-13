@@ -43,6 +43,39 @@ function Quote-TaskArgument([string]$Value) {
     '"' + $Value.Replace('"', '\"') + '"'
 }
 
+function Test-CurrentWindowsPrincipal([string]$TaskUserId) {
+    if ([string]::IsNullOrWhiteSpace($TaskUserId)) { return $false }
+
+    $currentIdentity = [System.Security.Principal.WindowsIdentity]::GetCurrent()
+    if ($null -eq $currentIdentity.User) { throw 'current Windows identity SID is unavailable.' }
+
+    # Task Scheduler can normalize a local interactive identity from
+    # MACHINE\\user to user. Resolve every representation to a SID and only
+    # accept the task when it is the SID of the interactive caller.
+    $candidates = New-Object System.Collections.Generic.List[string]
+    $candidates.Add($TaskUserId)
+    if ($TaskUserId -notmatch '[\\@]') {
+        $separator = $currentIdentity.Name.LastIndexOf('\\')
+        if ($separator -gt 0) {
+            $candidates.Add($currentIdentity.Name.Substring(0, $separator + 1) + $TaskUserId)
+        }
+    }
+
+    foreach ($candidate in ($candidates | Select-Object -Unique)) {
+        try {
+            $account = New-Object System.Security.Principal.NTAccount($candidate)
+            $sid = $account.Translate([System.Security.Principal.SecurityIdentifier]).Value
+            if ([string]::Equals($sid, $currentIdentity.User.Value, [System.StringComparison]::OrdinalIgnoreCase)) {
+                return $true
+            }
+        } catch [System.Security.Principal.IdentityNotMappedException] {
+            # Continue with a machine-qualified candidate when Scheduler returned a bare local account name.
+        }
+    }
+
+    return $false
+}
+
 function Get-Context {
     if ($TaskName -notmatch '^[A-Za-z0-9_.-]{1,100}$') { throw 'task name validation failed.' }
     $backend = Resolve-ExistingDirectory $ReleaseBackend 'release backend'
@@ -79,10 +112,9 @@ function Test-TaskConfiguration([pscustomobject]$Context) {
     $task = Get-ScheduledTask -TaskName $TaskName -ErrorAction Stop
     $action = @($task.Actions)
     $trigger = @($task.Triggers)
-    $expectedUser = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
     $expectedArguments = '--headless ' + (Quote-TaskArgument $PowerShell) + ' -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ' + (Quote-TaskArgument $Context.Launcher) + ' -ReleaseBackend ' + (Quote-TaskArgument $Context.Backend) + ' -FrankenPhp ' + (Quote-TaskArgument $Context.FrankenPhp) + ' -LogDirectory ' + (Quote-TaskArgument $Context.LogDirectory)
     if ($action.Count -ne 1 -or $action[0].Execute -cne $Conhost -or $action[0].Arguments -cne $expectedArguments -or $action[0].WorkingDirectory -cne $Context.Backend) { throw 'task action verification failed.' }
-    if ($task.Principal.UserId -cne $expectedUser -or $task.Principal.LogonType -notin @('Interactive', 'InteractiveToken') -or $task.Principal.RunLevel -ne 'Limited') { throw 'task principal verification failed.' }
+    if (-not (Test-CurrentWindowsPrincipal ([string]$task.Principal.UserId)) -or $task.Principal.LogonType -notin @('Interactive', 'InteractiveToken') -or $task.Principal.RunLevel -ne 'Limited') { throw 'task principal verification failed.' }
     if ($trigger.Count -ne 1 -or $trigger[0].CimClass.CimClassName -ne 'MSFT_TaskTimeTrigger' -or -not $trigger[0].Enabled -or [string]::IsNullOrWhiteSpace([string]$trigger[0].StartBoundary) -or $trigger[0].Repetition.Interval -ne 'PT1M' -or $trigger[0].Repetition.Duration -ne 'P3650D') { throw 'task trigger verification failed.' }
     if (-not $task.Settings.Enabled -or -not $task.Settings.AllowDemandStart -or $task.Settings.Hidden -or $task.Settings.RunOnlyIfIdle -or $task.Settings.DisallowStartIfOnBatteries -or $task.Settings.StopIfGoingOnBatteries -or $task.Settings.MultipleInstances -ne 'IgnoreNew' -or -not $task.Settings.StartWhenAvailable -or $task.Settings.ExecutionTimeLimit -ne 'PT5M') { throw 'task settings verification failed.' }
 }
